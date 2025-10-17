@@ -46,7 +46,7 @@ uint64_t mutation_mac_vlan(void **mbufs, unsigned int n, void *data)
 		eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN);
 
 		struct rte_vlan_hdr *vlan_hdr = (struct rte_vlan_hdr *)(eth_hdr + 1);
-		vlan_hdr->vlan_tci = rte_cpu_to_be_16(rte_rdtsc() & 0xFFF);
+		vlan_hdr->vlan_tci = rte_cpu_to_be_16(rdtsc16());
 		vlan_hdr->eth_proto = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
 
 		// 填充 IPv4
@@ -76,7 +76,7 @@ uint64_t mutation_mac_vlan(void **mbufs, unsigned int n, void *data)
 		icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
 		icmp_hdr->icmp_code = 0;
 		/* FIXME */
-		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rte_rdtsc() & (unsigned short int)-1);
+		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
@@ -144,9 +144,8 @@ uint64_t mutation_mac_multicast(void **mbufs, unsigned int n, void *data)
 		/* 以太网头: 目的 MAC = 组播 MAC, 源 MAC 可以取端口的 MAC 或自定义 */
 		struct rte_ether_addr dst_mac;
 		uint32_t dst_ip_be = 0;
-		uint64_t tsc = rte_rdtsc();
-		tsc = tsc ^ (tsc >> 8);
-		int mcast_type = tsc % 3;
+		uint64_t ra = rdtsc8();
+		int mcast_type = ((ra ^ (ra >> 4)) & 3) % 3;
 		switch (mcast_type) {
 			case 0:
 				/* 本地子网控制（例如 OSPF, RIP2, IGMP） */
@@ -412,7 +411,7 @@ uint64_t mutation_ip_version(void **mbufs, unsigned int n, void *data)
 		memset(icmp_hdr, 0, sizeof(*icmp_hdr));
 		icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REQUEST;
 		icmp_hdr->icmp_code = 0;
-		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rte_rdtsc() & (unsigned short int)-1);
+		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
@@ -472,7 +471,7 @@ uint64_t mutation_ip_ihl(void **mbufs, unsigned int n, void *data)
 		memset(icmp_hdr, 0, sizeof(*icmp_hdr));
 		icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REQUEST;
 		icmp_hdr->icmp_code = 0;
-		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rte_rdtsc() & (unsigned short int)-1);
+		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
@@ -542,7 +541,7 @@ uint64_t mutation_ip_dscp(void **mbufs, unsigned int n, void *data)
 		memset(icmp_hdr, 0, sizeof(*icmp_hdr));
 		icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REQUEST;
 		icmp_hdr->icmp_code = 0;
-		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rte_rdtsc() & (unsigned short int)-1);
+		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
@@ -603,7 +602,7 @@ uint64_t mutation_ip_ecn(void **mbufs, unsigned int n, void *data)
 		memset(icmp_hdr, 0, sizeof(*icmp_hdr));
 		icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REQUEST;
 		icmp_hdr->icmp_code = 0;
-		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rte_rdtsc() & (unsigned short int)-1);
+		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
@@ -1077,7 +1076,7 @@ uint64_t mutation_ip_cksum(void **mbufs, unsigned int n, void *data)
 		memset(icmp_hdr, 0, sizeof(*icmp_hdr));
 		icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REQUEST;
 		icmp_hdr->icmp_code = 0;
-		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rte_rdtsc() & (unsigned short int)-1);
+		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
@@ -1392,7 +1391,7 @@ uint64_t mutation_icmp_type(void **mbufs, unsigned int n, void *data)
 		memset(icmp_hdr, 0, sizeof(*icmp_hdr));
 		icmp_hdr->icmp_type = 15 + ((rte_rdtsc() >> 2) & 3);
 		icmp_hdr->icmp_code = 0;
-		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rte_rdtsc() & (unsigned short int)-1);
+		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
@@ -1513,10 +1512,10 @@ uint64_t mutation_tcp_data_off(void **mbufs, unsigned int n, void *data)
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
 		tcp_hdr->dst_port = RANDOM_TCP_DST(cnode);
-		tcp_hdr->sent_seq = rte_cpu_to_be_32(rte_rdtsc() & (uint32_t)-1);
+		tcp_hdr->sent_seq = rte_cpu_to_be_32(rdtsc32());
 		tcp_hdr->recv_ack = 1;
 		/* mutation */
-		tcp_hdr->data_off = (uint8_t)-1; // ((sizeof(struct rte_tcp_hdr) / 4) << 4) + (rte_rdtsc() & 0xf);
+		tcp_hdr->data_off = (uint8_t)-1;
 		tcp_hdr->tcp_flags = RTE_TCP_ACK_FLAG;
 		tcp_hdr->rx_win = rte_cpu_to_be_16(65535);
 		tcp_hdr->cksum = 0;
@@ -1575,7 +1574,7 @@ uint64_t mutation_tcp_flags(void **mbufs, unsigned int n, void *data)
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
 		tcp_hdr->dst_port = RANDOM_TCP_DST(cnode);
-		tcp_hdr->sent_seq = rte_cpu_to_be_32(rte_rdtsc() & (uint32_t)-1);
+		tcp_hdr->sent_seq = rte_cpu_to_be_32(rdtsc32());
 		tcp_hdr->recv_ack = 1;
 		tcp_hdr->data_off = ((sizeof(struct rte_tcp_hdr) / 4) << 4);
 		/* mutation */
@@ -1637,7 +1636,7 @@ uint64_t mutation_tcp_window(void **mbufs, unsigned int n, void *data)
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
 		tcp_hdr->dst_port = RANDOM_TCP_DST(cnode);
-		tcp_hdr->sent_seq = rte_cpu_to_be_32(rte_rdtsc() & (uint32_t)-1);
+		tcp_hdr->sent_seq = rte_cpu_to_be_32(rdtsc32());
 		tcp_hdr->recv_ack = 1;
 		tcp_hdr->data_off = ((sizeof(struct rte_tcp_hdr) / 4) << 4);
 		tcp_hdr->tcp_flags = RTE_TCP_ACK_FLAG | RTE_TCP_ACK_FLAG;
@@ -1699,7 +1698,7 @@ uint64_t mutation_tcp_cksum(void **mbufs, unsigned int n, void *data)
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
 		tcp_hdr->dst_port = RANDOM_TCP_DST(cnode);
-		tcp_hdr->sent_seq = rte_cpu_to_be_32(rte_rdtsc() & (uint32_t)-1);
+		tcp_hdr->sent_seq = rte_cpu_to_be_32(rdtsc32());
 		tcp_hdr->recv_ack = 1;
 		tcp_hdr->data_off = ((sizeof(struct rte_tcp_hdr) / 4) << 4);
 		tcp_hdr->tcp_flags = RTE_TCP_ACK_FLAG | RTE_TCP_ACK_FLAG;

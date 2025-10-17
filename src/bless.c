@@ -484,6 +484,7 @@ static uint64_t (*bless_encap_outer[])(struct rte_mbuf **mbufs, unsigned int n, 
 
 uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, void *data)
 {
+	uint64_t r = 0;
 	uint64_t tx_bytes  = 0;
 
 	if (type < 0 || type >= TYPE_MAX) {
@@ -491,24 +492,23 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 	}
 
 	Cnode *cnode = (Cnode*)data;
-	// printf("data_off %u\n", mbufs[0]->data_off);
-	// struct bless_encap_params *bep = (struct bless_encap_params*)data;
-	/* inner or out-of-ratio outer */
-	// if (!bep->outer || (rte_rdtsc() % 100 >= bep->outer->fields.ratio)) {
-		// tx_bytes = bless_get_funcs[type](mbufs, n, bep->inner);
-		// tx_bytes = bless_get_funcs[type](mbufs, n, );
-		// return tx_bytes;
-	// }
 	/* inner */
-	tx_bytes = bless_get_funcs[type](mbufs, n, cnode);
-	if (tx_bytes > 0 && cnode->vxlan.enable && (rte_rdtsc() % 100 < cnode->vxlan.ratio)) {
+	r = bless_get_funcs[type](mbufs, n, cnode);
+	if (!r) {
+		return 0;
+	}
+	if (cnode->vxlan.enable) {
 		/* outer */
-		// printf("tx_bytes %lu enable %d ratio %u\n",
-				// tx_bytes, cnode->vxlan.enable, cnode->vxlan.ratio);
-		tx_bytes += bless_encap_outer[0](mbufs, n, cnode);
+		uint16_t ra = rdtsc16() & 1023;
+		if ((ra % 100) < cnode->vxlan.ratio) {
+			tx_bytes = bless_encap_outer[0](mbufs, n, cnode);
+			if (!tx_bytes) {
+				return 0;
+			}
+		}
 	}
 
-	return tx_bytes;
+	return tx_bytes + r;
 }
 
 int bless_alloc_mbufs(struct rte_mempool *pktmbuf_pool, struct rte_mbuf **mbufs, int n)
@@ -528,7 +528,7 @@ struct rte_mempool *bless_create_pktmbuf_pool(uint32_t n)
 
 	char name[128] = { 0 };
 	sprintf(name, "%s-%d", "tx_pkts_pool", rte_lcore_id());
-	printf("creating %s %u ...\n", name, n);
+	printf("creating pktmbufpool %s %u ...\n", name, n);
 	struct rte_mempool *pktmbuf_pool = rte_pktmbuf_pool_create(name, n,
 			0 /* MEMPOOL_CACHE_SIZE */, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
 			rte_socket_id());

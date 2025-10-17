@@ -1407,13 +1407,10 @@ static int config_parse_bless_erroneous(Node *root, Cnode *cnode)
 		struct ec_clas *clas = &cnode->erroneous.clas[n_clas++];
 		clas->name = strdup(n->key);
 		int n_type = 0;
-		// printf("%s: ", clas->name);
 		for (Node *i = n->child; i; i = i->next) {
 			clas->type[n_type++] = strdup(i->value);
-			// printf("%s ", i->value);
 			res++;
 		}
-		// printf("\n");
 		clas->n_type = n_type;
 	}
 	cnode->erroneous.n_clas = n_clas;
@@ -1517,7 +1514,7 @@ uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range
 uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, uint16_t num, int64_t range)
 {
 	uint32_t index = 0;
-	uint64_t tsc = rte_rdtsc();
+	uint64_t tsc = rdtsc64();
 	tsc = tsc ^ (tsc >> 8);
 
 	/* pure array: [ 0, 1, ..., n ] */

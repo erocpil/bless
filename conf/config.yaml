@@ -8,11 +8,11 @@
 
 dpdk:
   main-lcore: 0
-  l: 0,1-6
+  l: 0,1
   n: 4
   lcores: null
   socket-mem: null
-  allow: null # [ 00:04.0, 00:05.0 ]
+  allow: null # [ 00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0 ]
   block: [ 00:04.0 ]
   vdev: null # net_tap0,iface=tap0
   proc-type: primary
@@ -25,10 +25,10 @@ dpdk:
   file-prefix: null # bless
 
 injector:
-  p: 0x3f
+  p: 0x1
   q: 1
-  T: 1
   P:
+  T: 1
   no-mac-updating:
   portmap: null # (0, 1)
   batch: 512
@@ -62,7 +62,7 @@ bless:
           dst: [ 10000, 10001, 10003 ]
           payload: "injector: udp payload."
   vxlan:
-    enable: true
+    enable: false
     ratio: 10
     ether:
       dst: 10:70:fd:af:21:10
@@ -75,11 +75,11 @@ bless:
           dst-range: -5 # not supported
           udp:
             src: [ 4000, 4001, 4002 ]
-            src-range: 123 # no use
+            src-range: 123 # not supported
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 10
+    ratio: 0
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3

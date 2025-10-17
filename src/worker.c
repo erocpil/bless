@@ -136,23 +136,18 @@ void worker_loop_txonly(void *data)
 			// sent = rte_eth_tx_buffer_flush(portid, 0, buffer);
 			uint64_t tx_bytes = 0;
 			int type = -1;
-			if (nb_tx > size) {
-				nb_tx = size;
-			}
 
 			// srandom(rte_rdtsc());
 			for (int j = 0; j < nb_tx; j++) {
 				/* should this mbuf be a mutation? */
 				uint64_t tsc = rte_rdtsc();
 				tsc = tsc ^ (tsc >> 8);
-				if ((tsc & 127) < cnode->erroneous.ratio) {
-				// if (0) {
+				if ((tsc & 1023) < cnode->erroneous.ratio) {
 					int n = tsc % cnode->erroneous.n_mutation;
 					mutation_func func = cnode->erroneous.func[n];
 					int r = func((void**)&mbufs[j], 1, (void*)cnode);
-					if (-1 == r) {
-						printf("-1\n");
-						// continue;
+					if (!r) {
+						rte_exit(EXIT_FAILURE, "Cannot mutate()\n");
 					}
 					tx_bytes += r;
 					enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
@@ -160,10 +155,11 @@ void worker_loop_txonly(void *data)
 					(conf->stats[portid] + type)->tx_bytes += tx_bytes;
 				} else {
 					enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
-					tx_bytes = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
-					if (ULONG_MAX == tx_bytes) {
+					int r = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
+					if (!r) {
 						rte_exit(EXIT_FAILURE, "Cannot bless_mbuf()\n");
 					}
+					tx_bytes += r;
 					(conf->stats[portid] + type)->tx_pkts++;
 					(conf->stats[portid] + type)->tx_bytes += tx_bytes;
 				}
@@ -187,6 +183,6 @@ void worker_loop_txonly(void *data)
 				rte_pktmbuf_free_bulk(&mbufs[sent], nb_tx - sent);
 			}
 			// rte_delay_ms(1);
-			}
 		}
 	}
+}
