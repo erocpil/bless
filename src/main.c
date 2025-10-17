@@ -434,8 +434,7 @@ static unsigned int l2fwd_parse_nqueue(const char *q_arg)
 	return n;
 }
 
-	static int
-l2fwd_parse_timer_period(const char *q_arg)
+static int l2fwd_parse_timer_period(const char *q_arg)
 {
 	char *end = NULL;
 	int n;

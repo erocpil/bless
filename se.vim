@@ -2,10 +2,10 @@ let SessionLoad = 1
 if &cp | set nocp | endif
 let s:cpo_save=&cpo
 set cpo&vim
-imap <M-l> <Right>
-imap <M-h> <Left>
-imap <M-j> <Down>
 imap <M-k> <Up>
+imap <M-j> <Down>
+imap <M-h> <Left>
+imap <M-l> <Right>
 imap <Nul> <C-Space>
 inoremap <expr> <Up> pumvisible() ? "\" : "\<Up>"
 inoremap <expr> <S-Tab> pumvisible() ? "\" : "\<S-Tab>"
@@ -36,13 +36,13 @@ xmap <silent> % <Plug>(MatchitVisualForward)
 nmap <silent> % <Plug>(MatchitNormalForward)
 nmap ,t <Plug>view:switch_status_path_length
 imap ¯ <Plug>NERDCommenterToggle
-imap ì <Right>
-imap è <Left>
-imap ê <Down>
 imap ë <Up>
+imap ê <Down>
+imap è <Left>
+imap ì <Right>
 imap <silent> ï o
-nmap Q gq
 xmap Q gq
+nmap Q gq
 omap Q gq
 omap <silent> [% <Plug>(MatchitOperationMultiBackward)
 xmap <silent> [% <Plug>(MatchitVisualMultiBackward)
@@ -253,6 +253,7 @@ set autoindent
 set background=dark
 set cindent
 set cinoptions=>4,e0,n0,f0,{0,}0,^0,:s,=s,l0,gs,hs,ps,ts,+s,c3,C0,(2s,us,U0,w0,m0,j0,)20,*30
+set clipboard=unnamed,unnamedplus
 set completeopt=menuone
 set confirm
 set cpoptions=aAceFszB
@@ -305,6 +306,7 @@ set tabstop=4
 set tags=./tags,./TAGS,tags,TAGS,/usr/src/linux-source-2.6.32/include/linux/tags,/usr/src/linux-source-2.6.32/include/scsi/tags,/usr/src/linux-source-2.6.32/drivers/scsi/tags
 set title
 set titlelen=100
+set titlestring=%<%(%{Tlist_Get_Tag_Prototype_By_Line()}\ \ \ %)%([%M]%)%f%{FileInfo()}\ %{getcwd()}\ %=%l/%L-%P
 set ttimeout
 set ttimeoutlen=100
 set undofile
@@ -316,7 +318,7 @@ let s:so_save = &g:so | let s:siso_save = &g:siso | setg so=0 siso=0 | setl so=-
 let v:this_session=expand("<sfile>:p")
 silent only
 silent tabonly
-cd ~/src/bless/src
+cd ~/src/bless/include
 if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
@@ -329,13 +331,15 @@ badd +147 ~/src/bless/src/worker.c
 badd +1364 ~/src/bless/src/config.c
 badd +68 ~/src/bless/include/config.h
 badd +87 ~/src/bless/conf/config.yaml
-badd +35 ~/src/bless/src/Makefile
+badd +29 ~/src/bless/src/Makefile
 badd +19 ~/src/bless/include/erroneous.h
 badd +60 ~/src/bless/include/mutation.h
+badd +0 ~/src/bless/include/define.h
 argglobal
 %argdel
-$argadd main.c
+$argadd ~/src/bless/src/main.c
 set stal=2
+tabnew +setlocal\ bufhidden=wipe
 tabnew +setlocal\ bufhidden=wipe
 tabnew +setlocal\ bufhidden=wipe
 tabnew +setlocal\ bufhidden=wipe
@@ -499,17 +503,23 @@ setlocal nowinfixheight
 setlocal nowinfixwidth
 setlocal wrap
 setlocal wrapmargin=0
-520
+287
 sil! normal! zo
-538
+300
 sil! normal! zo
-540
+309
 sil! normal! zo
-let s:l = 669 - ((19 * winheight(0) + 17) / 34)
+519
+sil! normal! zo
+537
+sil! normal! zo
+539
+sil! normal! zo
+let s:l = 309 - ((20 * winheight(0) + 17) / 34)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 669
+keepjumps 309
 normal! 0
 tabnext
 edit ~/src/bless/include/erroneous.h
@@ -670,246 +680,16 @@ setlocal wrapmargin=0
 sil! normal! zo
 20
 sil! normal! zo
-let s:l = 18 - ((16 * winheight(0) + 17) / 34)
+let s:l = 16 - ((14 * winheight(0) + 17) / 34)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 18
-normal! 04|
+keepjumps 16
+normal! 0
 tabnext
 edit ~/src/bless/include/mutation.h
 argglobal
 balt ~/src/bless/include/bless.h
-let s:cpo_save=&cpo
-set cpo&vim
-inoremap <buffer> <silent> <M--> =EchoFuncP()
-inoremap <buffer> <silent> <M-=> =EchoFuncN()
-inoremap <buffer> <silent> ­ =EchoFuncP()
-inoremap <buffer> <silent> ½ =EchoFuncN()
-inoremap <buffer> <silent> ( (=EchoFunc()
-inoremap <buffer> <silent> ) =EchoFuncClear())
-let &cpo=s:cpo_save
-unlet s:cpo_save
-setlocal keymap=
-setlocal noarabic
-setlocal autoindent
-setlocal backupcopy=
-setlocal balloonexpr=
-setlocal nobinary
-setlocal nobreakindent
-setlocal breakindentopt=
-setlocal bufhidden=
-setlocal buflisted
-setlocal buftype=
-setlocal cindent
-setlocal cinkeys=0{,0},0),0],:,0#,!^F,o,O,e
-setlocal cinoptions=>4,e0,n0,f0,{0,}0,^0,:s,=s,l0,gs,hs,ps,ts,+s,c3,C0,(2s,us,U0,w0,m0,j0,)20,*30
-setlocal cinscopedecls=public,protected,private
-setlocal cinwords=if,else,while,do,for,switch
-setlocal colorcolumn=
-setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,://
-setlocal commentstring=/*\ %s\ */
-setlocal complete=.,w,b,u,t,i
-setlocal completefunc=
-setlocal completeopt=
-setlocal concealcursor=
-setlocal conceallevel=0
-setlocal nocopyindent
-setlocal cryptmethod=
-setlocal nocursorbind
-setlocal nocursorcolumn
-setlocal nocursorline
-setlocal cursorlineopt=both
-setlocal define=^\\s*#\\s*define
-setlocal dictionary=~/.vim/c-support/wordlists/c-c++-keywords.list,~/.vim/c-support/wordlists/k+r.list,~/.vim/c-support/wordlists/stl_index.list
-setlocal nodiff
-setlocal diffanchors=
-setlocal equalprg=
-setlocal errorformat=
-setlocal eventignorewin=
-setlocal noexpandtab
-if &filetype != 'c'
-setlocal filetype=c
-endif
-setlocal fillchars=
-setlocal findfunc=
-setlocal fixendofline
-setlocal foldcolumn=0
-setlocal foldenable
-setlocal foldexpr=0
-setlocal foldignore=#
-set foldlevel=100
-setlocal foldlevel=100
-setlocal foldmarker={{{,}}}
-set foldmethod=syntax
-setlocal foldmethod=syntax
-setlocal foldminlines=1
-setlocal foldnestmax=20
-setlocal foldtext=foldtext()
-setlocal formatexpr=
-setlocal formatlistpat=^\\s*\\d\\+[\\]:.)}\\t\ ]\\s*
-setlocal formatoptions=croql
-setlocal formatprg=
-setlocal grepformat=
-setlocal grepprg=
-setlocal iminsert=0
-setlocal imsearch=-1
-setlocal include=^\\s*#\\s*include
-setlocal includeexpr=
-setlocal indentexpr=
-setlocal indentkeys=0{,0},0),0],:,0#,!^F,o,O,e
-setlocal noinfercase
-setlocal isexpand=
-setlocal iskeyword=@,48-57,_,192-255
-setlocal keywordprg=
-setlocal lhistory=10
-set linebreak
-setlocal linebreak
-setlocal nolisp
-setlocal lispoptions=
-setlocal lispwords=
-setlocal nolist
-setlocal listchars=
-setlocal makeencoding=
-setlocal makeprg=
-setlocal matchpairs=(:),{:},[:],<:>
-setlocal nomodeline
-setlocal modifiable
-setlocal nrformats=bin,hex
-set number
-setlocal number
-setlocal numberwidth=4
-setlocal omnifunc=ccomplete#Complete
-setlocal path=
-setlocal nopreserveindent
-setlocal nopreviewwindow
-setlocal quoteescape=\\
-setlocal noreadonly
-setlocal norelativenumber
-setlocal norightleft
-setlocal rightleftcmd=search
-setlocal noscrollbind
-setlocal scrolloff=-1
-setlocal shiftwidth=4
-setlocal noshortname
-setlocal showbreak=
-setlocal sidescrolloff=-1
-setlocal signcolumn=auto
-setlocal smartindent
-setlocal nosmoothscroll
-setlocal softtabstop=4
-setlocal nospell
-setlocal spellcapcheck=[.?!]\\_[\\])'\"\	\ ]\\+
-setlocal spellfile=
-setlocal spelllang=en
-setlocal spelloptions=
-setlocal statusline=%h%#StatuslineFlag#%m%r%w\ %#StatuslineFileName#%t\ %#StatuslineFileEnc#%{&fileencoding}\ %#StatuslineFileFormat#%{&fileformat}\ %#StatuslineFileType#%{strlen(&ft)?'.'.&ft:'**'}\ %#GetTagName#%{GetTagName(line('.'))}%0*\ %=%#StatuslinePosition#%c-%v\ %l\ %#StatuslinePercent#%L\ %P\ %#StatuslineHostName#%{hostname()}local
-setlocal suffixesadd=
-setlocal swapfile
-setlocal synmaxcol=3000
-if &syntax != 'c'
-setlocal syntax=c
-endif
-setlocal tabstop=4
-setlocal tagcase=
-setlocal tagfunc=
-setlocal tags=
-setlocal termwinkey=
-setlocal termwinscroll=10000
-setlocal termwinsize=
-setlocal textwidth=78
-setlocal thesaurus=
-setlocal thesaurusfunc=
-setlocal undofile
-setlocal undolevels=-123456
-setlocal varsofttabstop=
-setlocal vartabstop=
-setlocal virtualedit=
-setlocal wincolor=
-setlocal nowinfixbuf
-setlocal nowinfixheight
-setlocal nowinfixwidth
-setlocal wrap
-setlocal wrapmargin=0
-69
-sil! normal! zo
-81
-sil! normal! zo
-164
-sil! normal! zo
-176
-sil! normal! zo
-282
-sil! normal! zo
-294
-sil! normal! zo
-351
-sil! normal! zo
-356
-sil! normal! zo
-417
-sil! normal! zo
-478
-sil! normal! zo
-547
-sil! normal! zo
-608
-sil! normal! zo
-669
-sil! normal! zo
-678
-sil! normal! zo
-742
-sil! normal! zo
-807
-sil! normal! zo
-877
-sil! normal! zo
-943
-sil! normal! zo
-952
-sil! normal! zo
-1264
-sil! normal! zo
-1383
-sil! normal! zo
-1396
-sil! normal! zo
-1405
-sil! normal! zo
-1460
-sil! normal! zo
-1469
-sil! normal! zo
-1521
-sil! normal! zo
-1530
-sil! normal! zo
-1583
-sil! normal! zo
-1592
-sil! normal! zo
-1645
-sil! normal! zo
-1654
-sil! normal! zo
-1707
-sil! normal! zo
-1716
-sil! normal! zo
-1770
-sil! normal! zo
-1779
-sil! normal! zo
-let s:l = 60 - ((12 * winheight(0) + 17) / 34)
-if s:l < 1 | let s:l = 1 | endif
-keepjumps exe s:l
-normal! zt
-keepjumps 60
-normal! 026|
-tabnext
-edit ~/src/bless/src/config.c
-argglobal
 let s:cpo_save=&cpo
 set cpo&vim
 inoremap <buffer> <silent> <M--> =EchoFuncP()
@@ -1062,6 +842,415 @@ setlocal nowinfixheight
 setlocal nowinfixwidth
 setlocal wrap
 setlocal wrapmargin=0
+20
+sil! normal! zo
+32
+sil! normal! zo
+115
+sil! normal! zo
+128
+sil! normal! zo
+232
+sil! normal! zo
+244
+sil! normal! zo
+301
+sil! normal! zo
+306
+sil! normal! zo
+367
+sil! normal! zo
+428
+sil! normal! zo
+497
+sil! normal! zo
+558
+sil! normal! zo
+619
+sil! normal! zo
+628
+sil! normal! zo
+677
+sil! normal! zo
+692
+sil! normal! zo
+701
+sil! normal! zo
+757
+sil! normal! zo
+766
+sil! normal! zo
+827
+sil! normal! zo
+836
+sil! normal! zo
+893
+sil! normal! zo
+902
+sil! normal! zo
+1030
+sil! normal! zo
+1039
+sil! normal! zo
+1214
+sil! normal! zo
+1346
+sil! normal! zo
+1355
+sil! normal! zo
+1410
+sil! normal! zo
+1419
+sil! normal! zo
+1471
+sil! normal! zo
+1480
+sil! normal! zo
+1533
+sil! normal! zo
+1542
+sil! normal! zo
+1595
+sil! normal! zo
+1604
+sil! normal! zo
+1657
+sil! normal! zo
+1666
+sil! normal! zo
+1720
+sil! normal! zo
+1729
+sil! normal! zo
+let s:l = 367 - ((16 * winheight(0) + 17) / 34)
+if s:l < 1 | let s:l = 1 | endif
+keepjumps exe s:l
+normal! zt
+keepjumps 367
+normal! 0
+tabnext
+edit ~/src/bless/include/define.h
+argglobal
+balt ~/src/bless/include/mutation.h
+let s:cpo_save=&cpo
+set cpo&vim
+inoremap <buffer> <silent> <M--> =EchoFuncP()
+inoremap <buffer> <silent> <M-=> =EchoFuncN()
+inoremap <buffer> <silent> ­ =EchoFuncP()
+inoremap <buffer> <silent> ½ =EchoFuncN()
+inoremap <buffer> <silent> ( (=EchoFunc()
+inoremap <buffer> <silent> ) =EchoFuncClear())
+let &cpo=s:cpo_save
+unlet s:cpo_save
+setlocal keymap=
+setlocal noarabic
+setlocal autoindent
+setlocal backupcopy=
+setlocal balloonexpr=
+setlocal nobinary
+setlocal nobreakindent
+setlocal breakindentopt=
+setlocal bufhidden=
+setlocal buflisted
+setlocal buftype=
+setlocal cindent
+setlocal cinkeys=0{,0},0),0],:,0#,!^F,o,O,e
+setlocal cinoptions=>4,e0,n0,f0,{0,}0,^0,:s,=s,l0,gs,hs,ps,ts,+s,c3,C0,(2s,us,U0,w0,m0,j0,)20,*30
+setlocal cinscopedecls=public,protected,private
+setlocal cinwords=if,else,while,do,for,switch
+setlocal colorcolumn=
+setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,://
+setlocal commentstring=/*\ %s\ */
+setlocal complete=.,w,b,u,t,i
+setlocal completefunc=
+setlocal completeopt=
+setlocal concealcursor=
+setlocal conceallevel=0
+setlocal nocopyindent
+setlocal cryptmethod=
+setlocal nocursorbind
+setlocal nocursorcolumn
+setlocal nocursorline
+setlocal cursorlineopt=both
+setlocal define=^\\s*#\\s*define
+setlocal dictionary=~/.vim/c-support/wordlists/c-c++-keywords.list,~/.vim/c-support/wordlists/k+r.list,~/.vim/c-support/wordlists/stl_index.list
+setlocal nodiff
+setlocal diffanchors=
+setlocal equalprg=
+setlocal errorformat=
+setlocal eventignorewin=
+setlocal noexpandtab
+if &filetype != 'c'
+setlocal filetype=c
+endif
+setlocal fillchars=
+setlocal findfunc=
+setlocal fixendofline
+setlocal foldcolumn=0
+setlocal foldenable
+setlocal foldexpr=0
+setlocal foldignore=#
+set foldlevel=100
+setlocal foldlevel=100
+setlocal foldmarker={{{,}}}
+set foldmethod=syntax
+setlocal foldmethod=syntax
+setlocal foldminlines=1
+setlocal foldnestmax=20
+setlocal foldtext=foldtext()
+setlocal formatexpr=
+setlocal formatlistpat=^\\s*\\d\\+[\\]:.)}\\t\ ]\\s*
+setlocal formatoptions=croql
+setlocal formatprg=
+setlocal grepformat=
+setlocal grepprg=
+setlocal iminsert=0
+setlocal imsearch=-1
+setlocal include=^\\s*#\\s*include
+setlocal includeexpr=
+setlocal indentexpr=
+setlocal indentkeys=0{,0},0),0],:,0#,!^F,o,O,e
+setlocal noinfercase
+setlocal isexpand=
+setlocal iskeyword=@,48-57,_,192-255
+setlocal keywordprg=
+setlocal lhistory=10
+set linebreak
+setlocal linebreak
+setlocal nolisp
+setlocal lispoptions=
+setlocal lispwords=
+setlocal nolist
+setlocal listchars=
+setlocal makeencoding=
+setlocal makeprg=
+setlocal matchpairs=(:),{:},[:],<:>
+setlocal nomodeline
+setlocal modifiable
+setlocal nrformats=bin,hex
+set number
+setlocal number
+setlocal numberwidth=4
+setlocal omnifunc=ccomplete#Complete
+setlocal path=
+setlocal nopreserveindent
+setlocal nopreviewwindow
+setlocal quoteescape=\\
+setlocal noreadonly
+setlocal norelativenumber
+setlocal norightleft
+setlocal rightleftcmd=search
+setlocal noscrollbind
+setlocal scrolloff=-1
+setlocal shiftwidth=4
+setlocal noshortname
+setlocal showbreak=
+setlocal sidescrolloff=-1
+setlocal signcolumn=auto
+setlocal smartindent
+setlocal nosmoothscroll
+setlocal softtabstop=4
+setlocal nospell
+setlocal spellcapcheck=[.?!]\\_[\\])'\"\	\ ]\\+
+setlocal spellfile=
+setlocal spelllang=en
+setlocal spelloptions=
+setlocal statusline=%h%#StatuslineFlag#%m%r%w\ %#StatuslineFileName#%t\ %#StatuslineFileEnc#%{&fileencoding}\ %#StatuslineFileFormat#%{&fileformat}\ %#StatuslineFileType#%{strlen(&ft)?'.'.&ft:'**'}\ %#GetTagName#%{GetTagName(line('.'))}%0*\ %=%#StatuslinePosition#%c-%v\ %l\ %#StatuslinePercent#%L\ %P\ %#StatuslineHostName#%{hostname()}local
+setlocal suffixesadd=
+setlocal swapfile
+setlocal synmaxcol=3000
+if &syntax != 'c'
+setlocal syntax=c
+endif
+setlocal tabstop=4
+setlocal tagcase=
+setlocal tagfunc=
+setlocal tags=
+setlocal termwinkey=
+setlocal termwinscroll=10000
+setlocal termwinsize=
+setlocal textwidth=78
+setlocal thesaurus=
+setlocal thesaurusfunc=
+setlocal undofile
+setlocal undolevels=-123456
+setlocal varsofttabstop=
+setlocal vartabstop=
+setlocal virtualedit=
+setlocal wincolor=
+setlocal nowinfixbuf
+setlocal nowinfixheight
+setlocal nowinfixwidth
+setlocal wrap
+setlocal wrapmargin=0
+39
+sil! normal! zo
+70
+sil! normal! zo
+76
+sil! normal! zo
+81
+sil! normal! zo
+let s:l = 69 - ((16 * winheight(0) + 17) / 34)
+if s:l < 1 | let s:l = 1 | endif
+keepjumps exe s:l
+normal! zt
+keepjumps 69
+normal! 0
+tabnext
+edit ~/src/bless/src/config.c
+argglobal
+let s:cpo_save=&cpo
+set cpo&vim
+inoremap <buffer> <silent> <M--> =EchoFuncP()
+inoremap <buffer> <silent> <M-=> =EchoFuncN()
+inoremap <buffer> <silent> ­ =EchoFuncP()
+inoremap <buffer> <silent> ½ =EchoFuncN()
+inoremap <buffer> <silent> ( (=EchoFunc()
+inoremap <buffer> <silent> ) =EchoFuncClear())
+let &cpo=s:cpo_save
+unlet s:cpo_save
+setlocal keymap=
+setlocal noarabic
+setlocal autoindent
+setlocal backupcopy=
+setlocal balloonexpr=
+setlocal nobinary
+setlocal nobreakindent
+setlocal breakindentopt=
+setlocal bufhidden=
+setlocal buflisted
+setlocal buftype=
+setlocal cindent
+setlocal cinkeys=0{,0},0),0],:,0#,!^F,o,O,e
+setlocal cinoptions=>4,e0,n0,f0,{0,}0,^0,:s,=s,l0,gs,hs,ps,ts,+s,c3,C0,(2s,us,U0,w0,m0,j0,)20,*30
+setlocal cinscopedecls=public,protected,private
+setlocal cinwords=if,else,while,do,for,switch
+setlocal colorcolumn=
+setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,://
+setlocal commentstring=/*\ %s\ */
+setlocal complete=.,w,b,u,t,i
+setlocal completefunc=
+setlocal completeopt=
+setlocal concealcursor=
+setlocal conceallevel=0
+setlocal nocopyindent
+setlocal cryptmethod=
+setlocal nocursorbind
+setlocal nocursorcolumn
+setlocal nocursorline
+setlocal cursorlineopt=both
+setlocal define=^\\s*#\\s*define
+setlocal dictionary=~/.vim/c-support/wordlists/c-c++-keywords.list,~/.vim/c-support/wordlists/k+r.list,~/.vim/c-support/wordlists/stl_index.list
+setlocal nodiff
+setlocal diffanchors=
+setlocal equalprg=
+setlocal errorformat=
+setlocal eventignorewin=
+setlocal noexpandtab
+if &filetype != 'c'
+setlocal filetype=c
+endif
+setlocal fillchars=
+setlocal findfunc=
+setlocal fixendofline
+setlocal foldcolumn=0
+setlocal foldenable
+setlocal foldexpr=0
+setlocal foldignore=#
+set foldlevel=100
+setlocal foldlevel=100
+setlocal foldmarker={{{,}}}
+set foldmethod=syntax
+setlocal foldmethod=syntax
+setlocal foldminlines=1
+setlocal foldnestmax=20
+setlocal foldtext=foldtext()
+setlocal formatexpr=
+setlocal formatlistpat=^\\s*\\d\\+[\\]:.)}\\t\ ]\\s*
+setlocal formatoptions=croql
+setlocal formatprg=
+setlocal grepformat=
+setlocal grepprg=
+setlocal iminsert=0
+setlocal imsearch=-1
+setlocal include=^\\s*#\\s*include
+setlocal includeexpr=
+setlocal indentexpr=
+setlocal indentkeys=0{,0},0),0],:,0#,!^F,o,O,e
+setlocal noinfercase
+setlocal isexpand=
+setlocal iskeyword=@,48-57,_,192-255
+setlocal keywordprg=
+setlocal lhistory=10
+set linebreak
+setlocal linebreak
+setlocal nolisp
+setlocal lispoptions=
+setlocal lispwords=
+setlocal nolist
+setlocal listchars=
+setlocal makeencoding=
+setlocal makeprg=
+setlocal matchpairs=(:),{:},[:],<:>
+setlocal nomodeline
+setlocal modifiable
+setlocal nrformats=bin,hex
+set number
+setlocal number
+setlocal numberwidth=4
+setlocal omnifunc=ccomplete#Complete
+setlocal path=
+setlocal nopreserveindent
+setlocal nopreviewwindow
+setlocal quoteescape=\\
+setlocal noreadonly
+setlocal norelativenumber
+setlocal norightleft
+setlocal rightleftcmd=search
+setlocal noscrollbind
+setlocal scrolloff=-1
+setlocal shiftwidth=4
+setlocal noshortname
+setlocal showbreak=
+setlocal sidescrolloff=-1
+setlocal signcolumn=auto
+setlocal smartindent
+setlocal nosmoothscroll
+setlocal softtabstop=4
+setlocal nospell
+setlocal spellcapcheck=[.?!]\\_[\\])'\"\	\ ]\\+
+setlocal spellfile=
+setlocal spelllang=en
+setlocal spelloptions=
+setlocal statusline=%h%#StatuslineFlag#%m%r%w\ %#StatuslineFileName#%t\ %#StatuslineFileEnc#%{&fileencoding}\ %#StatuslineFileFormat#%{&fileformat}\ %#StatuslineFileType#%{strlen(&ft)?'.'.&ft:'**'}\ %#GetTagName#%{GetTagName(line('.'))}%0*\ %=%#StatuslinePosition#%c-%v\ %l\ %#StatuslinePercent#%L\ %P\ %#StatuslineHostName#%{hostname()}local
+setlocal suffixesadd=
+setlocal swapfile
+setlocal synmaxcol=3000
+if &syntax != 'c'
+setlocal syntax=c
+endif
+setlocal tabstop=4
+setlocal tagcase=
+setlocal tagfunc=
+setlocal tags=
+setlocal termwinkey=
+setlocal termwinscroll=10000
+setlocal termwinsize=
+setlocal textwidth=78
+setlocal thesaurus=
+setlocal thesaurusfunc=
+setlocal undofile
+setlocal undolevels=-123456
+setlocal varsofttabstop=
+setlocal vartabstop=
+setlocal virtualedit=
+setlocal wincolor=
+setlocal nowinfixbuf
+setlocal nowinfixheight
+setlocal nowinfixwidth
+setlocal wrap
+setlocal wrapmargin=0
 21
 sil! normal! zo
 34
@@ -1072,58 +1261,74 @@ sil! normal! zo
 sil! normal! zo
 349
 sil! normal! zo
-568
+556
 sil! normal! zo
-571
+559
 sil! normal! zo
-690
+567
 sil! normal! zo
-694
+678
 sil! normal! zo
-720
+682
 sil! normal! zo
-723
+689
 sil! normal! zo
-725
+708
 sil! normal! zo
-753
+711
 sil! normal! zo
-760
+713
 sil! normal! zo
-782
+741
 sil! normal! zo
-815
+748
 sil! normal! zo
-818
+770
+sil! normal! zo
+803
+sil! normal! zo
+806
+sil! normal! zo
+808
 sil! normal! zo
 820
 sil! normal! zo
-880
+868
 sil! normal! zo
-942
+876
 sil! normal! zo
-1021
+922
 sil! normal! zo
-1034
+1009
 sil! normal! zo
-1093
+1049
 sil! normal! zo
-1148
+1088
 sil! normal! zo
-1161
+1123
 sil! normal! zo
-1214
+1160
 sil! normal! zo
-1334
+1194
 sil! normal! zo
-1378
+1207
 sil! normal! zo
-let s:l = 1381 - ((9 * winheight(0) + 17) / 34)
+1260
+sil! normal! zo
+1380
+sil! normal! zo
+1473
+sil! normal! zo
+1490
+sil! normal! zo
+1511
+sil! normal! zo
+let s:l = 1511 - ((11 * winheight(0) + 17) / 34)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 1381
-normal! 018|
+keepjumps 1511
+normal! 0
 tabnext
 edit ~/src/bless/conf/config.yaml
 argglobal
@@ -1430,28 +1635,12 @@ setlocal nowinfixheight
 setlocal nowinfixwidth
 setlocal wrap
 setlocal wrapmargin=0
-38
-sil! normal! zo
-39
-sil! normal! zo
-44
-sil! normal! zo
-51
-sil! normal! zo
-75
-sil! normal! zo
-78
-sil! normal! zo
-83
-sil! normal! zo
-84
-sil! normal! zo
 let s:l = 122 - ((30 * winheight(0) + 17) / 34)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
 keepjumps 122
-normal! 010|
+normal! 012|
 tabnext
 edit ~/src/bless/src/worker.c
 argglobal
@@ -1606,9 +1795,9 @@ setlocal nowinfixheight
 setlocal nowinfixwidth
 setlocal wrap
 setlocal wrapmargin=0
-9
+7
 sil! normal! zo
-129
+127
 sil! normal! zo
 let s:l = 131 - ((21 * winheight(0) + 17) / 34)
 if s:l < 1 | let s:l = 1 | endif
@@ -1772,42 +1961,36 @@ setlocal nowinfixheight
 setlocal nowinfixwidth
 setlocal wrap
 setlocal wrapmargin=0
-41
+40
 sil! normal! zo
-68
-sil! normal! zo
-98
+85
 sil! normal! zo
 101
 sil! normal! zo
-113
-sil! normal! zo
 116
 sil! normal! zo
-129
+163
 sil! normal! zo
-143
+168
 sil! normal! zo
-199
+221
 sil! normal! zo
-204
+234
 sil! normal! zo
-262
+324
 sil! normal! zo
-371
+337
 sil! normal! zo
-386
+486
 sil! normal! zo
-566
+564
 sil! normal! zo
-608
-sil! normal! zo
-let s:l = 765 - ((16 * winheight(0) + 17) / 34)
+let s:l = 500 - ((16 * winheight(0) + 17) / 34)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 765
-normal! 06|
+keepjumps 500
+normal! 019|
 tabnext
 edit ~/src/bless/include/bless.h
 argglobal
@@ -2129,7 +2312,7 @@ keepjumps exe s:l
 normal! zt
 keepjumps 24
 normal! 0
-tabnext 4
+tabnext 3
 set stal=1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0
   silent exe 'bwipe ' . s:wipebuf

@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 #include <bits/socket.h>
+#include <x86intrin.h>
 
 #define RTE_LOGTYPE_BLESS RTE_LOGTYPE_USER1
 
@@ -47,7 +48,7 @@ static unsigned int make_power_of_2(unsigned int n)
 }
 
 /* 计算 16-bit one's complement checksum */
-	static uint16_t icmp_calc_cksum(const void *buf, size_t len)
+static uint16_t icmp_calc_cksum(const void *buf, size_t len)
 {
 	const uint16_t *data = buf;
 	uint32_t sum = 0;
@@ -64,4 +65,31 @@ static unsigned int make_power_of_2(unsigned int n)
 
 	return (uint16_t)(~sum);
 }
+
+static inline uint64_t rdtsc_serialized()
+{
+	// _mm_lfence();
+	return __rdtsc();
+}
+
+static inline uint8_t rdtsc8()
+{
+	return rdtsc_serialized();
+}
+
+static inline uint16_t rdtsc16()
+{
+	return rdtsc_serialized();
+}
+
+static inline uint32_t rdtsc32()
+{
+	return rdtsc_serialized();
+}
+
+static inline uint64_t rdtsc64()
+{
+	return rdtsc_serialized();
+}
+
 #endif

@@ -97,7 +97,7 @@ int32_t bless_seperate_port_range(char *port_range)
 	return 0;
 }
 
-uint64_t get_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	struct rte_ether_hdr *eth;
 	struct rte_ipv4_hdr *ip;
@@ -159,7 +159,7 @@ uint64_t get_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
  * 1. random pkts generation according to conf->bless
  * 2. set pkt type using rte_mbuf_dynfield detailed metrics
  */
-uint64_t get_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	uint64_t tx_bytes = 0;
 	const uint16_t total_pkt_size = sizeof(struct rte_ether_hdr) + sizeof(struct rte_arp_hdr);
@@ -217,7 +217,7 @@ uint64_t get_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	return tx_bytes;
 }
 
-uint64_t get_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	const char *payload = "tcp payload";  // TCP 数据部分
 	uint16_t payload_len = strlen(payload) + 1;
@@ -320,7 +320,7 @@ static uint16_t calc_cksum(const void *buf, size_t len)
 }
 #endif
 
-uint64_t get_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	Cnode *cnode = (Cnode*)data;
 	uint64_t tx_bytes = 0;
@@ -390,7 +390,7 @@ uint64_t get_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	return tx_bytes;
 }
 
-uint64_t get_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	return 0;
 }
@@ -469,11 +469,11 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 }
 
 static uint64_t (*bless_get_funcs[])(struct rte_mbuf **mbufs, unsigned int n, void *data) = {
-	get_mbufs_arp,
-	get_mbufs_icmp,
-	get_mbufs_tcp,
-	get_mbufs_udp,
-	get_mbufs_erroneous,
+	bless_mbufs_arp,
+	bless_mbufs_icmp,
+	bless_mbufs_tcp,
+	bless_mbufs_udp,
+	bless_mbufs_erroneous,
 	NULL
 };
 
@@ -482,8 +482,9 @@ static uint64_t (*bless_encap_outer[])(struct rte_mbuf **mbufs, unsigned int n, 
 	NULL
 };
 
-uint64_t bless_get_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, void *data)
+uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, void *data)
 {
+	uint64_t r = 0;
 	uint64_t tx_bytes  = 0;
 
 	if (type < 0 || type >= TYPE_MAX) {
@@ -491,24 +492,23 @@ uint64_t bless_get_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE ty
 	}
 
 	Cnode *cnode = (Cnode*)data;
-	// printf("data_off %u\n", mbufs[0]->data_off);
-	// struct bless_encap_params *bep = (struct bless_encap_params*)data;
-	/* inner or out-of-ratio outer */
-	// if (!bep->outer || (rte_rdtsc() % 100 >= bep->outer->fields.ratio)) {
-		// tx_bytes = bless_get_funcs[type](mbufs, n, bep->inner);
-		// tx_bytes = bless_get_funcs[type](mbufs, n, );
-		// return tx_bytes;
-	// }
 	/* inner */
-	tx_bytes = bless_get_funcs[type](mbufs, n, cnode);
-	if (tx_bytes > 0 && cnode->vxlan.enable && (rte_rdtsc() % 100 < cnode->vxlan.ratio)) {
+	r = bless_get_funcs[type](mbufs, n, cnode);
+	if (!r) {
+		return 0;
+	}
+	if (cnode->vxlan.enable) {
 		/* outer */
-		// printf("tx_bytes %lu enable %d ratio %u\n",
-				// tx_bytes, cnode->vxlan.enable, cnode->vxlan.ratio);
-		tx_bytes += bless_encap_outer[0](mbufs, n, cnode);
+		uint16_t ra = rdtsc16() & 1023;
+		if ((ra % 100) < cnode->vxlan.ratio) {
+			tx_bytes = bless_encap_outer[0](mbufs, n, cnode);
+			if (!tx_bytes) {
+				return 0;
+			}
+		}
 	}
 
-	return tx_bytes;
+	return tx_bytes + r;
 }
 
 int bless_alloc_mbufs(struct rte_mempool *pktmbuf_pool, struct rte_mbuf **mbufs, int n)
@@ -528,7 +528,7 @@ struct rte_mempool *bless_create_pktmbuf_pool(uint32_t n)
 
 	char name[128] = { 0 };
 	sprintf(name, "%s-%d", "tx_pkts_pool", rte_lcore_id());
-	printf("creating %s %u ...\n", name, n);
+	printf("creating pktmbufpool %s %u ...\n", name, n);
 	struct rte_mempool *pktmbuf_pool = rte_pktmbuf_pool_create(name, n,
 			0 /* MEMPOOL_CACHE_SIZE */, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
 			rte_socket_id());
