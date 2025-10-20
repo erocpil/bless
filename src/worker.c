@@ -160,7 +160,7 @@ void worker_loop_txonly(void *data)
 					(conf->stats[portid] + type)->tx_bytes += tx_bytes;
 				} else {
 					enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
-					tx_bytes = bless_get_mbufs(&mbufs[j], 1, type, (void*)cnode);
+					tx_bytes = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
 					if (ULONG_MAX == tx_bytes) {
 						rte_exit(EXIT_FAILURE, "Cannot bless_mbuf()\n");
 					}

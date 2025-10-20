@@ -97,7 +97,7 @@ int32_t bless_seperate_port_range(char *port_range)
 	return 0;
 }
 
-uint64_t get_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	struct rte_ether_hdr *eth;
 	struct rte_ipv4_hdr *ip;
@@ -159,7 +159,7 @@ uint64_t get_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
  * 1. random pkts generation according to conf->bless
  * 2. set pkt type using rte_mbuf_dynfield detailed metrics
  */
-uint64_t get_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	uint64_t tx_bytes = 0;
 	const uint16_t total_pkt_size = sizeof(struct rte_ether_hdr) + sizeof(struct rte_arp_hdr);
@@ -217,7 +217,7 @@ uint64_t get_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	return tx_bytes;
 }
 
-uint64_t get_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	const char *payload = "tcp payload";  // TCP 数据部分
 	uint16_t payload_len = strlen(payload) + 1;
@@ -320,7 +320,7 @@ static uint16_t calc_cksum(const void *buf, size_t len)
 }
 #endif
 
-uint64_t get_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	Cnode *cnode = (Cnode*)data;
 	uint64_t tx_bytes = 0;
@@ -390,7 +390,7 @@ uint64_t get_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	return tx_bytes;
 }
 
-uint64_t get_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data)
+uint64_t bless_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	return 0;
 }
@@ -469,11 +469,11 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 }
 
 static uint64_t (*bless_get_funcs[])(struct rte_mbuf **mbufs, unsigned int n, void *data) = {
-	get_mbufs_arp,
-	get_mbufs_icmp,
-	get_mbufs_tcp,
-	get_mbufs_udp,
-	get_mbufs_erroneous,
+	bless_mbufs_arp,
+	bless_mbufs_icmp,
+	bless_mbufs_tcp,
+	bless_mbufs_udp,
+	bless_mbufs_erroneous,
 	NULL
 };
 
@@ -482,7 +482,7 @@ static uint64_t (*bless_encap_outer[])(struct rte_mbuf **mbufs, unsigned int n, 
 	NULL
 };
 
-uint64_t bless_get_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, void *data)
+uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, void *data)
 {
 	uint64_t tx_bytes  = 0;
 

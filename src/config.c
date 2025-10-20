@@ -1474,10 +1474,11 @@ Cnode *config_parse_bless(Node *root)
 
 uint16_t random_array_elem_uint16_t(uint16_t *array, uint16_t num, int32_t range)
 {
-	uint64_t tsc = rte_rdtsc();
-	tsc = tsc ^ (tsc >> 8);
+	uint64_t ra = rte_rdtsc();
+	uint16_t tsc = 0;
 
 	if (num) {
+		tsc =  (uint16_t)(ra ^ (ra >> 8)) & (BLESS_CONFIG_MAX - 1);
 		return rte_cpu_to_be_16(array[tsc % num]);
 	}
 
@@ -1485,16 +1486,18 @@ uint16_t random_array_elem_uint16_t(uint16_t *array, uint16_t num, int32_t range
 		return rte_cpu_to_be_16(*array);
 	}
 
+	tsc = (ra ^ (ra >> 8)) & (uint16_t)(-1);
 	int offset = tsc % labs(range);
 	return rte_cpu_to_be_16(*array + (range > 0 ? offset : -offset));
 }
 
 uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range)
 {
-	uint64_t tsc = rte_rdtsc();
-	tsc = tsc ^ (tsc >> 8);
+	uint64_t ra = rte_rdtsc();
+	uint32_t tsc = 0;
 
 	if (num) {
+		tsc = (uint32_t)(ra ^ (ra >> 8)) & (BLESS_CONFIG_MAX - 1);
 		return array[tsc % num];
 	}
 
@@ -1502,6 +1505,7 @@ uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range
 		return *array;
 	}
 
+	tsc = (uint32_t)(ra ^ (ra >> 8));
 	int offset = tsc % labs(range);
 	return rte_cpu_to_be_32(rte_cpu_to_be_32(*array) + (range > 0 ? offset : -offset));
 }

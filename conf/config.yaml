@@ -63,7 +63,7 @@ bless:
           payload: "injector: udp payload."
   vxlan:
     enable: true
-    ratio: 80
+    ratio: 10
     ether:
       dst: 10:70:fd:af:21:10
       src: 10:70:fd:af:21:02
@@ -79,7 +79,7 @@ bless:
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 0
+    ratio: 10
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3
