@@ -47,12 +47,12 @@
 
 /* Per-port statistics struct */
 struct port_statistics {
-	uint64_t tx_pkts;
-	uint64_t tx_bytes;
-	uint64_t rx;
-	uint64_t dropped_pkts;
-	uint64_t dropped_bytes;
-	uint64_t tsc;
+	rte_atomic64_t tx_pkts;
+	rte_atomic64_t tx_bytes;
+	rte_atomic64_t rx;
+	rte_atomic64_t dropped_pkts;
+	rte_atomic64_t dropped_bytes;
+	rte_atomic64_t tsc;
 } __rte_cache_aligned;
 
 struct distribution {
@@ -201,7 +201,7 @@ struct bless_conf {
 
 void bless_print_mac(const struct rte_ether_addr *mac);
 void bless_print_ipv4(uint32_t ip);
-struct rte_mempool *bless_create_pktmbuf_pool(uint32_t n);
+struct rte_mempool *bless_create_pktmbuf_pool(uint32_t n, char *name);
 int bless_alloc_mbufs(struct rte_mempool *pktmbuf_pool, struct rte_mbuf **mbufs, int n);
 uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, void *data);
 uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data);

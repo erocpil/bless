@@ -8,7 +8,7 @@
 
 dpdk:
   main-lcore: 0
-  l: 0,1
+  l: 0,1-19
   n: 4
   lcores: null
   socket-mem: null
@@ -25,8 +25,8 @@ dpdk:
   file-prefix: null # bless
 
 injector:
-  p: 0x1
-  q: 1
+  p: 0x3f
+  q: 3
   P:
   T: 1
   no-mac-updating:
@@ -40,7 +40,7 @@ injector:
 
 bless:
   ether:
-    mtu: 1500 # size of ether payload, may result in error if vxlan enabled
+    mtu: 150 # size of ether payload, may result in error if vxlan enabled
     dst: 10:70:fd:af:21:10
     src: 10:70:fd:af:21:02
     type:

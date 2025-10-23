@@ -1,12 +1,12 @@
 #include "bless.h"
 #include "worker.h"
 #include "metrics.h"
-#include "config.h"
 
 struct bless_conf *bconf = NULL;
 
 /* mask of enabled ports */
-static uint32_t l2fwd_enabled_port_mask = 0;
+static uint32_t enabled_port_mask = 0;
+static uint32_t enabled_lcores = 0;
 
 // volatile static struct port_statistics *port_statistics[RTE_MAX_ETHPORTS];
 
@@ -61,7 +61,7 @@ static struct port_pair_params port_pair_params_array[RTE_MAX_ETHPORTS / 2];
 static struct port_pair_params *port_pair_params;
 static uint16_t nb_port_pair_params;
 
-static unsigned int l2fwd_rx_queue_per_lcore = 1;
+static unsigned int rxtxq_per_lcore = 1;
 
 // static struct rte_eth_dev_tx_buffer *tx_buffer[RTE_MAX_ETHPORTS];
 
@@ -236,7 +236,7 @@ static void print_stats(struct port_statistics **port_statistics)
 
 	for (portid = 0; portid < RTE_MAX_ETHPORTS; portid++) {
 		/* skip disabled ports */
-		if ((l2fwd_enabled_port_mask & (1 << portid)) == 0) {
+		if ((enabled_port_mask & (1 << portid)) == 0) {
 			// printf("\nskipped %d\n", portid);
 			continue;
 		}
@@ -258,11 +258,11 @@ static void print_stats(struct port_statistics **port_statistics)
 			   (port_statistics[portid] + i)->dropped_pkts,
 			   (port_statistics[portid] + i)->dropped_bytes);
 			   */
-			total_packets_tx_pkts += (port_statistics[portid] + i)->tx_pkts;
-			total_packets_tx_bytes += (port_statistics[portid] + i)->tx_bytes;
-			total_packets_dropped_pkts += (port_statistics[portid] + i)->dropped_pkts;
-			total_packets_dropped_bytes += (port_statistics[portid] + i)->dropped_bytes;
-			total_packets_rx += (port_statistics[portid] + i)->rx;
+			total_packets_tx_pkts += rte_atomic64_read(&(port_statistics[portid] + i)->tx_pkts);
+			total_packets_tx_bytes += rte_atomic64_read(&(port_statistics[portid] + i)->tx_bytes);
+			total_packets_dropped_pkts += rte_atomic64_read(&(port_statistics[portid] + i)->dropped_pkts);
+			total_packets_dropped_bytes += rte_atomic64_read(&(port_statistics[portid] + i)->dropped_bytes);
+			total_packets_rx += rte_atomic64_read(&(port_statistics[portid] + i)->rx);
 		}
 	}
 	printf("\nAggregate statistics ==============================="
@@ -287,7 +287,6 @@ void main_loop(void *data)
 {
 	uint64_t prev_tsc = 0, diff_tsc = 0, cur_tsc = 0;
 	uint64_t timer_tsc;
-	// return;
 
 	unsigned int lcore_id = rte_lcore_id();
 	struct bless_conf *conf = (struct bless_conf*)data;
@@ -298,10 +297,7 @@ void main_loop(void *data)
 	pthread_barrier_wait(conf->barrier);
 
 	while (!force_quit) {
-
-		// rte_delay_ms(100);
-		// continue;
-
+		rte_delay_ms(100);
 		cur_tsc = rte_rdtsc();
 		diff_tsc = cur_tsc - prev_tsc;
 		timer_tsc += diff_tsc;
@@ -315,7 +311,6 @@ void main_loop(void *data)
 			}
 		}
 		prev_tsc = cur_tsc;
-		rte_delay_us(1000);
 	}
 }
 
@@ -327,6 +322,15 @@ static int bless_launch_one_lcore(void *conf)
 	if (lcore_id == rte_get_main_lcore()) {
 		main_loop((void*)conf);
 	} else {
+		if (!lcore_queue_conf[lcore_id].enabled) {
+			// printf("skip unused lcore %d\n", lcore_id);
+			return 0;
+		}
+		printf("lcore %d enable %d lid %d pid %d qid %d\n", lcore_id,
+				lcore_queue_conf[lcore_id].enabled,
+				lcore_queue_conf[lcore_id].txl_id,
+				lcore_queue_conf[lcore_id].txp_id,
+				lcore_queue_conf[lcore_id].txq_id);
 		worker_loop_txonly(conf);
 	}
 
@@ -539,9 +543,9 @@ static int bless_parse_args(int argc, char **argv)
 		switch (opt) {
 			/* portmask */
 			case 'p':
-				l2fwd_enabled_port_mask = l2fwd_parse_portmask(optarg);
-				printf("l2fwd_enabled_port_mask %d\n", l2fwd_enabled_port_mask);
-				if (l2fwd_enabled_port_mask == 0) {
+				enabled_port_mask = l2fwd_parse_portmask(optarg);
+				printf("enabled_port_mask %d\n", enabled_port_mask);
+				if (enabled_port_mask == 0) {
 					printf("invalid portmask\n");
 					l2fwd_usage(prgname);
 					return -1;
@@ -553,8 +557,8 @@ static int bless_parse_args(int argc, char **argv)
 
 				/* nqueue */
 			case 'q':
-				l2fwd_rx_queue_per_lcore = l2fwd_parse_nqueue(optarg);
-				if (l2fwd_rx_queue_per_lcore == 0) {
+				rxtxq_per_lcore = l2fwd_parse_nqueue(optarg);
+				if (rxtxq_per_lcore == 0) {
 					printf("invalid queue number\n");
 					l2fwd_usage(prgname);
 					return -1;
@@ -773,7 +777,7 @@ check_port_pair_config(void)
 
 		for (i = 0; i < NUM_PORTS; i++)  {
 			portid = port_pair_params[index].port[i];
-			if ((l2fwd_enabled_port_mask & (1 << portid)) == 0) {
+			if ((enabled_port_mask & (1 << portid)) == 0) {
 				printf("port %u is not enabled in port mask\n",
 						portid);
 				return -1;
@@ -794,7 +798,7 @@ check_port_pair_config(void)
 		port_pair_config_mask |= port_pair_mask;
 	}
 
-	l2fwd_enabled_port_mask &= port_pair_config_mask;
+	enabled_port_mask &= port_pair_config_mask;
 
 	return 0;
 }
@@ -1003,7 +1007,7 @@ int main(int argc, char **argv)
 	}
 
 	/* check port mask to possible port mask */
-	if (l2fwd_enabled_port_mask & ~((1 << nb_ports) - 1)) {
+	if (enabled_port_mask & ~((1 << nb_ports) - 1)) {
 		rte_exit(EXIT_FAILURE, "Invalid portmask; possible (0x%x)\n",
 				(1 << nb_ports) - 1);
 	}
@@ -1016,6 +1020,62 @@ int main(int argc, char **argv)
 		l2fwd_dst_ports[portid] = 0;
 	}
 	last_port = 0;
+
+	{
+		rte_lcore_dump(stdout);
+		uint32_t mid = rte_get_main_lcore();
+		printf("main %d\n", mid);
+		uint32_t lid = 0;
+		int nlcore = 0;
+		RTE_LCORE_FOREACH_WORKER(lid) {
+			printf("worker %d\n", lid);
+			nlcore += ROLE_RTE == rte_eal_lcore_role(lid);
+		}
+		int nport = rte_eth_dev_count_avail();
+		printf("rte lcore %d\n", nlcore);
+		printf("rxtxq_per_lcore %d\n", rxtxq_per_lcore);
+		printf("port %d\n", nport);
+		if (nlcore < rxtxq_per_lcore * nport) {
+			rte_exit(EXIT_FAILURE, "Not enough cores %d < %d * %d\n",
+					nlcore, rxtxq_per_lcore, nport);
+		}
+		lid = 0;
+		uint32_t pid = 0;
+		memset(lcore_queue_conf, 0, sizeof(struct lcore_queue_conf) * RTE_MAX_LCORE);
+		RTE_ETH_FOREACH_DEV(pid) {
+			if ((enabled_port_mask & (1 << pid)) == 0) {
+				printf("skip port %d\n", pid);
+				continue;
+			}
+			printf("Port %d\n", pid);
+			for (uint32_t qid = 0; qid < rxtxq_per_lcore; qid++) {
+				/* get the lcore_id for this port */
+				while (!rte_lcore_is_enabled(lid) ||
+						lid == rte_get_main_lcore()) {
+					lid++;
+					if (lid >= RTE_MAX_LCORE) {
+						rte_exit(EXIT_FAILURE, "[%s %d] Not enough cores\n", __func__, __LINE__);
+					}
+				}
+				/* queue view */
+				printf("  queue %d lcore %d\n", qid, lid);
+				lcore_queue_conf[lid].enabled = 1;
+				lcore_queue_conf[lid].txl_id = lid;
+				lcore_queue_conf[lid].txp_id = pid;
+				lcore_queue_conf[lid].txq_id = qid;
+				lid++;
+			}
+			enabled_lcores += rxtxq_per_lcore;
+		}
+	}
+	/* lcore view */
+	for (int i = 0; i < RTE_MAX_LCORE; i++) {
+		if (!lcore_queue_conf[i].enabled) {
+			continue;
+		}
+		printf("lcore %d port %d txq %d\n", i, lcore_queue_conf[i].txp_id, lcore_queue_conf[i].txq_id);
+	}
+	getchar();
 
 	/* populate destination port details */
 	if (port_pair_params != NULL) {
@@ -1031,7 +1091,7 @@ int main(int argc, char **argv)
 		uint32_t nb_ports_in_mask = 0;
 		RTE_ETH_FOREACH_DEV(portid) {
 			/* skip ports that are not enabled */
-			if ((l2fwd_enabled_port_mask & (1 << portid)) == 0) {
+			if ((enabled_port_mask & (1 << portid)) == 0) {
 				continue;
 			}
 
@@ -1058,7 +1118,7 @@ int main(int argc, char **argv)
 	uint32_t nb_lcores = 0;
 	RTE_ETH_FOREACH_DEV(portid) {
 		/* skip ports that are not enabled */
-		if ((l2fwd_enabled_port_mask & (1 << portid)) == 0) {
+		if ((enabled_port_mask & (1 << portid)) == 0) {
 			continue;
 		}
 
@@ -1066,7 +1126,7 @@ int main(int argc, char **argv)
 		while (rx_lcore_id == rte_get_main_lcore() ||
 				(rte_lcore_is_enabled(rx_lcore_id) == 0 ||
 				 lcore_queue_conf[rx_lcore_id].n_rx_port ==
-				 l2fwd_rx_queue_per_lcore)) {
+				 rxtxq_per_lcore)) {
 			rx_lcore_id++;
 			if (rx_lcore_id >= RTE_MAX_LCORE) {
 				rte_exit(EXIT_FAILURE, "Not enough cores\n");
@@ -1097,8 +1157,9 @@ int main(int argc, char **argv)
 	}
 	/* >8 End of create the mbuf pool. */
 
-	/* Initialise each port */
 	uint16_t nb_ports_available = 0;
+
+	/* Initialise each port */
 	RTE_ETH_FOREACH_DEV(portid) {
 		struct rte_eth_rxconf rxq_conf;
 		struct rte_eth_txconf txq_conf;
@@ -1106,7 +1167,7 @@ int main(int argc, char **argv)
 		struct rte_eth_dev_info dev_info;
 
 		/* skip ports that are not enabled */
-		if ((l2fwd_enabled_port_mask & (1 << portid)) == 0) {
+		if ((enabled_port_mask & (1 << portid)) == 0) {
 			printf("Skipping disabled port %u\n", portid);
 			continue;
 		}
@@ -1128,7 +1189,7 @@ int main(int argc, char **argv)
 				RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
 		}
 		/* Configure the number of queues for a port. */
-		ret = rte_eth_dev_configure(portid, 1, 1, &local_port_conf);
+		ret = rte_eth_dev_configure(portid, 1, rxtxq_per_lcore, &local_port_conf);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%u\n",
 					ret, portid);
@@ -1142,6 +1203,8 @@ int main(int argc, char **argv)
 					"Cannot adjust number of descriptors: err=%d, port=%u\n",
 					ret, portid);
 		}
+		printf("TODO nb_txd %d\n", nb_txd);
+		getchar();
 
 		ret = rte_eth_macaddr_get(portid,
 				&l2fwd_ports_eth_addr[portid]);
@@ -1170,12 +1233,12 @@ int main(int argc, char **argv)
 		fflush(stdout);
 		txq_conf = dev_info.default_txconf;
 		txq_conf.offloads = local_port_conf.txmode.offloads;
-		ret = rte_eth_tx_queue_setup(portid, 0, nb_txd,
-				rte_eth_dev_socket_id(portid),
-				&txq_conf);
-		if (ret < 0) {
-			rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup:err=%d, port=%u\n",
-					ret, portid);
+		for (int i = 0; i < rxtxq_per_lcore; i++) {
+			ret = rte_eth_tx_queue_setup(portid, i, nb_txd,
+					rte_eth_dev_socket_id(portid), &txq_conf);
+			if (ret < 0) {
+				rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup:err=%d, port=%u\n", ret, portid);
+			}
 		}
 		/* >8 End of init one TX queue on each port. */
 
@@ -1234,7 +1297,7 @@ int main(int argc, char **argv)
 				"All available ports are disabled. Please set portmask.\n");
 	}
 
-	check_all_ports_link_status(l2fwd_enabled_port_mask);
+	check_all_ports_link_status(enabled_port_mask);
 
 
 	char name[16];
@@ -1266,9 +1329,9 @@ int main(int argc, char **argv)
 	bconf->dst_ports = l2fwd_dst_ports;
 	bconf->force_quit = &force_quit;
 	bconf->timer_period = timer_period;
-	bconf->enabled_port_mask = l2fwd_enabled_port_mask;
+	bconf->enabled_port_mask = enabled_port_mask;
 	pthread_barrier_t barrier;
-	pthread_barrier_init(&barrier, NULL, nb_lcores + 1); /* main lcore */
+	pthread_barrier_init(&barrier, NULL, enabled_lcores + 1); /* + main lcore */
 	bconf->barrier = &barrier;
 
 	printf("\n\n >> %d nb_lcores %d\n\n", rte_lcore_id(), nb_lcores + 1);
@@ -1287,8 +1350,9 @@ int main(int argc, char **argv)
 	}
 
 	RTE_ETH_FOREACH_DEV(portid) {
-		if ((l2fwd_enabled_port_mask & (1 << portid)) == 0)
+		if ((enabled_port_mask & (1 << portid)) == 0) {
 			continue;
+		}
 		printf("Closing port %d...", portid);
 		ret = rte_eth_dev_stop(portid);
 		if (ret != 0)

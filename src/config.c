@@ -422,7 +422,7 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 				perror("malloc");
 				exit(EXIT_FAILURE);
 			}
-			printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
+			// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 
 			if (strlen(n->key) == 1) {
 				if (strlen(n->value)) {
@@ -458,7 +458,7 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 				perror("malloc");
 				exit(EXIT_FAILURE);
 			}
-			printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
+			// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 
 			char *p = argv[i];
 			if (strlen(n->key) == 1) {
@@ -506,7 +506,7 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 		exit(EXIT_FAILURE);
 	}
 	memset(argv, 0, sizeof(char*) * (MAX_EAL_PARAMS + 1));
-	printf("malloc(argv) %p\n", argv);
+	// printf("malloc(argv) %p\n", argv);
 
 	int i = 0;
 	size_t len = strlen((*targv)[i]) + 1;
@@ -515,7 +515,7 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 		perror("malloc");
 		exit(EXIT_FAILURE);
 	}
-	printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
+	// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 	strcpy(argv[i], (*targv)[i]);
 
 	i = config_parse_dpdk_internal(node, &argc, &argv, ++i);
@@ -526,7 +526,7 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 		perror("strdup");
 		exit(EXIT_FAILURE);
 	}
-	printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
+	// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 
 	path = "injector";
 	node = find_by_path(root, path);

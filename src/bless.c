@@ -148,7 +148,7 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		udp->dst_port = RANDOM_UDP_DST(cnode);
 		udp->dgram_len = htons(sizeof(struct rte_udp_hdr) + payload_len);
 		udp->dgram_cksum = 0;
-		// udp->dgram_cksum = rte_ipv4_udptcp_cksum(ip, udp);
+		udp->dgram_cksum = rte_ipv4_udptcp_cksum(ip, udp);
 		rte_memcpy((uint8_t *)udp + l4_len, payload, payload_len);
 	}
 	return tx_bytes;
@@ -520,23 +520,21 @@ int bless_alloc_mbufs(struct rte_mempool *pktmbuf_pool, struct rte_mbuf **mbufs,
 	return n;
 }
 
-struct rte_mempool *bless_create_pktmbuf_pool(uint32_t n)
+struct rte_mempool *bless_create_pktmbuf_pool(uint32_t n, char *name)
 {
 	if (n >= (INT_MAX >> 1)) {
 		rte_exit(EXIT_FAILURE, "Too many mbuf %u\n", n);
 	}
 
-	char name[128] = { 0 };
-	sprintf(name, "%s-%d", "tx_pkts_pool", rte_lcore_id());
 	printf("creating pktmbufpool %s %u ...\n", name, n);
 	struct rte_mempool *pktmbuf_pool = rte_pktmbuf_pool_create(name, n,
 			0 /* MEMPOOL_CACHE_SIZE */, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
 			rte_socket_id());
 	if (!pktmbuf_pool) {
-		rte_exit(EXIT_FAILURE, "Cannot init pktmbuf_pool\n");
+		rte_exit(EXIT_FAILURE, "Cannot init rte_pktmbuf_pool_create()\n");
 	}
 
-	rte_mempool_dump(stdout, pktmbuf_pool);
+	// rte_mempool_dump(stdout, pktmbuf_pool);
 
 	return pktmbuf_pool;
 }

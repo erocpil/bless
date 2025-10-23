@@ -26,8 +26,8 @@ static: $(BUILDDIR)/$(APP)-static
 	ln -sf $(APP)-static $(BUILDDIR)/$(APP)
 
 PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
-# CFLAGS += -O2 $(shell $(PKGCONF) --cflags libdpdk)
-CFLAGS += -Wall -g -O0 $(shell $(PKGCONF) --cflags libdpdk)
+CFLAGS += -O2 $(shell $(PKGCONF) --cflags libdpdk)
+# CFLAGS += -Wall -g -O0 $(shell $(PKGCONF) --cflags libdpdk)
 CFLAGS += -I../include
 # Add flag to allow experimental API as bless uses rte_ethdev_set_ptype API
 CFLAGS += -DALLOW_EXPERIMENTAL_API

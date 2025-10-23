@@ -46,11 +46,13 @@ static int bless_handle_metrics(const char *cmd __rte_unused, const char *params
 			continue;
 		}
 
+		/* FIXME atomic
 		total_packets_tx_pkts += (port_statistics[portid] + type)->tx_pkts;
 		total_packets_tx_bytes += (port_statistics[portid] + type)->tx_bytes;
 		// total_packets_rx += (port_statistics[portid] + type)->rx;
 		total_packets_dropped_pkts += (port_statistics[portid] + type)->dropped_pkts;
 		total_packets_dropped_bytes += (port_statistics[portid] + type)->dropped_bytes;
+		*/
 	}
 	rte_tel_data_add_dict_int(d, "tx_pkts", total_packets_tx_pkts);
 	rte_tel_data_add_dict_int(d, "tx_bytes", total_packets_tx_bytes);
