@@ -15,11 +15,76 @@ struct Mutation {
 	size_t count;
 };
 
+static inline void offload_ipv4_or_calc(Cnode *cnode, struct rte_mbuf *m,
+		struct rte_ipv4_hdr *iph)
+{
+	iph->hdr_checksum = 0;
+	if (OFFLOAD_IPV4(cnode)) {
+		m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM;
+	} else {
+		iph->hdr_checksum = rte_ipv4_cksum(iph);
+	}
+}
+
+/* compatible interface */
+static inline void offload_ipv6_or_calc(Cnode *cnode, struct rte_mbuf *m)
+{
+	if (OFFLOAD_IPV6(cnode)) {
+		m->ol_flags |= RTE_MBUF_F_TX_IPV6;
+	} else {
+		/* FIXME */
+		m->ol_flags |= RTE_MBUF_F_TX_IPV6;
+	}
+}
+
+static inline void offload_ipv4_tcp_only_or_calc(Cnode *cnode, struct rte_mbuf *m,
+		struct rte_ipv4_hdr *iph, struct rte_tcp_hdr *tcph)
+{
+	tcph->cksum = 0;
+	if (OFFLOAD_TCP(cnode)) {
+		m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_TCP_CKSUM;
+	} else {
+		tcph->cksum = rte_ipv4_udptcp_cksum(iph, (const void *)tcph);
+	}
+}
+
+static inline void offload_ipv6_tcp_only_or_calc(Cnode *cnode, struct rte_mbuf *m,
+		struct rte_ipv4_hdr *iph, struct rte_tcp_hdr *tcph)
+{
+	tcph->cksum = 0;
+	if (OFFLOAD_TCP(cnode)) {
+		m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_TCP_CKSUM;
+	} else {
+		tcph->cksum = rte_ipv4_udptcp_cksum(iph, (const void *)tcph);
+	}
+}
+
+static inline void offload_ipv4_udp_only_or_calc(Cnode *cnode, struct rte_mbuf *m,
+		struct rte_ipv4_hdr *iph, struct rte_udp_hdr *udph)
+{
+	udph->dgram_cksum = 0;
+	if (OFFLOAD_UDP(cnode)) {
+		m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_UDP_CKSUM;
+	} else {
+		udph->dgram_cksum = rte_ipv4_udptcp_cksum(iph, udph);
+		printf("cksum %u\n", udph->dgram_cksum);
+	}
+}
+
+static inline void offload_ipv6_udp_only_or_calc(Cnode *cnode, struct rte_mbuf *m,
+		struct rte_ipv6_hdr *ipv6h, struct rte_udp_hdr *udph)
+{
+	udph->dgram_cksum = 0;
+	if (OFFLOAD_UDP(cnode)) {
+		m->ol_flags |= RTE_MBUF_F_TX_IPV6 | RTE_MBUF_F_TX_UDP_CKSUM;
+	} else {
+		udph->dgram_cksum = rte_ipv6_udptcp_cksum(ipv6h, udph);
+	}
+}
+
 uint64_t mutation_udp_cksum(void **mbufs, unsigned int n, void *data);
 uint64_t mutation_mac_vlan(void **mbufs, unsigned int n, void *data)
 {
-	// return mutation_udp_cksum(mbufs, n, data);
-
 	Cnode *cnode = (Cnode*)data;
 	uint64_t tx_bytes = 0, mutated = 0;
 
@@ -63,11 +128,7 @@ uint64_t mutation_mac_vlan(void **mbufs, unsigned int n, void *data)
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
 		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
-
-		m->l2_len = sizeof(struct rte_ether_hdr) + sizeof(struct rte_vlan_hdr);
-		m->l3_len = sizeof(struct rte_ipv4_hdr);
-		m->ol_flags = RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_UDP_CKSUM;
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 #if 1
 		// 填充 ICMP (Echo Request)
@@ -81,6 +142,8 @@ uint64_t mutation_mac_vlan(void **mbufs, unsigned int n, void *data)
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
 #endif
+
+		/* FIXME l{2,3,4}_len */
 
 		mutated++;
 		tx_bytes += pkt_size;
@@ -118,8 +181,8 @@ uint64_t mutation_mac_multicast(void **mbufs, unsigned int n, void *data)
 	struct rte_ether_hdr *eth;
 	struct rte_ipv4_hdr *ip4;
 	struct rte_udp_hdr *udp;
-	const char *payload = cnode->ether.type.ip.udp.payload;
-	uint16_t payload_len = cnode->ether.type.ip.udp.payload_len;
+	const char *payload = cnode->ether.type.ipv4.udp.payload;
+	uint16_t payload_len = cnode->ether.type.ipv4.udp.payload_len;
 	uint16_t eth_hdr_len = sizeof(struct rte_ether_hdr);
 	uint16_t ip_hdr_len  = sizeof(struct rte_ipv4_hdr);
 	uint16_t udp_hdr_len = sizeof(struct rte_udp_hdr);
@@ -179,33 +242,24 @@ uint64_t mutation_mac_multicast(void **mbufs, unsigned int n, void *data)
 		ip4->next_proto_id = IPPROTO_UDP;
 		ip4->src_addr = RANDOM_IP_SRC(cnode);
 		ip4->dst_addr = dst_ip_be;
-		ip4->hdr_checksum = 0;
-		/* 计算 ipv4 头校验和 */
-		ip4->hdr_checksum = rte_ipv4_cksum(ip4);
+		offload_ipv4_or_calc(cnode, m, ip4);
 
 		/* UDP 头 */
 		udp->src_port = RANDOM_UDP_SRC(cnode);
 		udp->dst_port = RANDOM_UDP_DST(cnode);
 		udp->dgram_len = rte_cpu_to_be_16(udp_hdr_len + payload_len);
-		udp->dgram_cksum = 0; /* 可启用 offload 或计算伪首部校验和 */
+		offload_ipv4_udp_only_or_calc(cnode, m, ip4, udp);
 
 		/* 复制 payload */
 		if (payload_len && payload) {
 			rte_memcpy(udppayload, payload, payload_len);
 		}
 
-		/* 设置 mbuf 长度字段，注意 l2/l3/l4 长度 */
-		m->pkt_len = total_len;
-		m->data_len = total_len;
-		/* l2/l3/l4 len 字段（有些 DPDK 版本使用 l2_len/l3_len/l4_len） */
 		m->l2_len = eth_hdr_len;
 		m->l3_len = ip_hdr_len;
 		m->l4_len = udp_hdr_len;
 
-		/* 如果网卡支持 offload，可以打开 L3/L4 校验 offload（可选）：
-		 * m->ol_flags |= PKT_TX_IPV4 | PKT_TX_UDP_CKSUM;
-		 * 然后把 udp->dgram_cksum 设置为 rte_cpu_to_be_16(0) 并在 tx 时让 NIC 计算。
-		 */
+		tx_bytes += total_len;
 	}
 
 	return tx_bytes;
@@ -245,6 +299,7 @@ uint64_t mutation_mac_ipv6(void **mbufs, unsigned int n, void *data)
 		struct rte_mbuf *m = mbufs[i];
 		rte_pktmbuf_reset(m);
 
+		/* FIXME */
 		m->data_len = pkt_len;
 		m->pkt_len  = pkt_len;
 
@@ -277,20 +332,26 @@ uint64_t mutation_mac_ipv6(void **mbufs, unsigned int n, void *data)
 		rte_memcpy(&ip6->src_addr, &src_addr, sizeof(struct in6_addr));
 		rte_memcpy(&ip6->dst_addr, &dst_addr, sizeof(struct in6_addr));
 
+		offload_ipv6_or_calc(cnode, m);
+
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip6 + 1);
 		udp->src_port = rte_cpu_to_be_16(1234);
 		udp->dst_port = rte_cpu_to_be_16(4321);
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		offload_ipv6_udp_only_or_calc(cnode, m, ip6, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
 			rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
-		/* ---------------- UDP Checksum ---------------- */
-		udp->dgram_cksum = rte_ipv6_udptcp_cksum(ip6, udp);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv6_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
+
+		mutated++;
+		tx_bytes += pkt_len;
 	}
 
 	return tx_bytes;
@@ -331,7 +392,6 @@ uint64_t mutation_arp_src(void **mbufs, unsigned int n, void *data)
 			rte_ether_addr_copy(&dst_mac, &eth_hdr->dst_addr);
 			eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP);
 
-			// 构造 ARP 请求头部
 			arp_hdr->arp_hardware = rte_cpu_to_be_16(RTE_ARP_HRD_ETHER);
 			arp_hdr->arp_protocol = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
 			arp_hdr->arp_hlen = RTE_ETHER_ADDR_LEN;
@@ -357,6 +417,13 @@ uint64_t mutation_arp_src(void **mbufs, unsigned int n, void *data)
 			rte_ether_addr_copy((struct rte_ether_addr*)&cnode->ether.src, &arp_hdr->arp_data.arp_tha);
 			arp_hdr->arp_data.arp_tip = RANDOM_IP_SRC(cnode);
 		}
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = 0;
+		m->l4_len = 0;
+
+		mutated++;
+		tx_bytes += total_pkt_size;
 	}
 
 	return tx_bytes;
@@ -378,8 +445,9 @@ uint64_t mutation_ip_version(void **mbufs, unsigned int n, void *data)
 		rte_pktmbuf_reset(m);
 
 		char *pkt_data = rte_pktmbuf_append(m, pkt_size);
-		if (!pkt_data)
+		if (!pkt_data) {
 			continue;
+		}
 
 		// 填充 Ethernet
 		struct rte_ether_hdr *eth_hdr = (struct rte_ether_hdr *)pkt_data;
@@ -403,8 +471,7 @@ uint64_t mutation_ip_version(void **mbufs, unsigned int n, void *data)
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum  = 0;
-		ip_hdr->hdr_checksum  = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// 填充 ICMP (Echo Request)
 		struct rte_icmp_hdr *icmp_hdr = (struct rte_icmp_hdr *)(ip_hdr + 1);
@@ -415,6 +482,10 @@ uint64_t mutation_ip_version(void **mbufs, unsigned int n, void *data)
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_icmp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_size;
@@ -439,8 +510,9 @@ uint64_t mutation_ip_ihl(void **mbufs, unsigned int n, void *data)
 		rte_pktmbuf_reset(m);
 
 		char *pkt_data = rte_pktmbuf_append(m, pkt_size);
-		if (!pkt_data)
+		if (!pkt_data) {
 			continue;
+		}
 
 		// 填充 Ethernet
 		struct rte_ether_hdr *eth_hdr = (struct rte_ether_hdr *)pkt_data;
@@ -463,8 +535,7 @@ uint64_t mutation_ip_ihl(void **mbufs, unsigned int n, void *data)
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// 填充 ICMP (Echo Request)
 		struct rte_icmp_hdr *icmp_hdr = (struct rte_icmp_hdr *)(ip_hdr + 1);
@@ -475,6 +546,10 @@ uint64_t mutation_ip_ihl(void **mbufs, unsigned int n, void *data)
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_icmp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_size;
@@ -533,8 +608,7 @@ uint64_t mutation_ip_dscp(void **mbufs, unsigned int n, void *data)
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum  = 0;
-		ip_hdr->hdr_checksum  = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// 填充 ICMP (Echo Request)
 		struct rte_icmp_hdr *icmp_hdr = (struct rte_icmp_hdr *)(ip_hdr + 1);
@@ -545,6 +619,10 @@ uint64_t mutation_ip_dscp(void **mbufs, unsigned int n, void *data)
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_icmp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_size;
@@ -584,7 +662,9 @@ uint64_t mutation_ip_ecn(void **mbufs, unsigned int n, void *data)
 		memset(ip_hdr, 0, sizeof(*ip_hdr));
 		ip_hdr->version_ihl   = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
 		/* mutation: ecn of 0, 1, 2, 3 */
-		ip_hdr->type_of_service = rte_rdtsc() & 3;
+		uint64_t tsc = rte_rdtsc();
+		tsc ^= tsc >> 8;
+		ip_hdr->type_of_service = tsc % 4;
 		ip_hdr->total_length  = rte_cpu_to_be_16(sizeof(struct rte_ipv4_hdr) +
 				sizeof(struct rte_icmp_hdr));
 		ip_hdr->packet_id     = rte_cpu_to_be_16(1);
@@ -594,8 +674,7 @@ uint64_t mutation_ip_ecn(void **mbufs, unsigned int n, void *data)
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum  = 0;
-		ip_hdr->hdr_checksum  = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// 填充 ICMP (Echo Request)
 		struct rte_icmp_hdr *icmp_hdr = (struct rte_icmp_hdr *)(ip_hdr + 1);
@@ -606,6 +685,10 @@ uint64_t mutation_ip_ecn(void **mbufs, unsigned int n, void *data)
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_icmp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_size;
@@ -647,38 +730,32 @@ uint64_t mutation_ip_total_length(void **mbufs, unsigned int n, void *data)
 		ip_hdr->version_ihl   = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
 		ip_hdr->type_of_service = 0;
 		/* mutation */
-		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len);
-		ip_hdr->packet_id     = rte_cpu_to_be_16(1);
+		/* total length error leads to udp cksum error */
+		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len) + 1;
+		ip_hdr->packet_id = rte_cpu_to_be_16(1);
 		ip_hdr->fragment_offset = 0;
 		ip_hdr->time_to_live  = 225;
 		ip_hdr->next_proto_id = IPPROTO_UDP;
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum  = 0;
-		ip_hdr->hdr_checksum  = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
 		udp->src_port = rte_cpu_to_be_16(10);
 		udp->dst_port = rte_cpu_to_be_16(100);
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
-			char *p = (char *)(udp + 1);
-			rte_memcpy(p, payload, payload_len);
+			rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
-		/* ---------------- UDP Checksum ---------------- */
-		udp->dgram_cksum = 0; // rte_ipv4_udptcp_cksum(ip_hdr, udp);
-
-#if 0
-		rte_pktmbuf_dump(stdout, m, 1000);
-		printf("udp len %u\n", udp_len);
-		printf("pkt_len %u data_len %u\n\n", m->pkt_len, m->data_len);
-#endif
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_len;
@@ -703,8 +780,9 @@ uint64_t mutation_ip_id(void **mbufs, unsigned int n, void *data)
 		rte_pktmbuf_reset(m);
 
 		char *pkt_data = rte_pktmbuf_append(m, pkt_len);
-		if (!pkt_data)
+		if (!pkt_data) {
 			continue;
+		}
 
 		// 填充 Ethernet
 		struct rte_ether_hdr *eth_hdr = (struct rte_ether_hdr *)pkt_data;
@@ -719,31 +797,33 @@ uint64_t mutation_ip_id(void **mbufs, unsigned int n, void *data)
 		ip_hdr->version_ihl = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
 		ip_hdr->type_of_service = 0;
 		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len);
-		ip_hdr->packet_id = rte_cpu_to_be_16(0);
-		ip_hdr->fragment_offset = 0;
+		/* mutation id is not 0 but DF */
+		ip_hdr->packet_id = rte_cpu_to_be_16(USHRT_MAX);
+		uint16_t frag_off = 0;
+		frag_off |= RTE_IPV4_HDR_DF_FLAG;
+		ip_hdr->fragment_offset = rte_cpu_to_be_16(frag_off);
 		ip_hdr->time_to_live = 225;
 		ip_hdr->next_proto_id = IPPROTO_UDP;
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
 		udp->src_port = rte_cpu_to_be_16(54321);
 		udp->dst_port = rte_cpu_to_be_16(12346);
-		/* mutation */
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
 			rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
-		/* ---------------- UDP Checksum ---------------- */
-		udp->dgram_cksum = 0; // rte_ipv4_udptcp_cksum(ip_hdr, udp);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_len;
@@ -769,7 +849,6 @@ uint64_t mutation_ip_flags(void **mbufs, unsigned int n, void *data)
 
 		char *pkt_data = rte_pktmbuf_append(m, pkt_len);
 		if (!pkt_data) {
-			printf("FIXME\n");
 			continue;
 		}
 
@@ -786,6 +865,7 @@ uint64_t mutation_ip_flags(void **mbufs, unsigned int n, void *data)
 		ip_hdr->version_ihl = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
 		ip_hdr->type_of_service = 0;
 		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len);
+		/* mutation no previous id and no flags set, but MF */
 		ip_hdr->packet_id = rte_cpu_to_be_16(10);
 		uint16_t frag_off = 0;
 		frag_off |= RTE_IPV4_HDR_MF_FLAG;
@@ -795,8 +875,7 @@ uint64_t mutation_ip_flags(void **mbufs, unsigned int n, void *data)
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
@@ -804,16 +883,17 @@ uint64_t mutation_ip_flags(void **mbufs, unsigned int n, void *data)
 		udp->dst_port = rte_cpu_to_be_16(54321);
 		/* mutation */
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
 			// MF set, wireshark won't show payload
-			rte_memcpy((char *)(udp + 1), payload, payload_len);
+			// rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
-		/* ---------------- UDP Checksum ---------------- */
-		udp->dgram_cksum = 0; // rte_ipv4_udptcp_cksum(ip_hdr, udp);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_len;
@@ -838,8 +918,9 @@ uint64_t mutation_ip_fragment_offset(void **mbufs, unsigned int n, void *data)
 		rte_pktmbuf_reset(m);
 
 		char *pkt_data = rte_pktmbuf_append(m, pkt_len);
-		if (!pkt_data)
+		if (!pkt_data) {
 			continue;
+		}
 
 		// 填充 Ethernet
 		struct rte_ether_hdr *eth_hdr = (struct rte_ether_hdr *)pkt_data;
@@ -855,31 +936,33 @@ uint64_t mutation_ip_fragment_offset(void **mbufs, unsigned int n, void *data)
 		ip_hdr->type_of_service = 0;
 		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len);
 		ip_hdr->packet_id = rte_cpu_to_be_16(11);
-		uint16_t frag_off = 1 << 1;
+		/* mutation DF but offset */
+		uint16_t frag_off = 0;
+		frag_off |= RTE_IPV4_HDR_DF_FLAG;
 		ip_hdr->fragment_offset = rte_cpu_to_be_16(frag_off);
+		ip_hdr->fragment_offset |= rte_cpu_to_be_16((1 << 13) - 1);
 		ip_hdr->time_to_live = 225;
 		ip_hdr->next_proto_id = IPPROTO_UDP;
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum  = 0;
-		ip_hdr->hdr_checksum  = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
 		udp->src_port = rte_cpu_to_be_16(12348);
 		udp->dst_port = rte_cpu_to_be_16(54321);
-		/* mutation */
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
-			rte_memcpy((char *)(udp + 1), payload, payload_len);
+			// rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
-		/* ---------------- UDP Checksum ---------------- */
-		udp->dgram_cksum = 0; // rte_ipv4_udptcp_cksum(ip_hdr, udp);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_len;
@@ -924,35 +1007,36 @@ uint64_t mutation_ip_ttl(void **mbufs, unsigned int n, void *data)
 		ip_hdr->packet_id = rte_cpu_to_be_16(1);
 		ip_hdr->fragment_offset = 0;
 		/* mutation */
-		ip_hdr->time_to_live = 225; // (uint8_t)-1;
-		// ip_hdr->time_to_live = 0;
+		static uint64_t flag = 0;
+		if (flag++ & 1) {
+			ip_hdr->time_to_live = flag > 10 ? 2 : 0;
+		} else {
+			ip_hdr->time_to_live =  (uint8_t)-1;
+		}
 		ip_hdr->next_proto_id = IPPROTO_UDP;
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
 		udp->src_port = rte_cpu_to_be_16(54321);
 		udp->dst_port = rte_cpu_to_be_16(12349);
-		/* mutation */
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
 			rte_memcpy((char*)(udp + 1), payload, payload_len);
 		}
 
-		/* ---------------- UDP Checksum ---------------- */
-		udp->dgram_cksum = 0; // rte_ipv4_udptcp_cksum(ip_hdr, udp);
+		assert(m->pkt_len == pkt_len);
+		assert(m->data_len == pkt_len);
 
 		m->l2_len = sizeof(struct rte_ether_hdr);
 		m->l3_len = sizeof(struct rte_ipv4_hdr);
 		m->l4_len = sizeof(struct rte_udp_hdr);
-		assert(m->pkt_len == pkt_len);
-		assert(m->data_len == pkt_len);
+
 		mutated++;
 		tx_bytes += pkt_len;
 	}
@@ -976,8 +1060,9 @@ uint64_t mutation_ip_protocol(void **mbufs, unsigned int n, void *data)
 		rte_pktmbuf_reset(m);
 
 		char *pkt_data = rte_pktmbuf_append(m, pkt_len);
-		if (!pkt_data)
+		if (!pkt_data) {
 			continue;
+		}
 
 		// 填充 Ethernet
 		struct rte_ether_hdr *eth_hdr = (struct rte_ether_hdr *)pkt_data;
@@ -995,12 +1080,13 @@ uint64_t mutation_ip_protocol(void **mbufs, unsigned int n, void *data)
 		ip_hdr->packet_id = rte_cpu_to_be_16(1);
 		ip_hdr->fragment_offset = 0;
 		ip_hdr->time_to_live = 225; // 64;
-		ip_hdr->next_proto_id = 0;
+		static uint64_t flag = 0;
+		ip_hdr->next_proto_id = 192 + ((flag++) & 0xf);
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
 		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
@@ -1008,15 +1094,16 @@ uint64_t mutation_ip_protocol(void **mbufs, unsigned int n, void *data)
 		udp->dst_port = rte_cpu_to_be_16(12350);
 		/* mutation */
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
-			rte_memcpy((char *)(udp + 1), payload, payload_len);
+			// rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
-		/* ---------------- UDP Checksum ---------------- */
-		udp->dgram_cksum = 0; // rte_ipv4_udptcp_cksum(ip_hdr, udp);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_len;
@@ -1066,10 +1153,8 @@ uint64_t mutation_ip_cksum(void **mbufs, unsigned int n, void *data)
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
 		/* mutation */
-		/* FIXME */
-		ip_hdr->hdr_checksum = rte_cpu_to_be_16(1); // rte_ipv4_cksum(ip_hdr);
+		ip_hdr->hdr_checksum = rte_cpu_to_be_16(rte_rdtsc() & ((uint16_t)-1));
 
 		// 填充 ICMP (Echo Request)
 		struct rte_icmp_hdr *icmp_hdr = (struct rte_icmp_hdr *)(ip_hdr + 1);
@@ -1080,6 +1165,10 @@ uint64_t mutation_ip_cksum(void **mbufs, unsigned int n, void *data)
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_icmp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_size;
@@ -1170,7 +1259,8 @@ static int calc_hmac_sha256(const uint8_t *key, int keylen,
 }
 
 /* 构造内层 (inner) IPv4 + UDP 报文作为 ESP 明文 */
-static int build_inner_ipv4_udp(uint8_t **out, int *outlen) {
+static int build_inner_ipv4_udp(uint8_t **out, int *outlen)
+{
 	/* 简单构造： inner IPv4 + UDP + payload */
 	const char payload[] = "DPDK IPSEC inner payload";
 	int payload_len = sizeof(payload)-1;
@@ -1335,7 +1425,7 @@ uint64_t mutation_ip_ipsec(void **mbufs, unsigned int n, void *data)
 	for (unsigned int i = 0; i < n; i++) {
 		struct rte_mbuf *m = mbufs[i];
 		rte_pktmbuf_reset(m);
-		build_ipv4_esp_tunnel(m, data);
+		tx_bytes += build_ipv4_esp_tunnel(m, data);
 	}
 
 	return tx_bytes;
@@ -1371,7 +1461,6 @@ uint64_t mutation_icmp_type(void **mbufs, unsigned int n, void *data)
 		// 填充 IPv4
 		struct rte_ipv4_hdr *ip_hdr = (struct rte_ipv4_hdr *)(eth_hdr + 1);
 		memset(ip_hdr, 0, sizeof(*ip_hdr));
-		/* mutation */
 		ip_hdr->version_ihl = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
 		ip_hdr->type_of_service = 0;
 		ip_hdr->total_length = rte_cpu_to_be_16(sizeof(struct rte_ipv4_hdr) +
@@ -1389,12 +1478,17 @@ uint64_t mutation_icmp_type(void **mbufs, unsigned int n, void *data)
 		// 填充 ICMP (Echo Request)
 		struct rte_icmp_hdr *icmp_hdr = (struct rte_icmp_hdr *)(ip_hdr + 1);
 		memset(icmp_hdr, 0, sizeof(*icmp_hdr));
+		/* mutation */
 		icmp_hdr->icmp_type = 15 + ((rte_rdtsc() >> 2) & 3);
 		icmp_hdr->icmp_code = 0;
 		icmp_hdr->icmp_ident = rte_cpu_to_be_16(rdtsc16());
 		icmp_hdr->icmp_seq_nb = rte_cpu_to_be_16(1);
 		icmp_hdr->icmp_cksum = 0;
 		icmp_hdr->icmp_cksum = icmp_calc_cksum(icmp_hdr, sizeof(struct rte_icmp_hdr));
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_icmp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_size;
@@ -1441,26 +1535,32 @@ uint64_t mutation_tcp_syn_flood(void **mbufs, unsigned int n, void *data)
 		ip_hdr->total_length = rte_cpu_to_be_16(sizeof(struct rte_ipv4_hdr) + sizeof(struct rte_tcp_hdr));
 		ip_hdr->packet_id = rte_cpu_to_be_16(1);
 		ip_hdr->fragment_offset = 0;
-		ip_hdr->time_to_live = 225; // 64;
+		ip_hdr->time_to_live = 64;
 		ip_hdr->next_proto_id = IPPROTO_TCP;
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
-		tcp_hdr->dst_port = RANDOM_TCP_DST(cnode);
-		tcp_hdr->sent_seq = rte_cpu_to_be_32(1001);
+		/* mutation fixed dst port */
+		tcp_hdr->dst_port = cnode->ether.type.ipv4.tcp.dst[0]; // RANDOM_TCP_DST(cnode);
+		tcp_hdr->sent_seq = rte_cpu_to_be_32(rte_rdtsc() & (UINT32_MAX));
 		tcp_hdr->recv_ack = 0;
 		tcp_hdr->data_off = (sizeof(struct rte_tcp_hdr) / 4) << 4;  // 头部长度 (20B)
+		/* mutation */
 		tcp_hdr->tcp_flags = RTE_TCP_SYN_FLAG;
 		tcp_hdr->rx_win = rte_cpu_to_be_16(65535);
 		tcp_hdr->cksum = 0;
 		tcp_hdr->tcp_urp = 0;
+		offload_ipv4_tcp_only_or_calc(cnode, m, ip_hdr, tcp_hdr);
 
-		// 计算 TCP 校验和
-		tcp_hdr->cksum = rte_ipv4_udptcp_cksum(ip_hdr, tcp_hdr);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_tcp_hdr);
+
+		mutated++;
+		tx_bytes += pkt_size;
 	}
 
 	return tx_bytes;
@@ -1507,7 +1607,7 @@ uint64_t mutation_tcp_data_off(void **mbufs, unsigned int n, void *data)
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
 		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
@@ -1520,9 +1620,14 @@ uint64_t mutation_tcp_data_off(void **mbufs, unsigned int n, void *data)
 		tcp_hdr->rx_win = rte_cpu_to_be_16(65535);
 		tcp_hdr->cksum = 0;
 		tcp_hdr->tcp_urp = 0;
+		offload_ipv4_tcp_only_or_calc(cnode, m, ip_hdr, tcp_hdr);
 
-		// 计算 TCP 校验和
-		tcp_hdr->cksum = rte_ipv4_udptcp_cksum(ip_hdr, tcp_hdr);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_tcp_hdr);
+
+		mutated++;
+		tx_bytes += pkt_size;
 	}
 
 	return tx_bytes;
@@ -1568,8 +1673,7 @@ uint64_t mutation_tcp_flags(void **mbufs, unsigned int n, void *data)
 		ip_hdr->next_proto_id = IPPROTO_TCP;
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
@@ -1582,9 +1686,14 @@ uint64_t mutation_tcp_flags(void **mbufs, unsigned int n, void *data)
 		tcp_hdr->rx_win = rte_cpu_to_be_16(65535);
 		tcp_hdr->cksum = 0;
 		tcp_hdr->tcp_urp = 0;
+		offload_ipv4_tcp_only_or_calc(cnode, m, ip_hdr, tcp_hdr);
 
-		// 计算 TCP 校验和
-		tcp_hdr->cksum = rte_ipv4_udptcp_cksum(ip_hdr, tcp_hdr);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_tcp_hdr);
+
+		mutated++;
+		tx_bytes += pkt_size;
 	}
 
 	return tx_bytes;
@@ -1631,7 +1740,7 @@ uint64_t mutation_tcp_window(void **mbufs, unsigned int n, void *data)
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
 		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
@@ -1642,11 +1751,15 @@ uint64_t mutation_tcp_window(void **mbufs, unsigned int n, void *data)
 		tcp_hdr->tcp_flags = RTE_TCP_ACK_FLAG | RTE_TCP_ACK_FLAG;
 		/* mutation */
 		tcp_hdr->rx_win = 0;
-		tcp_hdr->cksum = 0;
 		tcp_hdr->tcp_urp = 0;
+		offload_ipv4_tcp_only_or_calc(cnode, m, ip_hdr, tcp_hdr);
 
-		// 计算 TCP 校验和
-		tcp_hdr->cksum = rte_ipv4_udptcp_cksum(ip_hdr, tcp_hdr);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_tcp_hdr);
+
+		mutated++;
+		tx_bytes += pkt_size;
 	}
 
 	return tx_bytes;
@@ -1692,8 +1805,7 @@ uint64_t mutation_tcp_cksum(void **mbufs, unsigned int n, void *data)
 		ip_hdr->next_proto_id = IPPROTO_TCP;
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		// TCP header
 		tcp_hdr->src_port = RANDOM_TCP_SRC(cnode);
@@ -1707,9 +1819,12 @@ uint64_t mutation_tcp_cksum(void **mbufs, unsigned int n, void *data)
 		tcp_hdr->cksum = 1;
 		tcp_hdr->tcp_urp = 0;
 
-		// 计算 TCP 校验和
-		/* mutation */
-		// tcp_hdr->cksum = rte_ipv4_udptcp_cksum(ip_hdr, tcp_hdr);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_tcp_hdr);
+
+		mutated++;
+		tx_bytes += pkt_size;
 	}
 
 	return tx_bytes;
@@ -1744,7 +1859,8 @@ uint64_t mutation_udp_len(void **mbufs, unsigned int n, void *data)
 
 		// 填充 IPv4
 		struct rte_ipv4_hdr *ip_hdr = (struct rte_ipv4_hdr *)(eth_hdr + 1);
-		memset(ip_hdr, 0, sizeof(*ip_hdr));
+		/* FIXME memset */
+		// memset(ip_hdr, 0, sizeof(*ip_hdr));
 		ip_hdr->version_ihl = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
 		ip_hdr->type_of_service = 0;
 		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len);
@@ -1753,23 +1869,26 @@ uint64_t mutation_udp_len(void **mbufs, unsigned int n, void *data)
 		ip_hdr->time_to_live = 225; // 64;
 		ip_hdr->next_proto_id = IPPROTO_UDP;
 		// FIXME
-		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
-		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		ip_hdr->src_addr = cnode->ether.type.ipv4.src[0]; // RANDOM_IP_SRC(cnode);
+		ip_hdr->dst_addr = cnode->ether.type.ipv4.dst[0]; // RANDOM_IP_DST(cnode);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
-		udp->src_port = RANDOM_UDP_SRC(cnode);
-		udp->dst_port = RANDOM_UDP_DST(cnode);
+		udp->src_port = rte_be_to_cpu_16(1000);
+		udp->dst_port = rte_be_to_cpu_16(1001);
 		/* mutation */
-		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		udp->dgram_cksum = 0;
+		udp->dgram_len = rte_cpu_to_be_16(udp_len + 1);
+		offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
 			rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
+
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
 
 		mutated++;
 		tx_bytes += pkt_len;
@@ -1783,8 +1902,8 @@ uint64_t mutation_udp_cksum(void **mbufs, unsigned int n, void *data)
 {
 	Cnode *cnode = (Cnode*)data;
 	uint64_t tx_bytes = 0, mutated = 0;
-	const char *payload = "cksum";
-	const uint16_t payload_len = strlen(payload) + 1;
+	const char *payload = cnode->ether.type.ipv4.udp.payload;
+	const uint16_t payload_len = cnode->ether.type.ipv4.udp.payload_len;
 	const uint16_t udp_len = sizeof(struct rte_udp_hdr) + payload_len;
 	const uint16_t ipv4_len = sizeof(struct rte_ipv4_hdr) + udp_len;
 	const uint16_t pkt_len = sizeof(struct rte_ether_hdr) + ipv4_len;
@@ -1818,8 +1937,7 @@ uint64_t mutation_udp_cksum(void **mbufs, unsigned int n, void *data)
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum = 0;
-		ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		offload_ipv4_or_calc(cnode, m, ip_hdr);
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
@@ -1834,6 +1952,10 @@ uint64_t mutation_udp_cksum(void **mbufs, unsigned int n, void *data)
 			rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
+
 		mutated++;
 		tx_bytes += pkt_len;
 	}
@@ -1847,6 +1969,8 @@ uint64_t mutation_udp_cksum(void **mbufs, unsigned int n, void *data)
 		sizeof(struct rte_udp_hdr) + \
 		8 \
 		)
+
+/* use hw offload for both inner and outer */
 uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 {
 	Cnode *cnode = (Cnode*)data;
@@ -1857,6 +1981,7 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 	const uint16_t ipv4_len = sizeof(struct rte_ipv4_hdr) + udp_len;
 	const uint16_t pkt_len = sizeof(struct rte_ether_hdr) + ipv4_len;
 
+	static int ff = 0;
 	for (unsigned int i = 0; i < n; i++) {
 		struct rte_mbuf *m = mbufs[i];
 		rte_pktmbuf_reset(m);
@@ -1881,27 +2006,32 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len);
 		ip_hdr->packet_id = rte_cpu_to_be_16(1);
 		ip_hdr->fragment_offset = 0;
-		ip_hdr->time_to_live = 225; // 64;
+		ip_hdr->time_to_live = 125; // 64;
 		ip_hdr->next_proto_id = IPPROTO_UDP;
 		// FIXME
 		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
 		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
-		ip_hdr->hdr_checksum  = 0;
-		ip_hdr->hdr_checksum  = rte_ipv4_cksum(ip_hdr);
+		// ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
+		ip_hdr->hdr_checksum = 0;
 
 		/* ---------------- UDP Header ---------------- */
 		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
 		udp->src_port = RANDOM_UDP_SRC(cnode);
 		udp->dst_port = RANDOM_UDP_DST(cnode);
 		udp->dgram_len = rte_cpu_to_be_16(udp_len);
-		/* mutation */
-		udp->dgram_cksum = 0xffff;
+		udp->dgram_cksum = 0;
+		// offload_ipv4_udp_only_or_calc(cnode, m, ip_hdr, udp);
 
 		/* ---------------- Payload ---------------- */
 		if (payload && payload_len) {
 			rte_memcpy((char *)(udp + 1), payload, payload_len);
 		}
 
+		if (!ff) {
+			bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
+			bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.dst);
+			rte_pktmbuf_dump(stdout, m, 1000);
+		}
 		/* VXLAN */
 		char *data = rte_pktmbuf_prepend(m, SIZEOF_VXLAN);
 		if (!data) {
@@ -1910,12 +2040,16 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 					m, SIZEOF_VXLAN, rte_pktmbuf_headroom(m));
 			return -1;
 		}
+		// printf("pkt_data %p data %p\n", pkt_data, data);
 
 		struct rte_ether_hdr *oeth = (struct rte_ether_hdr *)data;
 		struct rte_ipv4_hdr *oip = (struct rte_ipv4_hdr *)(oeth + 1);
 		struct rte_udp_hdr *oudp = (struct rte_udp_hdr *)(oip + 1);
 		uint8_t *vxlan_hdr = (uint8_t *)(oudp + 1);
 
+		if (!ff) {
+			rte_pktmbuf_dump(stdout, m, 1000);
+		}
 		/* 外层 L2 */
 		/* use vxlan's mac address */
 		rte_ether_addr_copy((struct rte_ether_addr*)cnode->vxlan.ether.src, &oeth->src_addr);
@@ -1929,19 +2063,22 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 		oip->total_length = rte_cpu_to_be_16(pkt_len + 8 + sizeof(struct rte_udp_hdr) + sizeof(struct rte_ipv4_hdr));
 		oip->packet_id = 0;
 		oip->fragment_offset = 0;
-		oip->time_to_live = 225; // 64;
+		oip->time_to_live = 123; // 64;
 		oip->next_proto_id = IPPROTO_UDP;
 		/* FIXME random */
 		uint64_t addr_vni = RANDOM_VXLAN_IP_VNI(cnode);
 		oip->src_addr = (uint32_t)addr_vni;
 		oip->dst_addr = RANDOM_VXLAN_IP_DST(cnode);
-		oip->hdr_checksum = rte_ipv4_cksum(oip);
+		oip->hdr_checksum = 0;
+		// oip->hdr_checksum = rte_ipv4_cksum(oip);
 
 		/* 外层 UDP */
 		/* FIXME find a port that is not 4789 or any one in use */
 		oudp->src_port = RANDOM_VXLAN_UDP_SRC(cnode);
 		/* XXX */
-		oudp->dst_port = -RANDOM_VXLAN_UDP_DST(cnode);
+		static uint64_t flag = 0;
+		uint16_t port = (flag++ & 1) ? 4789 : -4789;
+		oudp->dst_port = rte_be_to_cpu_16(port); // RANDOM_VXLAN_UDP_DST(cnode);
 		oudp->dgram_len = rte_cpu_to_be_16(m->pkt_len - sizeof(struct rte_ether_hdr) - sizeof(struct rte_ipv4_hdr));
 		oudp->dgram_cksum = 0;
 
@@ -1957,8 +2094,26 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 		vxlan_hdr[6] = (vni) & 0xFF;
 		vxlan_hdr[7] = 0;
 
+		m->ol_flags |= RTE_MBUF_F_TX_TUNNEL_VXLAN |
+			RTE_MBUF_F_TX_OUTER_IPV4 |
+			RTE_MBUF_F_TX_OUTER_IP_CKSUM |
+			RTE_MBUF_F_TX_OUTER_UDP_CKSUM |
+			RTE_MBUF_F_TX_IPV4 |
+			RTE_MBUF_F_TX_IP_CKSUM |
+			RTE_MBUF_F_TX_UDP_CKSUM;
+
+		m->outer_l2_len = sizeof(struct rte_ether_hdr);
+		m->outer_l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
+
 		mutated++;
 		tx_bytes += pkt_len;
+		if (!ff) {
+			rte_pktmbuf_dump(stdout, m, 1000);
+			ff = 1;
+		}
 	}
 
 	return tx_bytes;

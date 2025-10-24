@@ -141,15 +141,29 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		ip->dst_addr = RANDOM_IP_DST(cnode);
 
 		ip->hdr_checksum = 0;
-		ip->hdr_checksum = rte_ipv4_cksum(ip);
+		if (OFFLOAD_IPV4(cnode)) {
+			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM;
+		} else {
+			printf("_");
+			ip->hdr_checksum = rte_ipv4_cksum(ip);
+		}
 
 		udp = (struct rte_udp_hdr *)(ip + 1);
 		udp->src_port = RANDOM_UDP_SRC(cnode);
 		udp->dst_port = RANDOM_UDP_DST(cnode);
 		udp->dgram_len = htons(sizeof(struct rte_udp_hdr) + payload_len);
 		udp->dgram_cksum = 0;
-		udp->dgram_cksum = rte_ipv4_udptcp_cksum(ip, udp);
+		if (OFFLOAD_UDP(cnode)) {
+			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_UDP_CKSUM;
+		} else {
+			printf(".");
+			udp->dgram_cksum = rte_ipv4_udptcp_cksum(ip, udp);
+		}
 		rte_memcpy((uint8_t *)udp + l4_len, payload, payload_len);
+
+		m->l2_len = l2_len;
+		m->l3_len = l3_len;
+		m->l4_len = l4_len;
 	}
 	return tx_bytes;
 }
@@ -219,9 +233,9 @@ uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 
 uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
-	const char *payload = "tcp payload";  // TCP 数据部分
-	uint16_t payload_len = strlen(payload) + 1;
 	Cnode *cnode = (Cnode*)data;
+	const char *payload = cnode->ether.type.ipv4.tcp.payload;
+	uint16_t payload_len = cnode->ether.type.ipv4.tcp.payload_len;
 
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
@@ -257,6 +271,12 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		ip->next_proto_id = IPPROTO_TCP;
 		ip->src_addr = RANDOM_IP_SRC(cnode);
 		ip->dst_addr = RANDOM_IP_DST(cnode);
+		ip->hdr_checksum = 0;
+		if (OFFLOAD_IPV4(cnode)) {
+			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM;
+		} else {
+			ip->hdr_checksum = rte_ipv4_cksum(ip);
+		}
 
 		struct rte_tcp_hdr *tcp = (struct rte_tcp_hdr *)(ip + 1);
 		memset(tcp, 0, sizeof(*tcp));
@@ -269,25 +289,22 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		tcp->recv_ack = rte_cpu_to_be_32(ack++);
 		tcp->data_off = (sizeof(struct rte_tcp_hdr) / 4) << 4;
 		tcp->tcp_flags = RTE_TCP_ACK_FLAG | RTE_TCP_PSH_FLAG;
-		tcp->rx_win    = rte_cpu_to_be_16(65535);
+		tcp->rx_win = rte_cpu_to_be_16(65535);
 
-		rte_memcpy((uint8_t *)tcp + l4_len, payload, payload_len);
+		if (payload && payload_len) {
+			rte_memcpy((uint8_t *)tcp + l4_len, payload, payload_len);
+		}
+
+		tcp->cksum = 0;
+		if (OFFLOAD_TCP(cnode)) {
+			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_TCP_CKSUM;
+		} else {
+			tcp->cksum = rte_ipv4_udptcp_cksum(ip, (const void *)tcp);
+		}
 
 		m->l2_len = l2_len;
 		m->l3_len = l3_len;
 		m->l4_len = l4_len;
-
-		int use_hw_offload = 0;
-		if (use_hw_offload) {
-			// 硬件校验：把伪首部校验装进 tcp->cksum，IP hdr 的 cksum 置 0
-			m->ol_flags = RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_TCP_CKSUM;
-			ip->hdr_checksum = 0;
-			tcp->cksum = rte_ipv4_phdr_cksum(ip, m->ol_flags); // 生成 TCP 伪首部校验
-		} else {
-			// 软件校验：由 CPU 计算并直接写入
-			ip->hdr_checksum = rte_ipv4_cksum(ip);
-			tcp->cksum = rte_ipv4_udptcp_cksum(ip, (const void *)tcp);
-		}
 
 		tx_bytes += total_pkt_size;
 	}
@@ -324,8 +341,8 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	Cnode *cnode = (Cnode*)data;
 	uint64_t tx_bytes = 0;
-	const char *payload = cnode->ether.type.ip.icmp.payload;
-	const uint16_t payload_len = cnode->ether.type.ip.icmp.payload_len;
+	const char *payload = cnode->ether.type.ipv4.icmp.payload;
+	const uint16_t payload_len = cnode->ether.type.ipv4.icmp.payload_len;
 	struct rte_ether_hdr *eth;
 	struct rte_ipv4_hdr *ip;
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
@@ -445,7 +462,8 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		uint64_t addr_vni = RANDOM_VXLAN_IP_VNI(cnode);
 		ip->src_addr = (uint32_t)addr_vni;
 		ip->dst_addr = RANDOM_VXLAN_IP_DST(cnode);
-		ip->hdr_checksum = rte_ipv4_cksum(ip);
+		// ip->hdr_checksum = rte_ipv4_cksum(ip);
+		ip->hdr_checksum = 0;
 
 		/* 外层 UDP */
 		udp->src_port = RANDOM_VXLAN_UDP_SRC(cnode);
@@ -463,6 +481,18 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		vxlan_hdr[5] = (vni >> 8) & 0xFF;
 		vxlan_hdr[6] = (vni) & 0xFF;
 		vxlan_hdr[7] = 0;
+
+		m->ol_flags |= RTE_MBUF_F_TX_TUNNEL_VXLAN |
+			RTE_MBUF_F_TX_OUTER_IPV4 |
+			RTE_MBUF_F_TX_OUTER_IP_CKSUM |
+			RTE_MBUF_F_TX_OUTER_UDP_CKSUM |
+			RTE_MBUF_F_TX_IPV4 |
+			RTE_MBUF_F_TX_IP_CKSUM |
+			RTE_MBUF_F_TX_TCP_CKSUM |
+			RTE_MBUF_F_TX_UDP_CKSUM;
+
+		m->outer_l2_len = sizeof(struct rte_ether_hdr);
+		m->outer_l3_len = sizeof(struct rte_ipv4_hdr);
 	}
 
 	return SIZEOF_VXLAN;

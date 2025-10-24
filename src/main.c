@@ -68,6 +68,24 @@ static unsigned int rxtxq_per_lcore = 1;
 static struct rte_eth_conf port_conf = {
 	.txmode = {
 		.mq_mode = RTE_ETH_MQ_TX_NONE,
+		.offloads =
+			RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |   /* IPv4校验和 */
+			RTE_ETH_TX_OFFLOAD_UDP_CKSUM |    /* UDP校验和 */
+			RTE_ETH_TX_OFFLOAD_TCP_CKSUM |    /* TCP校验和 */
+			RTE_ETH_TX_OFFLOAD_OUTER_IPV4_CKSUM |
+			RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM |
+			RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO |
+			RTE_ETH_TX_OFFLOAD_UDP_TNL_TSO |
+			RTE_ETH_TX_OFFLOAD_VLAN_INSERT |  /* VLAN插入 */
+			RTE_ETH_TX_OFFLOAD_MULTI_SEGS |   /* 多段发送 */
+			RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE, /* 快速释放mbuf */
+	},
+	.rx_adv_conf = {
+		.rss_conf = {
+			/* RSS（Receive Side Scaling）配置 */
+			.rss_key = NULL, /* 使用默认 RSS hash key */
+			.rss_hf = RTE_ETH_RSS_IP | RTE_ETH_RSS_TCP | RTE_ETH_RSS_UDP,
+		},
 	},
 };
 
@@ -519,7 +537,7 @@ static const struct option lgopts[] = {
 };
 
 /* Parse the argument given in the command line of the application */
-static int bless_parse_args(int argc, char **argv)
+static int parse_args(int argc, char **argv)
 {
 	int opt, ret, timer_secs;
 	char **argvopt;
@@ -584,7 +602,6 @@ static int bless_parse_args(int argc, char **argv)
 				bconf->size = optarg ? atoi(optarg) : 0;
 				ratio.num = optarg ? atoi(optarg) : 0;
 				printf("bconf->size ratio.num %lu\n", bconf->size);
-				// getchar();
 				break;
 			case CMD_LINE_OPT_BATCH_NUM:
 				bconf->batch = optarg ? atoi(optarg) : 256;
@@ -751,8 +768,6 @@ static int bless_parse_args(int argc, char **argv)
 
 	ret = optind - 1;
 	optind = 1; /* reset getopt lib */
-
-	printf("bep %p %p\n\n", bep.inner, bep.outer);
 
 	if (-EPERM == bless_set_dist(bconf, &ratio, &bep)) {
 		rte_exit(EXIT_FAILURE, "Cannot bless_set_dist()\n");
@@ -949,7 +964,6 @@ int main(int argc, char **argv)
 	targc -= ret;
 	targv += ret;
 	argv += ret;
-	printf("%p %s %p %s\n", targv, *targv, argv, *argv);
 
 #ifdef RTE_LIB_PDUMP
 	ret = rte_pdump_init();
@@ -972,7 +986,7 @@ int main(int argc, char **argv)
 	signal(SIGTERM, signal_handler);
 
 	/* parse application arguments (after the EAL ones) */
-	ret = bless_parse_args(targc, targv);
+	ret = parse_args(targc, targv);
 	if (ret < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid BLESS arguments\n");
 	}
@@ -1075,7 +1089,6 @@ int main(int argc, char **argv)
 		}
 		printf("lcore %d port %d txq %d\n", i, lcore_queue_conf[i].txp_id, lcore_queue_conf[i].txq_id);
 	}
-	getchar();
 
 	/* populate destination port details */
 	if (port_pair_params != NULL) {
@@ -1184,10 +1197,14 @@ int main(int argc, char **argv)
 					portid, strerror(-ret));
 		}
 
+		local_port_conf.txmode.offloads &= dev_info.tx_offload_capa;
+#if 0
 		if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE) {
-			local_port_conf.txmode.offloads |=
-				RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
+			// local_port_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
+		} else {
+			local_port_conf.txmode.offloads ^= RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
 		}
+#endif
 		/* Configure the number of queues for a port. */
 		ret = rte_eth_dev_configure(portid, 1, rxtxq_per_lcore, &local_port_conf);
 		if (ret < 0) {
@@ -1204,7 +1221,6 @@ int main(int argc, char **argv)
 					ret, portid);
 		}
 		printf("TODO nb_txd %d\n", nb_txd);
-		getchar();
 
 		ret = rte_eth_macaddr_get(portid,
 				&l2fwd_ports_eth_addr[portid]);
@@ -1219,10 +1235,8 @@ int main(int argc, char **argv)
 		rxq_conf = dev_info.default_rxconf;
 		rxq_conf.offloads = local_port_conf.rxmode.offloads;
 		/* RX queue setup. 8< */
-		ret = rte_eth_rx_queue_setup(portid, 0, nb_rxd,
-				rte_eth_dev_socket_id(portid),
-				&rxq_conf,
-				l2fwd_pktmbuf_pool);
+		ret = rte_eth_rx_queue_setup(portid, 0, nb_rxd, rte_eth_dev_socket_id(portid),
+				&rxq_conf, l2fwd_pktmbuf_pool);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup:err=%d, port=%u\n",
 					ret, portid);

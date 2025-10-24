@@ -9,7 +9,7 @@
 static struct Mutation erroneous[] = {
 	{ "mac", mac_mutators, ARRAY_SIZE(mac_mutators) },
 	{ "arp", arp_mutators, ARRAY_SIZE(arp_mutators) },
-	{ "ip", ip_mutators, ARRAY_SIZE(ip_mutators) },
+	{ "ipv4", ip_mutators, ARRAY_SIZE(ip_mutators) },
 	{ "icmp", icmp_mutators, ARRAY_SIZE(icmp_mutators) },
 	{ "tcp", tcp_mutators, ARRAY_SIZE(tcp_mutators) },
 	{ "udp", udp_mutators, ARRAY_SIZE(udp_mutators) },

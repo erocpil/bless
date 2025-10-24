@@ -25,20 +25,21 @@ dpdk:
   file-prefix: null # bless
 
 injector:
-  p: 0x3f
+  p: 0x1
   q: 3
   P:
   T: 1
   no-mac-updating:
   portmap: null # (0, 1)
   batch: 512
-  num: -1
+  num: 100
   arp: 1
   icmp: 1
   tcp: 1
   udp: 1
 
 bless:
+  hw-offload: [ ipv4, udp, tcp ]
   ether:
     mtu: 150 # size of ether payload, may result in error if vxlan enabled
     dst: 10:70:fd:af:21:10
@@ -47,9 +48,10 @@ bless:
       arp:
         src: [ 10.0.0.1 ]
         dst: [ 20.0.0.2, 30.0.0.3, 40.0.0.4 ]
-      ip:
+      ipv4:
         src: 172.16.1.1+-99
         dst: [ 192.168.0.1, 192.168.1.1, 192.168.2.1 ]
+        #TODO proto: []
         icmp:
           ident: [ 0x1234, 0xface ]
           payload: "injector: icmp payload." # not used, yet
@@ -62,13 +64,13 @@ bless:
           dst: [ 10000, 10001, 10003 ]
           payload: "injector: udp payload."
   vxlan:
-    enable: false
-    ratio: 10
+    enable: true
+    ratio: 100
     ether:
       dst: 10:70:fd:af:21:10
       src: 10:70:fd:af:21:02
       type:
-        ip:
+        ipv4:
           src: [ 1.0.0.1:1891, 2.0.0.2:2892, 3.0.0.3:3893 ]
           src-range: 0 # not supported
           dst: [ 4.0.0.4, 5.0.0.5, 6.0.0.6 ]
@@ -79,12 +81,12 @@ bless:
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 0
+    ratio: 00
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3
-      ip: [ version, ihl, dscp, ecn, total_length, id, flags, fragment_offset, ttl, protocol, cksum, ipsec ] #
-      #     4        5    6     7    8             9   10     11               12   13        14     15
+      ipv4: [ version, ihl, dscp, ecn, total_length, id, flags, fragment_offset, ttl, protocol, cksum, ipsec ] #
+      #       4        5    6     7    8             9   10     11               12   13        14     15
       icmp: [ type ] # 16
       tcp: [ syn_flood, data_off, flags, window, cksum ]
       #      17         18        19     20      21

@@ -85,6 +85,11 @@ enum BLESS_TYPE {
 	TYPE_MAX,
 };
 
+#define OFFLOAD_IPV4(cnode) ((cnode)->offload & OF_IPV4_VAL)
+#define OFFLOAD_IPV6(cnode) ((cnode)->offload & OF_IPV4_VAL)
+#define OFFLOAD_TCP(cnode) ((cnode)->offload & OF_TCP_VAL)
+#define OFFLOAD_UDP(cnode) ((cnode)->offload & OF_UDP_VAL)
+
 static char *BLESS_TYPE_STR[] = {
 	"arp", "icmp", "tcp", "udp", "erroneous", "max",
 };
