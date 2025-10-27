@@ -45,8 +45,13 @@ int bless_parse_ip_range(char *data, uint32_t *ip, int64_t *range)
 	int i = 0;
 	char *ip_range = strdup(data);
 
-	while (ip_range[i] != '+') {
+	while (ip_range[i] != '\0' && ip_range[i] != '+' ) {
 		i++;
+	}
+
+	/* no range */
+	if ('\0' == ip_range[i]) {
+		*range = atoi(ip_range);
 	}
 
 	if ('+' == ip_range[i]) {
@@ -110,8 +115,8 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_udp_hdr);
-	// const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
-	const uint16_t total_pkt_size = l2_len + cnode->ether.mtu;
+	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
+	// const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len; // + cnode->ether.mtu;
 
 	for (int i = 0; i < (int)n; i++) {
 		struct rte_mbuf *m = mbufs[i];
@@ -153,13 +158,14 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		udp->dst_port = RANDOM_UDP_DST(cnode);
 		udp->dgram_len = htons(sizeof(struct rte_udp_hdr) + payload_len);
 		udp->dgram_cksum = 0;
+		rte_memcpy((uint8_t *)udp + l4_len, payload, payload_len);
+
 		if (OFFLOAD_UDP(cnode)) {
 			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_UDP_CKSUM;
 		} else {
 			printf(".");
 			udp->dgram_cksum = rte_ipv4_udptcp_cksum(ip, udp);
 		}
-		rte_memcpy((uint8_t *)udp + l4_len, payload, payload_len);
 
 		m->l2_len = l2_len;
 		m->l3_len = l3_len;
@@ -240,8 +246,8 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_tcp_hdr);
-	// const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
-	const uint16_t total_pkt_size = l2_len + cnode->ether.mtu;
+	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
+	// const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len; // + cnode->ether.mtu;
 
 	uint64_t tx_bytes = 0;
 
@@ -348,8 +354,8 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_icmp_hdr);
-	// const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
-	const uint16_t total_pkt_size = l2_len + cnode->ether.mtu;
+	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
+	// const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len; // + cnode->ether.mtu;
 
 	for (int i = 0; i < (int)n; i++) {
 		struct rte_mbuf *m = mbufs[i];
@@ -433,12 +439,14 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 			return -1;
 		}
 
+#if 0
 		/* XXX */
 		if (m->data_len > cnode->ether.mtu) {
 			uint16_t frame_len1 = cnode->ether.mtu + sizeof(struct rte_ether_addr) * 2 + sizeof(uint16_t);
 			m->data_len = frame_len1;
 			m->pkt_len = frame_len1;
 		}
+#endif
 
 		struct rte_ether_hdr *eth = (struct rte_ether_hdr *)data;
 		struct rte_ipv4_hdr *ip = (struct rte_ipv4_hdr *)(eth + 1);
@@ -467,7 +475,8 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 
 		/* 外层 UDP */
 		udp->src_port = RANDOM_VXLAN_UDP_SRC(cnode);
-		udp->dst_port = RANDOM_VXLAN_UDP_DST(cnode); // rte_cpu_to_be_16(4789);
+		// udp->dst_port = RANDOM_VXLAN_UDP_DST(cnode); // rte_cpu_to_be_16(RTE_VXLAN_DEFAULT_PORT);
+		udp->dst_port = rte_cpu_to_be_16(RTE_VXLAN_DEFAULT_PORT);
 		udp->dgram_len = rte_cpu_to_be_16(m->pkt_len - sizeof(struct rte_ether_hdr) - sizeof(struct rte_ipv4_hdr));
 		udp->dgram_cksum = 0;
 
@@ -477,12 +486,15 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		vxlan_hdr[2] = 0;
 		vxlan_hdr[3] = 0;
 		uint32_t vni = addr_vni >> 32;
+		// printf("vni %d\n", vni);
 		vxlan_hdr[4] = (vni >> 16) & 0xFF;
 		vxlan_hdr[5] = (vni >> 8) & 0xFF;
 		vxlan_hdr[6] = (vni) & 0xFF;
 		vxlan_hdr[7] = 0;
 
-		m->ol_flags |= RTE_MBUF_F_TX_TUNNEL_VXLAN |
+#if 1
+		m->ol_flags = RTE_MBUF_F_TX_TUNNEL_VXLAN |
+			// RTE_MBUF_F_TX_TUNNEL_UDP |
 			RTE_MBUF_F_TX_OUTER_IPV4 |
 			RTE_MBUF_F_TX_OUTER_IP_CKSUM |
 			RTE_MBUF_F_TX_OUTER_UDP_CKSUM |
@@ -490,6 +502,27 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 			RTE_MBUF_F_TX_IP_CKSUM |
 			RTE_MBUF_F_TX_TCP_CKSUM |
 			RTE_MBUF_F_TX_UDP_CKSUM;
+#else
+		m->ol_flags =
+			RTE_MBUF_F_TX_OUTER_IPV4 |       // 外层IPv4
+			RTE_MBUF_F_TX_OUTER_IP_CKSUM |
+			RTE_MBUF_F_TX_OUTER_UDP_CKSUM |  // 外层UDP校验和
+			RTE_MBUF_F_TX_IPV4 |             // 内层IPv4
+			RTE_MBUF_F_TX_IP_CKSUM |         // 内层IP校验和
+			RTE_MBUF_F_TX_UDP_CKSUM;         // 内层UDP校验和
+#endif
+
+		// inner rte_ipv4_phdr_cksum()
+		// struct rte_ether_hdr *ethh = rte_pktmbuf_mtod_offset(m, struct rte_ether_hdr*, SIZEOF_VXLAN);
+		struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr*, SIZEOF_VXLAN + sizeof(struct rte_ether_hdr));
+		if (IPPROTO_UDP == iph->type_of_service) {
+			struct rte_udp_hdr *udph = (struct rte_udp_hdr*)(iph + 1);
+			udph->dgram_cksum = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph, m->ol_flags);
+		} else if (IPPROTO_TCP == iph->type_of_service) {
+			struct rte_tcp_hdr *tcph = (struct rte_tcp_hdr*)(iph + 1);
+			tcph->cksum = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph, m->ol_flags);
+		} else {
+		}
 
 		m->outer_l2_len = sizeof(struct rte_ether_hdr);
 		m->outer_l3_len = sizeof(struct rte_ipv4_hdr);
@@ -535,6 +568,9 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 			if (!tx_bytes) {
 				return 0;
 			}
+		} else {
+			// printf("no vxlan\n");
+			// rte_exit(EXIT_FAILURE, "[%s %d] no vxlan\n", __func__, __LINE__, n);
 		}
 	}
 

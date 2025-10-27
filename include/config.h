@@ -94,7 +94,7 @@ enum BLESS_ERRNONEOUS_CLASS_TYPE_OFFSET {
 
 enum OFFLOAD_TYPE {
 	OF_IPV4 = 0,
-	OF_IPV6 = 0,
+	OF_IPV6,
 	OF_TCP,
 	OF_UDP,
 	OF_MAX,
@@ -105,7 +105,7 @@ enum OFFLOAD_VALUE {
 	OF_IPV6_VAL = 1 << OF_IPV6,
 	OF_TCP_VAL = 1 << OF_TCP,
 	OF_UDP_VAL = 1 << OF_UDP,
-	OF_MAX_VAL = 1 << (OF_UDP + 1),
+	OF_MAX_VAL = (uint64_t)-1,
 };
 
 struct offload_table_item {

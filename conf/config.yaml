@@ -32,16 +32,16 @@ injector:
   no-mac-updating:
   portmap: null # (0, 1)
   batch: 512
-  num: 100
-  arp: 1
-  icmp: 1
+  num: -1
+  arp: 0
+  icmp: 0
   tcp: 1
   udp: 1
 
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 150 # size of ether payload, may result in error if vxlan enabled
+    mtu: 0 # size of ether payload, may result in error if vxlan enabled
     dst: 10:70:fd:af:21:10
     src: 10:70:fd:af:21:02
     type:
@@ -49,7 +49,7 @@ bless:
         src: [ 10.0.0.1 ]
         dst: [ 20.0.0.2, 30.0.0.3, 40.0.0.4 ]
       ipv4:
-        src: 172.16.1.1+-99
+        src: 172.16.1.1
         dst: [ 192.168.0.1, 192.168.1.1, 192.168.2.1 ]
         #TODO proto: []
         icmp:
@@ -65,13 +65,13 @@ bless:
           payload: "injector: udp payload."
   vxlan:
     enable: true
-    ratio: 100
+    ratio: 0
     ether:
       dst: 10:70:fd:af:21:10
       src: 10:70:fd:af:21:02
       type:
         ipv4:
-          src: [ 1.0.0.1:1891, 2.0.0.2:2892, 3.0.0.3:3893 ]
+          src: [ 172.31.30.246:2619682 ]
           src-range: 0 # not supported
           dst: [ 4.0.0.4, 5.0.0.5, 6.0.0.6 ]
           dst-range: -5 # not supported
@@ -81,7 +81,7 @@ bless:
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 00
+    ratio: 100
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3

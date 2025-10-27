@@ -1684,8 +1684,8 @@ uint64_t mutation_tcp_flags(void **mbufs, unsigned int n, void *data)
 		/* mutation */
 		tcp_hdr->tcp_flags = RTE_TCP_FIN_FLAG | RTE_TCP_SYN_FLAG | RTE_TCP_RST_FLAG | RTE_TCP_PSH_FLAG | RTE_TCP_ACK_FLAG | RTE_TCP_URG_FLAG | RTE_TCP_ECE_FLAG | RTE_TCP_CWR_FLAG;
 		tcp_hdr->rx_win = rte_cpu_to_be_16(65535);
-		tcp_hdr->cksum = 0;
 		tcp_hdr->tcp_urp = 0;
+		tcp_hdr->cksum = 0;
 		offload_ipv4_tcp_only_or_calc(cnode, m, ip_hdr, tcp_hdr);
 
 		m->l2_len = sizeof(struct rte_ether_hdr);
@@ -1970,6 +1970,7 @@ uint64_t mutation_udp_cksum(void **mbufs, unsigned int n, void *data)
 		8 \
 		)
 
+#if 0
 /* use hw offload for both inner and outer */
 uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 {
@@ -2119,6 +2120,144 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 	return tx_bytes;
 	return mutated;
 }
+#else
+uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
+{
+	Cnode *cnode = (Cnode*)data;
+	uint64_t tx_bytes = 0, mutated = 0;
+	const char *payload = "mutation vxlan";
+	const uint16_t payload_len = strlen(payload) + 1;
+	const uint16_t udp_len = sizeof(struct rte_udp_hdr) + payload_len;
+	const uint16_t ipv4_len = sizeof(struct rte_ipv4_hdr) + udp_len;
+	const uint16_t pkt_len = sizeof(struct rte_ether_hdr) + ipv4_len;
+
+	static int ff = 0;
+	for (unsigned int i = 0; i < n; i++) {
+		struct rte_mbuf *m = mbufs[i];
+		rte_pktmbuf_reset(m);
+
+		char *pkt_data = rte_pktmbuf_append(m, pkt_len);
+		if (!pkt_data) {
+			continue;
+		}
+
+		// 填充 Ethernet
+		struct rte_ether_hdr *eth_hdr = (struct rte_ether_hdr *)pkt_data;
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->vxlan.ether.src, &eth_hdr->src_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->vxlan.ether.dst, &eth_hdr->dst_addr);
+		eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+
+		// 填充 IPv4
+		struct rte_ipv4_hdr *ip_hdr = (struct rte_ipv4_hdr *)(eth_hdr + 1);
+		memset(ip_hdr, 0, sizeof(*ip_hdr));
+		ip_hdr->version_ihl = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
+		ip_hdr->type_of_service = 0;
+		ip_hdr->total_length = rte_cpu_to_be_16(ipv4_len);
+		ip_hdr->packet_id = rte_cpu_to_be_16(1);
+		ip_hdr->fragment_offset = 0;
+		ip_hdr->time_to_live = 125;
+		ip_hdr->next_proto_id = IPPROTO_UDP;
+		ip_hdr->src_addr = RANDOM_IP_SRC(cnode);
+		ip_hdr->dst_addr = RANDOM_IP_DST(cnode);
+		ip_hdr->hdr_checksum = 0;  // ✅ 硬件计算
+
+		/* ---------------- UDP Header ---------------- */
+		struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(ip_hdr + 1);
+		udp->src_port = RANDOM_UDP_SRC(cnode);
+		udp->dst_port = RANDOM_UDP_DST(cnode);
+		udp->dgram_len = rte_cpu_to_be_16(udp_len);
+
+		// ❌ 错误：udp->dgram_cksum = 0;
+		// ✅ 正确：必须设置伪首部校验和（稍后设置，在ol_flags设置之后）
+
+		/* ---------------- Payload ---------------- */
+		if (payload && payload_len) {
+			// rte_memcpy((char *)(udp + 1), payload, payload_len);
+		}
+
+		/* VXLAN 封装 */
+		char *data = rte_pktmbuf_prepend(m, SIZEOF_VXLAN);
+		if (!data) {
+			rte_exit(EXIT_FAILURE,
+					"Cannot rte_pktmbuf_prepend(%p %lu) rte_pktmbuf_headroom(m) %u\n",
+					m, SIZEOF_VXLAN, rte_pktmbuf_headroom(m));
+			return -1;
+		}
+
+		struct rte_ether_hdr *oeth = (struct rte_ether_hdr *)data;
+		struct rte_ipv4_hdr *oip = (struct rte_ipv4_hdr *)(oeth + 1);
+		struct rte_udp_hdr *oudp = (struct rte_udp_hdr *)(oip + 1);
+		uint8_t *vxlan_hdr = (uint8_t *)(oudp + 1);
+
+		/* 外层 L2 */
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->vxlan.ether.src, &oeth->src_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->vxlan.ether.dst, &oeth->dst_addr);
+		oeth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+
+		/* 外层 L3 */
+		oip->version_ihl = 0x45;
+		oip->type_of_service = 0;
+		oip->total_length = rte_cpu_to_be_16(m->pkt_len - sizeof(struct rte_ether_hdr));
+		oip->packet_id = 0;
+		oip->fragment_offset = 0;
+		oip->time_to_live = 123;
+		oip->next_proto_id = IPPROTO_UDP;
+		uint64_t addr_vni = RANDOM_VXLAN_IP_VNI(cnode);
+		oip->src_addr = (uint32_t)addr_vni;
+		oip->dst_addr = RANDOM_VXLAN_IP_DST(cnode);
+		oip->hdr_checksum = 0;  // ✅ 硬件计算
+
+		/* 外层 UDP */
+		oudp->src_port = RANDOM_VXLAN_UDP_SRC(cnode);
+		static uint64_t flag = 0;
+		uint16_t port = (flag++ & 1) ? 4789 : -4789;
+		oudp->dst_port = rte_be_to_cpu_16(port);
+		oudp->dgram_len = rte_cpu_to_be_16(m->pkt_len - sizeof(struct rte_ether_hdr) - sizeof(struct rte_ipv4_hdr));
+		oudp->dgram_cksum = 0;  // ✅ 硬件计算
+
+		/* VXLAN header */
+		vxlan_hdr[0] = 0x08;
+		vxlan_hdr[1] = 0;
+		vxlan_hdr[2] = 0;
+		vxlan_hdr[3] = 0;
+		uint32_t vni = addr_vni >> 32;
+		vxlan_hdr[4] = (vni >> 16) & 0xFF;
+		vxlan_hdr[5] = (vni >> 8) & 0xFF;
+		vxlan_hdr[6] = (vni) & 0xFF;
+		vxlan_hdr[7] = 0;
+
+		/* ✅ 设置 offload 标志 */
+		m->ol_flags = RTE_MBUF_F_TX_TUNNEL_VXLAN |
+			RTE_MBUF_F_TX_OUTER_IPV4 |
+			RTE_MBUF_F_TX_OUTER_IP_CKSUM |
+			RTE_MBUF_F_TX_OUTER_UDP_CKSUM |
+			RTE_MBUF_F_TX_IPV4 |
+			RTE_MBUF_F_TX_IP_CKSUM |
+			RTE_MBUF_F_TX_UDP_CKSUM;
+
+		/* ✅ 修正：设置正确的长度字段 */
+		m->outer_l2_len = 0;  // ← 关键修改！
+		m->outer_l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l2_len = sizeof(struct rte_ether_hdr);
+		m->l3_len = sizeof(struct rte_ipv4_hdr);
+		m->l4_len = sizeof(struct rte_udp_hdr);
+
+		/* ✅ 关键修改：为内层UDP设置伪首部校验和 */
+		udp->dgram_cksum = rte_ipv4_phdr_cksum(ip_hdr, m->ol_flags);
+
+		mutated++;
+		tx_bytes += m->pkt_len;  // 修正：应该用实际报文长度
+
+		if (!ff) {
+			rte_pktmbuf_dump(stdout, m, 1000);
+			ff = 1;
+		}
+	}
+
+	return tx_bytes;
+	return mutated;
+}
+#endif
 
 static struct Mutator mac_mutators[] = {
 	{ "vlan",      mutation_mac_vlan },
