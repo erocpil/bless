@@ -649,9 +649,9 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 		exit(1);
 	}
 
-	int allocated = 0;
+	uint64_t allocated = 0;
 	for (int i = 0; i < n; i++) {
-		temp[i] = (double)total * weights[i] / sum;
+		temp[i] = (double)total * (weights[i] / sum);
 		int add = (int)temp[i];     // 整数部分
 		result[i] += add;
 		frac[i] = temp[i] - add;    // 小数部分
@@ -660,6 +660,7 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 
 	// Step3: 把剩下的分配给小数部分最大的
 	int remain = total - allocated;
+	printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
 	while (remain > 0) {
 		int idx = 0;
 		for (int i = 1; i < n; i++) {
@@ -669,6 +670,7 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 		frac[idx] = -1; // 标记已处理
 		remain--;
 	}
+	printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
 
 	free(temp);
 	free(frac);
@@ -748,6 +750,7 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 
 	bconf->bep.inner = bep->inner;
 	bconf->bep.outer = bep->outer;
+	getchar();
 
 	// DISTRIBUTION_DUMP(bconf->dist);
 
