@@ -34,7 +34,7 @@ injector:
   batch: 512
   num: -1
   arp: 0
-  icmp: 1
+  icmp: 0
   tcp: 1
   udp: 1
 
@@ -81,7 +81,7 @@ bless:
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 00
+    ratio: 100
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3

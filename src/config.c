@@ -1464,11 +1464,11 @@ Cnode *config_parse_bless(Node *root)
 		for (Node *t = node->child; t; t = t->next) {
 			for (int i = 0; i < n_item; i++) {
 				if (strcmp(t->value, offload_table[i].name)) {
-					printf("unknown offload type %s\n", t->value);
+					// printf("unknown offload type %s\n", t->value);
 					continue;
 				}
 				cnode->offload |= 1 << offload_table[i].type;
-				printf("%s ", t->value);
+				printf("found offload type %s ", t->value);
 			}
 		}
 	}

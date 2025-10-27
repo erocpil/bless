@@ -649,9 +649,9 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 		exit(1);
 	}
 
-	uint64_t allocated = 0;
+	int allocated = 0;
 	for (int i = 0; i < n; i++) {
-		temp[i] = (double)total * (weights[i] / sum);
+		temp[i] = (double)total * weights[i] / sum;
 		int add = (int)temp[i];     // 整数部分
 		result[i] += add;
 		frac[i] = temp[i] - add;    // 小数部分
