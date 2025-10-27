@@ -182,9 +182,8 @@ void worker_loop_txonly(void *data)
 			tsc = tsc ^ (tsc >> 8);
 			enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
 			// if (1) {
-			if (cnode->erroneous.n_mutation && (tsc & 1023) < cnode->erroneous.ratio) {
+			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation && (tsc & 1023) < cnode->erroneous.ratio) {
 				int n = tsc % cnode->erroneous.n_mutation;
-				n = 24;
 				mutation_func func = cnode->erroneous.func[n];
 				int r = func((void**)&mbufs[j], 1, (void*)cnode);
 				if (!r) {

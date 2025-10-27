@@ -65,7 +65,7 @@ bless:
           payload: "injector: udp payload."
   vxlan:
     enable: true
-    ratio: 0
+    ratio: 100
     ether:
       dst: 10:70:fd:af:21:10
       src: 10:70:fd:af:21:02

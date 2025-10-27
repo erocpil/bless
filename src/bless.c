@@ -563,7 +563,7 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 	if (cnode->vxlan.enable) {
 		/* outer */
 		uint16_t ra = rdtsc16() & 1023;
-		if ((ra % 100) < cnode->vxlan.ratio) {
+		if (cnode->vxlan.ratio > 0 && (ra % 100) < cnode->vxlan.ratio) {
 			tx_bytes = bless_encap_outer[0](mbufs, n, cnode);
 			if (!tx_bytes) {
 				return 0;

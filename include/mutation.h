@@ -67,7 +67,7 @@ static inline void offload_ipv4_udp_only_or_calc(Cnode *cnode, struct rte_mbuf *
 		m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_UDP_CKSUM;
 	} else {
 		udph->dgram_cksum = rte_ipv4_udptcp_cksum(iph, udph);
-		printf("cksum %u\n", udph->dgram_cksum);
+		// printf("cksum %u\n", udph->dgram_cksum);
 	}
 }
 
