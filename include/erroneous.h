@@ -13,6 +13,7 @@ static struct Mutation erroneous[] = {
 	{ "icmp", icmp_mutators, ARRAY_SIZE(icmp_mutators) },
 	{ "tcp", tcp_mutators, ARRAY_SIZE(tcp_mutators) },
 	{ "udp", udp_mutators, ARRAY_SIZE(udp_mutators) },
+	{ "other", other_mutators, ARRAY_SIZE(other_mutators) },
 };
 
 mutation_func find_mutation_func(const char *clas, const char *type)

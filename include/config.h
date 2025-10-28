@@ -113,21 +113,14 @@ struct offload_table_item {
 	int type;
 };
 
-static struct offload_table_item offload_table[] = {
-	{ "ipv4", OF_IPV4 },
-	{ "ipv6", OF_IPV6 },
-	{ "tcp", OF_TCP },
-	{ "udp", OF_UDP },
-};
-
 typedef struct Cnode {
 	uint64_t offload;
 	struct {
 		uint16_t mtu;
 		uint8_t dst[ETHER_ADDR_LEN];
 		uint8_t src[ETHER_ADDR_LEN];
-		// uint16_t n_dst;
-		// uint16_t n_src;
+		uint16_t n_dst;
+		uint16_t n_src;
 		struct {
 			struct {
 				uint32_t src[IP_ADDR_MAX];

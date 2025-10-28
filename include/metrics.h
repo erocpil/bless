@@ -14,6 +14,11 @@
 
 extern struct bless_conf *bconf;
 
+static int bless_handle_injector(const char *cmd __rte_unused, const char *params,
+		struct rte_tel_data *d, enum BLESS_TYPE type)
+{
+}
+
 static int bless_handle_metrics(const char *cmd __rte_unused, const char *params,
 		struct rte_tel_data *d, enum BLESS_TYPE type)
 {

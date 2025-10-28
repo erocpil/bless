@@ -2131,7 +2131,7 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 	const uint16_t ipv4_len = sizeof(struct rte_ipv4_hdr) + udp_len;
 	const uint16_t pkt_len = sizeof(struct rte_ether_hdr) + ipv4_len;
 
-	static int ff = 0;
+	// static int ff = 0;
 	for (unsigned int i = 0; i < n; i++) {
 		struct rte_mbuf *m = mbufs[i];
 		rte_pktmbuf_reset(m);
@@ -2248,16 +2248,125 @@ uint64_t mutation_udp_vxlan(void **mbufs, unsigned int n, void *data)
 		mutated++;
 		tx_bytes += m->pkt_len;  // 修正：应该用实际报文长度
 
-		if (!ff) {
-			rte_pktmbuf_dump(stdout, m, 1000);
-			ff = 1;
-		}
+		/*
+		   if (!ff) {
+		   rte_pktmbuf_dump(stdout, m, 1000);
+		   ff = 1;
+		   }
+		   */
 	}
 
 	return tx_bytes;
 	return mutated;
 }
 #endif
+
+#define TCP_OPT_TOA_KIND 76
+uint64_t mutation_toa(void **mbufs, unsigned int n, void *data)
+{
+	Cnode *cnode = (Cnode*)data;
+	uint64_t tx_bytes = 0, mutated = 0;
+
+	/* 计算各头部大小：
+	 * Ethernet(14) + IPv4(20) + TCP(20) + TCP_OPTIONS(12示例) = 66 => 可发送 */
+	const uint8_t tcp_opt_len = 12; /* 必须保证 TCP header (20 + opt) 是 4 字节倍数 */
+	const uint16_t eth_hdr_len = sizeof(struct rte_ether_hdr);
+	const uint16_t ipv4_hdr_len = sizeof(struct rte_ipv4_hdr);
+	const uint16_t tcp_hdr_len = sizeof(struct rte_tcp_hdr) + tcp_opt_len;
+	const uint16_t total_pkt_len = eth_hdr_len + ipv4_hdr_len + tcp_hdr_len;
+
+	for (unsigned int i = 0; i < n; i++) {
+		struct rte_mbuf *m = mbufs[i];
+		rte_pktmbuf_reset(m);
+		/* 在 mbuf 尾部追加空间 */
+		void *pkt = rte_pktmbuf_append(m, total_pkt_len);
+		if (pkt == NULL) {
+			continue;
+		}
+
+		/* 指针布局 */
+		uint8_t *ptr = (uint8_t *)pkt;
+
+		/* 1) Ethernet header */
+		struct rte_ether_hdr *eth = (struct rte_ether_hdr *)ptr;
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->vxlan.ether.src, &eth->src_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->vxlan.ether.dst, &eth->dst_addr);
+		eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+		ptr += eth_hdr_len;
+
+		/* 2) IPv4 header (without options) */
+		struct rte_ipv4_hdr *ip = (struct rte_ipv4_hdr *)ptr;
+		memset(ip, 0, sizeof(*ip));
+		ip->version_ihl = (4 << 4) | (ipv4_hdr_len / 4); /* IHL = 5 (no ip options) */
+		ip->type_of_service = 0;
+		ip->total_length = rte_cpu_to_be_16(ipv4_hdr_len + tcp_hdr_len);
+		ip->packet_id = rte_cpu_to_be_16(0);
+		ip->fragment_offset = rte_cpu_to_be_16(0);
+		ip->time_to_live = 64;
+		ip->next_proto_id = IPPROTO_TCP;
+		ip->src_addr = RANDOM_IP_SRC(cnode);
+		ip->dst_addr = RANDOM_IP_DST(cnode);
+		ip->hdr_checksum = 0; /* 先清零，后计算 */
+		ptr += ipv4_hdr_len;
+
+		/* 3) TCP header (20 bytes) + options */
+		struct rte_tcp_hdr *tcp = (struct rte_tcp_hdr *)ptr;
+		memset(tcp, 0, sizeof(*tcp));
+		tcp->src_port = RANDOM_TCP_SRC(cnode);
+		tcp->dst_port = RANDOM_TCP_DST(cnode);
+		tcp->sent_seq = rte_cpu_to_be_32(0x1000); /* 示例 seq */
+		tcp->recv_ack = rte_cpu_to_be_32(0);
+		/* Data offset is in 32-bit words. (20 + tcp_opt_len) / 4 */
+		tcp->data_off = (uint8_t)((tcp_hdr_len / 4) << 4);
+		tcp->tcp_flags = RTE_TCP_SYN_FLAG; /* 举例：SYN */
+		tcp->rx_win = rte_cpu_to_be_16(65535);
+		tcp->cksum = 0; /* 由 pseudo-header 或 HW 计算（这里设置 pseudo 部分）*/
+		tcp->tcp_urp = 0;
+		ptr += sizeof(struct rte_tcp_hdr);
+
+		/* 4) 填写 TOA option（示例结构： Kind(1) | Len(1) | Client IP(4) | Client Port(2) | padding N bytes ）*/
+		uint8_t *opt = ptr;
+		opt[0] = TCP_OPT_TOA_KIND;  /* kind */
+		opt[1] = tcp_opt_len;       /* length (包含 kind+len 字节) */
+		/* 原始客户端 IPv4 地址 (网络字节序) */
+		uint32_t *opt_ip = (uint32_t *)&opt[2];
+		*opt_ip = rte_cpu_to_be_32((8 << 24) | (8 << 16) | (8 << 8) | 8);
+		/* 原始客户端端口 (network order) 写在紧随其后（位于 opt[6..7]） */
+		uint16_t *opt_port = (uint16_t *)&opt[6];
+		*opt_port = rte_cpu_to_be_16(433);
+		/* 填充剩下的字节到 12 字节（此处第 8..11 字节为 0） */
+		// memset(&opt[8], 0x00, tcp_opt_len - 8);
+
+		/* 如果需要，TCP options 后还可添加 NOP(1) 等做对齐 - 本例 tcp_opt_len 已对齐 */
+
+		/* --- 完成头部填充 --- */
+
+		/* 5) 设置 mbuf 的 L2/L3/L4 长度，便于驱动使用 HW offload */
+		m->l2_len = eth_hdr_len;
+		m->l3_len = ipv4_hdr_len;
+		m->l4_len = tcp_hdr_len;
+
+		/* 6) IP 头校验和（软件填充，某些 PMD 需要） */
+		ip->hdr_checksum = rte_cpu_to_be_16(rte_ipv4_cksum(ip));
+
+		/* 7) 如果用硬件做 L4 校验，需要计算并写入 pseudo-header checksum 到 tcp->cksum
+		 *    DPDK 要求：当启用 PKT_TX_TCP_CKSUM 时，应用需写入 pseudo hdr cksum。 */
+		tcp->cksum = rte_cpu_to_be_16(rte_ipv4_phdr_cksum(ip, m->ol_flags));
+
+		/* 8) 设置 mbuf offload flags，告知 PMD 做 IP/TCP 校验或 TSO 等（示例） */
+		m->ol_flags |= RTE_MBUF_F_TX_IPV4;         /* 标注为 IPv4 包 */
+		m->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM;     /* 硬件算 IP 校验和（若 PMD 支持） */
+		m->ol_flags |= RTE_MBUF_F_TX_TCP_CKSUM;    /* 硬件算 TCP 校验和（若 PMD 支持） */
+
+		/* 部分 PMD 要求填写 pseudo hdr checksum（上面已用 rte_ipv4_phdr_cksum） */
+		/* pkt_len/data_len 在 rte_pktmbuf_append 已经被设置 */
+
+		tx_bytes += m->pkt_len;
+	}
+
+	return tx_bytes;
+	return mutated;
+}
 
 static struct Mutator mac_mutators[] = {
 	{ "vlan",      mutation_mac_vlan },
@@ -2300,6 +2409,10 @@ static struct Mutator udp_mutators[] = {
 	{ "len", mutation_udp_len },
 	{ "cksum", mutation_udp_cksum },
 	{ "vxlan", mutation_udp_vxlan },
+};
+
+static struct Mutator other_mutators[] = {
+	{ "toa", mutation_toa },
 };
 
 #endif

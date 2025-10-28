@@ -182,7 +182,7 @@ struct bless_conf {
 	pthread_barrier_t *barrier;
 	Cnode *cnode;
 
-	int64_t size;
+	int64_t num;
 	uint16_t batch;
 	struct distribution *dist;
 	struct dist_ratio dist_ratio;

@@ -142,14 +142,14 @@ void worker_loop_txonly(void *data)
 	// struct rte_ring *ring = (struct rte_ring*)(pktmbuf_pool->pool_data);
 	// printf("size %u mask %u capacity %u\n", ring->size, ring->mask, ring->capacity);
 
-	uint64_t size = conf->size;
-	// printf("size %lu\n", size);
+	uint64_t num = conf->num;
+	// printf("num %lu\n", num);
 	uint16_t batch = bconf->batch;
 	if (batch > 1024) {
 		batch = 1024;
 	}
-	if (batch > size) {
-		batch = size;
+	if (batch > num) {
+		batch = num;
 	}
 	uint16_t nb_tx = batch;
 	// printf("[%s %d] lcore %d send %lu batch %u\n", __func__, __LINE__, lcore_id, size, batch);
@@ -160,9 +160,20 @@ void worker_loop_txonly(void *data)
 			qconf->txl_id, qconf->txp_id, qconf->txq_id);
 	assert(qconf->txl_id == rte_lcore_id());
 
-	// return;
+	/* check if src mac address is provided */
+	if (!cnode->ether.n_src) {
+		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->ether.src);
+		printf("injector will use local port mac address:\n");
+		bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
+	}
+	/* check if vxlan src mac address is provided */
+	if (cnode->vxlan.enable && !cnode->ether.n_src) {
+		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->vxlan.ether.src);
+		printf("injector vxlan will use local port mac address:\n");
+		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
+	}
 
-	while (!*force_quit && size > 0) {
+	while (!*force_quit && num > 0) {
 		/*
 		 * TX burst queue
 		 */
@@ -172,11 +183,11 @@ void worker_loop_txonly(void *data)
 		// TODO
 		// rte_eth_macaddr_get();
 		// sent = rte_eth_tx_buffer_flush(portid, 0, buffer);
-		uint64_t tx_bytes = 0;
 		int type = -1;
 
 		// srandom(rte_rdtsc());
 		for (int j = 0; j < nb_tx; j++) {
+			uint64_t tx_bytes = 0;
 			/* should this mbuf be a mutation? */
 			uint64_t tsc = rte_rdtsc();
 			tsc = tsc ^ (tsc >> 8);
@@ -208,7 +219,7 @@ void worker_loop_txonly(void *data)
 		// rte_pktmbuf_dump(stdout, mbufs[0], 1000);
 		uint16_t sent = rte_eth_tx_burst(portid, qid, mbufs, nb_tx);
 		if (sent) {
-			size -= sent;
+			num -= sent;
 			// printf("lcore %u port %u sent %d remain %lu\n", lcore_id, portid, sent, size);
 		}
 		if (sent != nb_tx) {

@@ -20,6 +20,8 @@ struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
 void register_my_metrics(void)
 {
+	rte_telemetry_register_cmd("/bless/injector", bless_handle_injector,
+			"Returns `injector' metrics for BLESS");
 	rte_telemetry_register_cmd("/bless/arp", bless_handle_arp,
 			"Returns `arp' metrics for BLESS");
 	rte_telemetry_register_cmd("/bless/icmp", bless_handle_icmp,
@@ -232,8 +234,6 @@ static void l2fwd_main_loop(void)
 }
 #endif
 
-uint64_t pps = 0;
-uint64_t bps = 0;
 /* Print out statistics on packets dropped */
 static void print_stats(struct port_statistics **port_statistics)
 {
@@ -243,6 +243,8 @@ static void print_stats(struct port_statistics **port_statistics)
 	uint64_t total_packets_dropped_pkts = 0;
 	uint64_t total_packets_dropped_bytes = 0;
 	unsigned portid;
+	static uint64_t pps = 0;
+	static uint64_t bps = 0;
 
 	const char clr[] = { 27, '[', '2', 'J', '\0' };
 	const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
@@ -599,9 +601,9 @@ static int parse_args(int argc, char **argv)
 
 				/* long options */
 			case CMD_LINE_OPT_NUM_NUM:
-				bconf->size = optarg ? atoi(optarg) : 0;
+				bconf->num = optarg ? atoi(optarg) : 0;
 				ratio.num = optarg ? atoi(optarg) : 0;
-				printf("bconf->size ratio.num %lu\n", bconf->size);
+				printf("bconf->size ratio.num %lu\n", bconf->num);
 				break;
 			case CMD_LINE_OPT_BATCH_NUM:
 				bconf->batch = optarg ? atoi(optarg) : 256;
@@ -780,8 +782,7 @@ static int parse_args(int argc, char **argv)
  * Check port pair config with enabled port mask,
  * and for valid port pair combinations.
  */
-	static int
-check_port_pair_config(void)
+static int check_port_pair_config(void)
 {
 	uint32_t port_pair_config_mask = 0;
 	uint32_t port_pair_mask = 0;
@@ -819,8 +820,7 @@ check_port_pair_config(void)
 }
 
 /* Check the link status of all ports in up to 9s, and print them finally */
-	static void
-check_all_ports_link_status(uint32_t port_mask)
+static void check_all_ports_link_status(uint32_t port_mask)
 {
 #define CHECK_INTERVAL 100 /* 100ms */
 #define MAX_CHECK_TIME 90 /* 9s (90 * 100ms) in total */
@@ -882,8 +882,7 @@ check_all_ports_link_status(uint32_t port_mask)
 	}
 }
 
-	static void
-signal_handler(int signum)
+static void signal_handler(int signum)
 {
 	if (signum == SIGINT || signum == SIGTERM) {
 		printf("\n\nSignal %d received, preparing to exit...\n",

@@ -149,7 +149,6 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		if (OFFLOAD_IPV4(cnode)) {
 			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM;
 		} else {
-			printf("_");
 			ip->hdr_checksum = rte_ipv4_cksum(ip);
 		}
 
@@ -163,7 +162,6 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		if (OFFLOAD_UDP(cnode)) {
 			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_UDP_CKSUM;
 		} else {
-			printf(".");
 			udp->dgram_cksum = rte_ipv4_udptcp_cksum(ip, udp);
 		}
 
@@ -649,18 +647,21 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 		exit(1);
 	}
 
-	int allocated = 0;
+	volatile uint64_t allocated = 0;
+	double t = (double)total / sum;
 	for (int i = 0; i < n; i++) {
-		temp[i] = (double)total * weights[i] / sum;
-		int add = (int)temp[i];     // 整数部分
+		temp[i] = t * weights[i];
+		uint64_t add = (uint64_t)temp[i];     // 整数部分
 		result[i] += add;
 		frac[i] = temp[i] - add;    // 小数部分
 		allocated += add;
+		asm volatile ("" : : : "memory");
+		// printf("%d: t %.4f weight %d temp %.4f add %lu frac %.4f\n", i, t, weights[i], temp[i], add, frac[i]);
 	}
 
 	// Step3: 把剩下的分配给小数部分最大的
 	int remain = total - allocated;
-	printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
+	// printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
 	while (remain > 0) {
 		int idx = 0;
 		for (int i = 1; i < n; i++) {
@@ -670,7 +671,7 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 		frac[idx] = -1; // 标记已处理
 		remain--;
 	}
-	printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
+	// printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
 
 	free(temp);
 	free(frac);
@@ -685,14 +686,22 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 	for (int i = 0; i < TYPE_MAX - 1; i++) {
 		if (ratio->weight[i] > 0) {
 			weight[n++] = ratio->weight[i];
+		} else {
+			printf("skip 0 ratio type %s\n", BLESS_TYPE_STR[i]);
 		}
 	}
+	printf("weight from ratio:\n");
+	for (int i = 0; i < n; i++) {
+		printf("%d: %d\n", i, weight[i]);
+	}
+	printf("\n");
 	result = (uint64_t*)malloc(sizeof(uint64_t) * n);
-	if (bconf->size) {
+	if (bconf->num) {
 		if (!n) {
-			return -EPERM;
+			rte_exit(EXIT_FAILURE, "Cannot rte_malloc(distribution)\n");
 		} else {
-			distribute(weight, n, bconf->size, result);
+			distribute(weight, n, bconf->num, result);
+			printf("weight distribution from ratio:\n");
 			for (int i = 0, n = 0; i < TYPE_MAX - 1; i++) {
 				if (ratio->weight[i] > 0) {
 					printf("-> ");
@@ -727,6 +736,7 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 	dist->size = size;
 
 	distribute(weight, n, size, result);
+	printf("unified weight distribution:\n");
 	for (int i = 0; i < n; i++) {
 		printf("%d %lu\n", i, result[i]);
 	}
@@ -750,7 +760,6 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 
 	bconf->bep.inner = bep->inner;
 	bconf->bep.outer = bep->outer;
-	getchar();
 
 	// DISTRIBUTION_DUMP(bconf->dist);
 

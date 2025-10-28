@@ -2,6 +2,13 @@
 #include "bless.h"
 #include "erroneous.h"
 
+static struct offload_table_item offload_table[] = {
+	{ "ipv4", OF_IPV4 },
+	{ "ipv6", OF_IPV6 },
+	{ "tcp", OF_TCP },
+	{ "udp", OF_UDP },
+};
+
 Node *create_node(const char *key, const char *value, NodeType type)
 {
 	Node *node = (Node *)calloc(1, sizeof(Node));
@@ -888,7 +895,8 @@ static int config_parse_bless_ether(Node *root, Cnode *cnode)
 	path = "bless.ether.dst";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		printf("no dst mac address provided.\n");
+		exit(-1);
 	}
 	printf("%s: %s\n", path, node->value);
 
@@ -900,20 +908,23 @@ static int config_parse_bless_ether(Node *root, Cnode *cnode)
 		printf("Invalid dst mac address.\n");
 		exit(-1);
 	}
+	cnode->ether.n_dst = 1;
 
 	path = "bless.ether.src";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
-	}
-	printf("%s: %s\n", path, node->value);
-
-	if (node->value && strlen(node->value) && NODE_SCALAR == node->type &&
-			(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->ether.src)) == 0)) {
-		bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
+		printf("no src mac address node provided.\n");
+		cnode->ether.n_src = 0;
 	} else {
-		printf("Invalid src mac address.\n");
-		exit(-1);
+		printf("%s: %s\n", path, node->value);
+		if (node->value && strlen(node->value) && NODE_SCALAR == node->type &&
+				(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->ether.src)) == 0)) {
+			bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
+			cnode->ether.n_src = 1;
+		} else {
+			printf("Invalid src mac address, injector will try it's local port.\n");
+			cnode->ether.n_src = 0;
+		}
 	}
 
 	return 1;
@@ -942,17 +953,18 @@ static int config_parse_bless_vxlan_ether(Node *root, Cnode *cnode)
 	path = "bless.vxlan.ether.src";
 	node = find_by_path(root, path);
 	if (!node) {
-		printf("Invalid vxlan src mac address.\n");
-		exit(-1);
-	}
-	printf("%s: %s\n", path, node->value);
-
-	if (node->value && strlen(node->value) &&
-			(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->vxlan.ether.src)) == 0)) {
-		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
+		printf("no vxlan src mac address node provided.\n");
+		cnode->vxlan.ether.n_src = 0;
 	} else {
-		printf("Invalid vxlan src mac address.\n");
-		exit(-1);
+		printf("%s: %s\n", path, node->value);
+		if (node->value && strlen(node->value) &&
+				(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->vxlan.ether.src)) == 0)) {
+			bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
+			cnode->vxlan.ether.n_src = 1;
+		} else {
+			printf("Invalid vxlan src mac address, injector will try it's local port.\n");
+			cnode->vxlan.ether.n_src = 1;
+		}
 	}
 
 	return 1;
@@ -1294,7 +1306,6 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 	n = config_parse_bless_vxlan_ether(root, cnode);
 	bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
 	bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.dst);
-	getchar();
 
 	path = "bless.vxlan.ether.type.ipv4.src";
 	node = find_by_path(root, path);
