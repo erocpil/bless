@@ -461,30 +461,30 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 			}
 			len += 1; // '\0'
 
-			argv[i] = malloc(len);
-			if (!argv[i]) {
-				perror("malloc");
-				exit(EXIT_FAILURE);
-			}
-			// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
-
-			char *p = argv[i];
-			if (strlen(n->key) == 1) {
-				p += sprintf(p, "-%s ", n->key);
-			} else {
-				p += sprintf(p, "--%s=", n->key);
-			}
-
 			t = n->child;
 			while (t) {
+				argv[i] = malloc(len);
+				if (!argv[i]) {
+					perror("malloc");
+					exit(EXIT_FAILURE);
+				}
+				// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
+
+				char *p = argv[i];
+				if (strlen(n->key) == 1) {
+					p += sprintf(p, "-%s ", n->key);
+				} else {
+					p += sprintf(p, "--%s=", n->key);
+				}
+
 				p += sprintf(p, "%s", t->value);
 				if (t->next) {
-					*p++ = ',';
+					// *p++ = ',';
 				}
 				t = t->next;
+				*p = '\0';
+				i += !!t;
 			}
-			*p = '\0';
-
 		} else {
 			// NODE_MAPPING 其它情况略过
 		}

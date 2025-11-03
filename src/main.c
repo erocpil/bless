@@ -951,6 +951,11 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Cannot parse config.yaml\n");
 	}
 
+	for (int i = 0; i < targc; i++) {
+		printf("'%s' ", targv[i]);
+	}
+	printf("\n");
+	getchar();
 	bconf = bless_init(targc, targv);
 	if (!bconf) {
 		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
@@ -1351,6 +1356,8 @@ int main(int argc, char **argv)
 
 	// DISTRIBUTION_DUMP(bconf->dist);
 
+	printf("Bless is waiting ...\n");
+	getchar();
 	ret = 0;
 	/* launch per-lcore init on every lcore */
 	uint32_t lcore_id = 0;
