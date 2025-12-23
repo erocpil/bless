@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>   // access()
 #include <ctype.h>    // isprint()
+#include <stdatomic.h>
 #include <stdint.h>
 #include <arpa/inet.h>
 #include <bits/socket.h>
@@ -31,6 +32,17 @@
 #endif
 
 #define MBUF_DYNFIELDS_MAX  8
+
+enum {
+	STATE_INIT = 0,
+	STATE_RUNNING = 1,
+	STATE_STOPPED = 2,
+	STATE_EXIT = 3,
+};
+
+struct ws_user_data {
+	atomic_int *state;
+};
 
 typedef uint64_t (*mutation_func)(void **mbufs, unsigned int n, void *data);
 

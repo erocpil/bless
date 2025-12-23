@@ -1,58 +1,91 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# Copyright(c) 2010-2014 Intel Corporation
 
-# binary name
-APP = bless
-BUILDDIR ?= build
+APP     := bless
+O       ?= build
+BUILD   ?= release
+STATIC  ?= 0
+V       ?= 0
 
-# all source are stored in SRCS-y
-SRCS-y := $(wildcard *.c)
-OBJS-y := $(patsubst %.c, $(BUILDDIR)/%.o, $(SRCS-y))
+CC      := clang
+PKGCONF := pkg-config
 
-PKGCONF ?= pkg-config
+# ============================================================
+# Disable builtin rules
+# ============================================================
+MAKEFLAGS += -rR
+.SUFFIXES:
 
-# Build using pkg-config variables if possible
-ifneq ($(shell $(PKGCONF) --exists libdpdk && echo 0),0)
-$(error "no installation of DPDK found")
+# ============================================================
+# Paths
+# ============================================================
+OBJDIR := $(O)/$(BUILD)/obj
+BINDIR := $(O)/$(BUILD)/bin
+TARGET := $(BINDIR)/$(APP)
+
+CIVET_DIR := 3rd/civetweb
+CIVET_SRC := $(CIVET_DIR)/src/civetweb.c
+CIVET_INC := $(CIVET_DIR)/include
+
+CJSON_DIR := 3rd/cJSON
+CJSON_SRC := $(CJSON_DIR)/cJSON.c
+CJSON_INC  := $(CJSON_DIR)
+
+# ============================================================
+# Sources and objects
+# ============================================================
+SRC := $(wildcard *.c) $(CIVET_SRC) $(CJSON_SRC)
+OBJ := $(SRC:%.c=$(OBJDIR)/%.o)
+DEP := $(OBJ:.o=.d)
+
+# ============================================================
+# Flags
+# ============================================================
+DPDK_CFLAGS := $(shell $(PKGCONF) --cflags libdpdk 2>/dev/null)
+DPDK_LDFLAGS := $(shell $(PKGCONF) $(if $(filter 1,$(STATIC)),--static) --libs libdpdk 2>/dev/null)
+
+CFLAGS := -I../include -I$(CIVET_INC) -I$(CJSON_INC) -Wall \
+          -DALLOW_EXPERIMENTAL_API \
+          -DNO_SSL -DNO_CGI -DNO_FILESYSTEM -DUSE_WEBSOCKET \
+          $(DPDK_CFLAGS)
+
+ifeq ($(BUILD),debug)
+CFLAGS += -O0 -g -DDEBUG
+else
+CFLAGS += -O2 -DNDEBUG
 endif
 
-all: shared
-	echo $(OBJS-y)
+LDFLAGS := $(DPDK_LDFLAGS) -lyaml -lcrypto
 
-.PHONY: shared static
-shared: $(BUILDDIR)/$(APP)-shared
-	ln -sf $(APP)-shared $(BUILDDIR)/$(APP)
-static: $(BUILDDIR)/$(APP)-static
-	ln -sf $(APP)-static $(BUILDDIR)/$(APP)
-
-PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
-# CFLAGS += -O2 $(shell $(PKGCONF) --cflags libdpdk)
-CFLAGS += -Wall -g -O0 $(shell $(PKGCONF) --cflags libdpdk)
-CFLAGS += -I../include
-# Add flag to allow experimental API as bless uses rte_ethdev_set_ptype API
-CFLAGS += -DALLOW_EXPERIMENTAL_API
-LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk) -lyaml -lcrypto
-LDFLAGS_STATIC = $(shell $(PKGCONF) --static --libs libdpdk) -lyaml -lcrypto
-
-ifeq ($(MAKECMDGOALS),static)
-# check for broken pkg-config
-ifeq ($(shell echo $(LDFLAGS_STATIC) | grep 'whole-archive.*l:lib.*no-whole-archive'),)
-$(warning "pkg-config output list does not contain drivers between 'whole-archive'/'no-whole-archive' flags.")
-$(error "Cannot generate statically-linked binaries with this version of pkg-config")
-endif
+# ============================================================
+# Verbose control
+# ============================================================
+ifeq ($(V),1)
+Q :=
+ECHO := @true
+else
+Q := @
+ECHO := @echo
 endif
 
-$(BUILDDIR)/$(APP)-shared: $(SRCS-y) Makefile $(PC_FILE) | $(BUILDDIR)
-	$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
+# ============================================================
+# Targets
+# ============================================================
+.PHONY: all clean
 
-$(BUILDDIR)/$(APP)-static: $(SRCS-y) Makefile $(PC_FILE) | $(BUILDDIR)
-	$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_STATIC)
+all: $(TARGET)
 
-$(BUILDDIR):
-	@mkdir -p $@
+$(TARGET): $(OBJ)
+	@mkdir -p $(@D)
+	$(ECHO) "  LD      $@"
+	$(Q)$(CC) $(OBJ) -o $@ $(LDFLAGS)
+	$(Q)ln -sf bin/$(APP) $(O)/$(BUILD)/$(APP)
 
-.PHONY: clean
+$(OBJDIR)/%.o: %.c
+	@mkdir -p $(@D)
+	$(ECHO) "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 clean:
-	rm -f $(BUILDDIR)/$(APP) $(BUILDDIR)/$(APP)-static $(BUILDDIR)/$(APP)-shared
-	# test -d $(BUILDDIR) && rmdir -p $(BUILDDIR) || true
-	test -d $(BUILDDIR) && rmdir $(BUILDDIR) || true
+	$(Q)rm -rf $(O)
+
+-include $(DEP)

@@ -10,13 +10,19 @@
 #include <rte_debug.h>
 
 #include "bless.h"
-#include "define.h"
+#include "cJSON.h"
+// #include "define.h"
 
+char * encode_all_ports_json(uint32_t port_mask);
+char * encode_stats_to_json(uint32_t port_mask, char *log_text);
+
+#if 0
 extern struct bless_conf *bconf;
 
-static int bless_handle_injector(const char *cmd __rte_unused, const char *params,
-		struct rte_tel_data *d, enum BLESS_TYPE type)
+int bless_handle_injector(const char *cmd __rte_unused, const char *params __rte_unused,
+		struct rte_tel_data *d __rte_unused)
 {
+	return 0;
 }
 
 static int bless_handle_metrics(const char *cmd __rte_unused, const char *params,
@@ -68,7 +74,7 @@ static int bless_handle_metrics(const char *cmd __rte_unused, const char *params
 }
 
 /* FIXME */
-static int bless_handle_all(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
+int bless_handle_all(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
 {
 	for (int i = 0; i < TYPE_MAX; i++) {
 		bless_handle_metrics(cmd, params, d, i);
@@ -76,41 +82,41 @@ static int bless_handle_all(const char *cmd __rte_unused, const char *params, st
 	return 0;
 }
 
-static int bless_handle_arp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
+int bless_handle_arp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
 {
 	return bless_handle_metrics(cmd, params, d, TYPE_ARP);
 }
 
-static int bless_handle_udp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
+int bless_handle_udp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
 {
 	return bless_handle_metrics(cmd, params, d, TYPE_UDP);
 }
 
-static int bless_handle_tcp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
-{
-	return bless_handle_metrics(cmd, params, d, TYPE_UDP);
-	return 0;
-}
-
-static int bless_handle_icmp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
+int bless_handle_tcp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
 {
 	return bless_handle_metrics(cmd, params, d, TYPE_UDP);
 	return 0;
 }
 
-static int bless_handle_vxlan(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
+int bless_handle_icmp(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
 {
 	return bless_handle_metrics(cmd, params, d, TYPE_UDP);
 	return 0;
 }
 
-static int bless_handle_erroneous(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
+int bless_handle_vxlan(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
 {
 	return bless_handle_metrics(cmd, params, d, TYPE_UDP);
 	return 0;
 }
 
-static int my_custom_metrics_cb(const char *cmd, const char *params, struct rte_tel_data *d)
+int bless_handle_erroneous(const char *cmd __rte_unused, const char *params, struct rte_tel_data *d)
+{
+	return bless_handle_metrics(cmd, params, d, TYPE_UDP);
+	return 0;
+}
+
+int my_custom_metrics_cb(const char *cmd, const char *params, struct rte_tel_data *d)
 {
 	unsigned int lcore_id = rte_lcore_id();
 	unsigned int main_id = rte_get_main_lcore();
@@ -148,5 +154,6 @@ static int my_custom_metrics_cb(const char *cmd, const char *params, struct rte_
 
 	return 0;
 }
+#endif
 
 #endif

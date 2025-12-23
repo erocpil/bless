@@ -1,6 +1,8 @@
 #include "bless.h"
 #include "worker.h"
-#include "metrics.h"
+#include "metric.h"
+#include "ws_server.h"
+#include "cJSON.h"
 
 struct bless_conf *bconf = NULL;
 
@@ -14,12 +16,15 @@ static uint32_t enabled_lcores = 0;
 /* A tsc-based timer responsible for triggering statistics printout */
 uint64_t timer_period = 1; /* default period is 10 seconds */
 
+atomic_int g_state = ATOMIC_VAR_INIT(STATE_INIT);
+
 static volatile bool force_quit;
 
 struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
 void register_my_metrics(void)
 {
+#if 0
 	rte_telemetry_register_cmd("/bless/injector", bless_handle_injector,
 			"Returns `injector' metrics for BLESS");
 	rte_telemetry_register_cmd("/bless/arp", bless_handle_arp,
@@ -37,6 +42,7 @@ void register_my_metrics(void)
 
 	rte_telemetry_register_cmd("/myapp/metrics", my_custom_metrics_cb,
 			"Returns custom metrics for myapp");
+#endif
 }
 
 /* MAC updating enabled by default */
@@ -94,146 +100,6 @@ static struct rte_eth_conf port_conf = {
 struct rte_mempool * l2fwd_pktmbuf_pool = NULL;
 
 #if 0
-static void l2fwd_mac_updating(struct rte_mbuf *m, unsigned dest_portid)
-{
-	struct rte_ether_hdr *eth;
-	void *tmp;
-
-	eth = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
-
-	/* 02:00:00:00:00:xx */
-	tmp = &eth->dst_addr.addr_bytes[0];
-	*((uint64_t *)tmp) = 0x000000000002 + ((uint64_t)dest_portid << 40);
-
-	/* src addr */
-	rte_ether_addr_copy(&l2fwd_ports_eth_addr[dest_portid], &eth->src_addr);
-}
-#endif
-
-/* Simple forward. 8< */
-#if 0
-static void l2fwd_simple_forward(struct rte_mbuf *m, unsigned portid)
-{
-	unsigned dst_port;
-	int sent;
-	struct rte_eth_dev_tx_buffer *buffer;
-
-	dst_port = l2fwd_dst_ports[portid];
-
-	if (mac_updating)
-		l2fwd_mac_updating(m, dst_port);
-
-	buffer = tx_buffer[dst_port];
-	sent = rte_eth_tx_buffer(dst_port, 0, buffer, m);
-	if (sent)
-		port_statistics[dst_port].tx += sent;
-}
-/* >8 End of simple forward. */
-#endif
-
-/* main processing loop */
-#if 0
-static void l2fwd_main_loop(void)
-{
-	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
-	struct rte_mbuf *m;
-	int sent;
-	unsigned lcore_id;
-	uint64_t prev_tsc, diff_tsc, cur_tsc, timer_tsc;
-	unsigned i, j, portid, nb_rx;
-	struct lcore_queue_conf *qconf;
-	const uint64_t drain_tsc = (rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S *
-		BURST_TX_DRAIN_US;
-	struct rte_eth_dev_tx_buffer *buffer;
-
-	prev_tsc = 0;
-	timer_tsc = 0;
-
-	lcore_id = rte_lcore_id();
-	qconf = &lcore_queue_conf[lcore_id];
-
-	if (qconf->n_rx_port == 0) {
-		RTE_LOG(INFO, BLESS, "lcore %u has nothing to do\n", lcore_id);
-		return;
-	}
-
-	RTE_LOG(INFO, BLESS, "entering main loop on lcore %u\n", lcore_id);
-
-	for (i = 0; i < qconf->n_rx_port; i++) {
-
-		portid = qconf->rx_port_list[i];
-		RTE_LOG(INFO, BLESS, " -- lcoreid=%u portid=%u\n", lcore_id,
-				portid);
-
-	}
-
-	while (!force_quit) {
-
-		/* Drains TX queue in its main loop. 8< */
-		cur_tsc = rte_rdtsc();
-
-		/*
-		 * TX burst queue drain
-		 */
-		diff_tsc = cur_tsc - prev_tsc;
-		if (unlikely(diff_tsc > drain_tsc)) {
-
-			for (i = 0; i < qconf->n_rx_port; i++) {
-
-				portid = l2fwd_dst_ports[qconf->rx_port_list[i]];
-				buffer = tx_buffer[portid];
-
-				sent = rte_eth_tx_buffer_flush(portid, 0, buffer);
-				if (sent)
-					port_statistics[portid].tx += sent;
-
-			}
-
-			/* if timer is enabled */
-			if (timer_period > 0) {
-
-				/* advance the timer */
-				timer_tsc += diff_tsc;
-
-				/* if timer has reached its timeout */
-				if (unlikely(timer_tsc >= timer_period)) {
-
-					/* do this only on main core */
-					if (lcore_id == rte_get_main_lcore()) {
-						print_stats();
-						/* reset the timer */
-						timer_tsc = 0;
-					}
-				}
-			}
-
-			prev_tsc = cur_tsc;
-		}
-		/* >8 End of draining TX queue. */
-
-		/* Read packet from RX queues. 8< */
-		for (i = 0; i < qconf->n_rx_port; i++) {
-
-			portid = qconf->rx_port_list[i];
-			nb_rx = rte_eth_rx_burst(portid, 0,
-					pkts_burst, MAX_PKT_BURST);
-
-			if (unlikely(nb_rx == 0))
-				continue;
-
-			port_statistics[portid].rx += nb_rx;
-
-			for (j = 0; j < nb_rx; j++) {
-				m = pkts_burst[j];
-				rte_prefetch0(rte_pktmbuf_mtod(m, void *));
-				l2fwd_simple_forward(m, portid);
-			}
-		}
-		/* >8 End of read packet from RX queues. */
-	}
-}
-#endif
-
 /* Print out statistics on packets dropped */
 static void print_stats(struct port_statistics **port_statistics)
 {
@@ -302,6 +168,45 @@ static void print_stats(struct port_statistics **port_statistics)
 
 	fflush(stdout);
 }
+#endif
+
+char *metrics_to_json(uint16_t port_id, const char *log_text)
+{
+	struct rte_eth_stats stats;
+	cJSON *root = NULL;
+	cJSON *metric = NULL;
+	cJSON *log = NULL;
+	char *json_str = NULL;
+
+	if (rte_eth_stats_get(port_id, &stats) != 0) {
+		return NULL;
+	}
+
+	root = cJSON_CreateObject();
+	metric = cJSON_CreateObject();
+	log = cJSON_CreateObject();
+
+	/* metric */
+	cJSON_AddNumberToObject(metric, "ipps", stats.ipackets);
+	cJSON_AddNumberToObject(metric, "opps", stats.opackets);
+	cJSON_AddNumberToObject(metric, "ibytes", stats.ibytes);
+	cJSON_AddNumberToObject(metric, "obytes", stats.obytes);
+	cJSON_AddNumberToObject(metric, "imissed", stats.imissed);
+	cJSON_AddNumberToObject(metric, "rx_nobuf", stats.rx_nombuf);
+	cJSON_AddNumberToObject(metric, "ierrors", stats.ierrors);
+	cJSON_AddNumberToObject(metric, "oerrors", stats.oerrors);
+
+	/* log */
+	cJSON_AddStringToObject(log, "text", log_text ? log_text : "");
+
+	cJSON_AddItemToObject(root, "metric", metric);
+	cJSON_AddItemToObject(root, "log", log);
+
+	json_str = cJSON_PrintUnformatted(root);
+
+	cJSON_Delete(root);
+	return json_str;   /* 由调用方 free */
+}
 
 void main_loop(void *data)
 {
@@ -322,12 +227,17 @@ void main_loop(void *data)
 		diff_tsc = cur_tsc - prev_tsc;
 		timer_tsc += diff_tsc;
 		/* if timer has reached its timeout */
-		if (unlikely(timer_tsc >= timer_period)) {
+
+		if (unlikely(timer_tsc >= timer_period * 3)) {
 			/* do this only on main core */
 			if (lcore_id == rte_get_main_lcore()) {
-				print_stats(conf->stats);
-				/* reset the timer */
 				timer_tsc = 0;
+				// char *msg = encode_all_ports_json(enabled_port_mask);
+				char *msg = encode_stats_to_json(enabled_port_mask, "");
+
+				ws_broadcast(msg);
+				free(msg);
+
 			}
 		}
 		prev_tsc = cur_tsc;
@@ -564,7 +474,7 @@ static int parse_args(int argc, char **argv)
 			/* portmask */
 			case 'p':
 				enabled_port_mask = l2fwd_parse_portmask(optarg);
-				printf("enabled_port_mask %d\n", enabled_port_mask);
+				printf("enabled_port_mask %s => %d\n", optarg, enabled_port_mask);
 				if (enabled_port_mask == 0) {
 					printf("invalid portmask\n");
 					l2fwd_usage(prgname);
@@ -654,7 +564,7 @@ static int parse_args(int argc, char **argv)
 				if (inet_pton(AF_INET, optarg, &mc_inner->src_ip) != 1) {
 					rte_exit(EXIT_FAILURE, "Invalid ip address %s.\n", optarg);
 				}
-				strncpy((char*)mc_inner->str.src_ip, optarg, 16);
+				strncpy((char*)mc_inner->str.src_ip, optarg, 15);
 				bless_print_ipv4(mc_inner->src_ip);
 				mc_inner->src_ip = rte_cpu_to_be_32(mc_inner->src_ip);
 				printf("%s + %ld\n", mc_inner->str.src_ip, mc_inner->src_ip_range);
@@ -667,7 +577,7 @@ static int parse_args(int argc, char **argv)
 				}
 				bless_print_ipv4(mc_inner->dst_ip);
 				mc_inner->dst_ip = rte_cpu_to_be_32(mc_inner->dst_ip);
-				strncpy((char*)mc_inner->str.dst_ip, optarg, 16);
+				strncpy((char*)mc_inner->str.dst_ip, optarg, 15);
 				bless_print_ipv4(mc_inner->dst_ip);
 				printf("%s + %ld\n", mc_inner->str.dst_ip, mc_inner->dst_ip_range);
 				break;
@@ -833,29 +743,32 @@ static void check_all_ports_link_status(uint32_t port_mask)
 	printf("\nChecking link status");
 	fflush(stdout);
 	for (count = 0; count <= MAX_CHECK_TIME; count++) {
-		if (force_quit)
+		if (force_quit) {
 			return;
+		}
 		all_ports_up = 1;
 		RTE_ETH_FOREACH_DEV(portid) {
-			if (force_quit)
+			if (force_quit) {
 				return;
-			if ((port_mask & (1 << portid)) == 0)
+			}
+			if ((port_mask & (1 << portid)) == 0) {
 				continue;
+			}
 			memset(&link, 0, sizeof(link));
 			ret = rte_eth_link_get_nowait(portid, &link);
 			if (ret < 0) {
 				all_ports_up = 0;
-				if (print_flag == 1)
+				if (print_flag == 1) {
 					printf("Port %u link get failed: %s\n",
 							portid, rte_strerror(-ret));
+				}
 				continue;
 			}
 			/* print link status if flag set */
 			if (print_flag == 1) {
 				rte_eth_link_to_str(link_status_text,
 						sizeof(link_status_text), &link);
-				printf("Port %d %s\n", portid,
-						link_status_text);
+				printf("Port %d %s\n", portid, link_status_text);
 				continue;
 			}
 			/* clear all_ports_up flag if any link down */
@@ -865,8 +778,9 @@ static void check_all_ports_link_status(uint32_t port_mask)
 			}
 		}
 		/* after finally printing all link status, get out */
-		if (print_flag == 1)
+		if (print_flag == 1) {
 			break;
+		}
 
 		if (all_ports_up == 0) {
 			printf(".");
@@ -888,6 +802,7 @@ static void signal_handler(int signum)
 		printf("\n\nSignal %d received, preparing to exit...\n",
 				signum);
 		force_quit = true;
+		atomic_store(&g_state, STATE_EXIT);
 	}
 }
 
@@ -955,11 +870,15 @@ int main(int argc, char **argv)
 		printf("'%s' ", targv[i]);
 	}
 	printf("\n");
-	getchar();
 	bconf = bless_init(targc, targv);
 	if (!bconf) {
 		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
 	}
+
+	struct ws_user_data wsud = {
+		.state = &g_state,
+	};
+	struct mg_context *ctx = ws_server_start((void*)&wsud);
 
 	int ret = rte_eal_init(targc, targv);
 	if (ret < 0) {
@@ -986,6 +905,7 @@ int main(int argc, char **argv)
 	register_my_metrics();
 
 	force_quit = false;
+	atomic_store(&g_state, STATE_RUNNING);
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
 
@@ -1025,6 +945,7 @@ int main(int argc, char **argv)
 	}
 
 	/* check port mask to possible port mask */
+	// printf("nb_ports %u enabed 0x%x\n", nb_ports, enabled_port_mask);
 	if (enabled_port_mask & ~((1 << nb_ports) - 1)) {
 		rte_exit(EXIT_FAILURE, "Invalid portmask; possible (0x%x)\n",
 				(1 << nb_ports) - 1);
@@ -1052,10 +973,15 @@ int main(int argc, char **argv)
 		int nport = rte_eth_dev_count_avail();
 		printf("rte lcore %d\n", nlcore);
 		printf("rxtxq_per_lcore %d\n", rxtxq_per_lcore);
-		printf("port %d\n", nport);
-		if (nlcore < rxtxq_per_lcore * nport) {
+		printf("nport %d\n", nport);
+		printf("enabled_port_mask 0x%x\n", enabled_port_mask);
+		int n_enabled_port = rte_popcount32(enabled_port_mask);
+		if (nlcore < rxtxq_per_lcore * n_enabled_port) {
 			rte_exit(EXIT_FAILURE, "Not enough cores %d < %d * %d\n",
-					nlcore, rxtxq_per_lcore, nport);
+					nlcore, rxtxq_per_lcore, n_enabled_port);
+		} else if (nlcore > rxtxq_per_lcore * n_enabled_port) {
+			printf("%d lcore will not be used\n",
+					nlcore - rxtxq_per_lcore * n_enabled_port);
 		}
 		lid = 0;
 		uint32_t pid = 0;
@@ -1065,7 +991,9 @@ int main(int argc, char **argv)
 				printf("skip port %d\n", pid);
 				continue;
 			}
+
 			printf("Port %d\n", pid);
+
 			for (uint32_t qid = 0; qid < rxtxq_per_lcore; qid++) {
 				/* get the lcore_id for this port */
 				while (!rte_lcore_is_enabled(lid) ||
@@ -1193,6 +1121,7 @@ int main(int argc, char **argv)
 		/* init port */
 		printf("Initializing port %u... ", portid);
 		fflush(stdout);
+		// getchar();
 
 		ret = rte_eth_dev_info_get(portid, &dev_info);
 		if (ret != 0) {
@@ -1302,9 +1231,21 @@ int main(int argc, char **argv)
 						rte_strerror(-ret), portid);
 		}
 
-		printf("Port %u, MAC address: " RTE_ETHER_ADDR_PRT_FMT "\n\n",
-				portid,
-				RTE_ETHER_ADDR_BYTES(&l2fwd_ports_eth_addr[portid]));
+		{
+			struct rte_eth_dev_info *dev_info = rte_zmalloc(NULL, sizeof(struct rte_eth_dev_info), 0);
+			if (rte_eth_dev_info_get(portid, dev_info)) {;
+				rte_exit(EXIT_FAILURE, "[%s %d] rte_eth_dev_info_get(%d)\n",
+						__func__, __LINE__, portid);
+			}
+			printf("Port %u, MAC address: " RTE_ETHER_ADDR_PRT_FMT "\n",
+					portid, RTE_ETHER_ADDR_BYTES(&l2fwd_ports_eth_addr[portid]));
+			printf("driver name %s\n", dev_info->driver_name);
+			printf("if index %u\n", dev_info->if_index);
+			printf("mtu [%d, %d]\n", dev_info->min_mtu, dev_info->max_mtu);
+			printf("nb rx queues %u\n", dev_info->nb_rx_queues);
+			printf("nb tx queues %u\n", dev_info->nb_tx_queues);
+			// getchar();
+		}
 
 		/* initialize port stats */
 		// memset(port_statistics, 0, sizeof(port_statistics));
@@ -1346,6 +1287,8 @@ int main(int argc, char **argv)
 	// printf("port_statistics %p\n", port_statistics);
 	bconf->dst_ports = l2fwd_dst_ports;
 	bconf->force_quit = &force_quit;
+	bconf->state = &g_state;
+	printf("g_state %p\n", &g_state);
 	bconf->timer_period = timer_period;
 	bconf->enabled_port_mask = enabled_port_mask;
 	pthread_barrier_t barrier;
@@ -1356,8 +1299,7 @@ int main(int argc, char **argv)
 
 	// DISTRIBUTION_DUMP(bconf->dist);
 
-	printf("Bless is waiting ...\n");
-	getchar();
+	// printf("Bless is waiting ...\n");
 	ret = 0;
 	/* launch per-lcore init on every lcore */
 	uint32_t lcore_id = 0;
@@ -1382,14 +1324,16 @@ int main(int argc, char **argv)
 		printf(" Done\n");
 	}
 
+	pthread_barrier_destroy(&barrier);
+
 #ifdef RTE_LIB_PDUMP
 	rte_pdump_uninit();
 #endif
 
-	pthread_barrier_destroy(&barrier);
-
 	/* clean up the EAL */
 	rte_eal_cleanup();
+
+	ws_server_stop(ctx);
 
 	config_exit(conf_root);
 

@@ -1,11 +1,14 @@
 SRCDIR := src
+O ?= build
 BUILDDIR := build
 
 .PHONY: all clean
 all:
 	make -C  $(SRCDIR) \
-		BUILDDIR="../$(BUILDDIR)"
+		O="../$(O)"
+
+.PHONY: clean
 
 clean:
-	make -C $(SRCDIR) clean \
-		BUILDDIR="../$(BUILDDIR)"
+	rm -fr $(BUILDDIR)
+	make -C $(SRCDIR) clean BUILDDIR="../$(BUILDDIR)"

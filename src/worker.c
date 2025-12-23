@@ -69,6 +69,7 @@ void worker_loop_txonly(void *data)
 	l2fwd_enabled_port_mask = conf->enabled_port_mask;
 	qconf = conf->qconf; // bconf->qconf + lcore_id;
 	volatile bool *force_quit = conf->force_quit;
+	atomic_int *state = conf->state;
 	// uint32_t *l2fwd_dst_ports = conf->dst_ports;
 
 	/* FIXME */
@@ -173,7 +174,15 @@ void worker_loop_txonly(void *data)
 		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
 	}
 
-	while (!*force_quit && num > 0) {
+	while (!*force_quit) {
+		if (unlikely(num <= 0)) {
+			break;
+		}
+		if (unlikely(atomic_load_explicit(state, memory_order_acquire) == STATE_STOPPED)) {
+			printf("Detect STOPPED\n");
+			rte_delay_ms(1000);
+		}
+
 		/*
 		 * TX burst queue
 		 */

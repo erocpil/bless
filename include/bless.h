@@ -3,21 +3,22 @@
 
 #define _GNU_SOURCE
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+// #include <stdio.h>
+// #include <stdlib.h>
+// #include <string.h>
 #include <stdint.h>
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/queue.h>
-#include <setjmp.h>
+// #include <setjmp.h>
 #include <stdarg.h>
-#include <ctype.h>
-#include <errno.h>
+// #include <ctype.h>
+// #include <errno.h>
 #include <getopt.h>
-#include <signal.h>
+// #include <signal.h>
 #include <stdbool.h>
 #include <sys/param.h>
+#include <stdatomic.h>
 
 #include <rte_common.h>
 #include <rte_log.h>
@@ -43,7 +44,7 @@
 #include <rte_telemetry.h>
 
 #include "config.h"
-#include "define.h"
+// #include "define.h"
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -92,11 +93,6 @@ enum BLESS_TYPE {
 
 static char *BLESS_TYPE_STR[] = {
 	"arp", "icmp", "tcp", "udp", "erroneous", "max",
-};
-
-enum {
-	STATE_INACTIVE = -1,
-	STATE_RANDOM = INT_MIN,
 };
 
 struct dist_ratio {
@@ -179,6 +175,7 @@ struct bless_conf {
 	uint32_t *dst_ports;
 	uint64_t timer_period;
 	volatile bool *force_quit;
+	atomic_int *state;
 	pthread_barrier_t *barrier;
 	Cnode *cnode;
 
@@ -214,7 +211,7 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data);
 uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data);
 uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data);
 uint64_t bless_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data);
-struct bless_conf *bless_init();
+struct bless_conf *bless_init(int argc, char *argv[]);
 int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bless_encap_params *bep);
 int32_t bless_parse_type(enum BLESS_TYPE type, char *optarg);
 void dist_ratio_init(struct dist_ratio *dr);
