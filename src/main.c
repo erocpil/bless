@@ -228,7 +228,7 @@ void main_loop(void *data)
 		timer_tsc += diff_tsc;
 		/* if timer has reached its timeout */
 
-		if (unlikely(timer_tsc >= timer_period * 3)) {
+		if (unlikely(timer_tsc >= timer_period * 1)) {
 			/* do this only on main core */
 			if (lcore_id == rte_get_main_lcore()) {
 				timer_tsc = 0;
