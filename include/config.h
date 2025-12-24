@@ -203,7 +203,7 @@ typedef struct Cnode {
 } __attribute__((__aligned__(sizeof(char)))) Cnode;
 
 int config_check_file(char *file);
-Node *config_init(int argc, char **argv);
+Node *config_init(char *f);
 int config_exit(Node *root);
 int config_parse_server(Node *root, struct server_options_cfg *cfg);
 int config_parse_dpdk(Node *root, int *targc, char ***targv);

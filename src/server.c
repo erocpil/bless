@@ -253,16 +253,13 @@ struct mg_context * ws_server_start(void *data)
 	struct mg_callbacks cb = {0};
 	struct mg_init_data init = {
 		.callbacks = &cb,
-		// .configuration_options = SERVER_OPTIONS
 		.configuration_options = cfg->civet_opts,
 	};
 
 	struct mg_context *ctx = mg_start2(&init, NULL);
 
-	printf("uri %s\n", cfg->uri);
-	getchar();
 	mg_set_websocket_handler_with_subprotocols(ctx,
-			cfg->uri,
+			cfg->uri ? cfg->uri : WS_URL,
 			&wsprot,
 			ws_connect_handler,
 			ws_ready_handler,

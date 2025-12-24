@@ -884,12 +884,18 @@ int main(int argc, char **argv)
 	char **targv = argv;
 	Node *conf_root = NULL;
 
-	if (2 == argc && config_check_file(argv[1])) {
+	char *f = "conf/config.yaml";
+	if (2 == argc) {
+		f = argv[1];
 	}
-	conf_root = config_init(argc, argv);
+	if (-1 == config_check_file(f)) {
+		rte_exit(EXIT_FAILURE, "Cannot check %s\n", f);
+	}
+
+	conf_root = config_init(f);
 	config_parse_dpdk(conf_root, &targc, &targv);
 	if (!conf_root) {
-		rte_exit(EXIT_FAILURE, "Cannot parse config.yaml\n");
+		rte_exit(EXIT_FAILURE, "Cannot parse %s\n", f);
 	}
 
 	for (int i = 0; i < targc; i++) {

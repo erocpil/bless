@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DPDK Metrics Dashboard</title>
+<style>
+body {
+  font-family: monospace;
+  margin: 0;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+.toolbar {
+  padding: 8px;
+  background: #222;
+  color: #eee;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.toolbar button {
+  padding: 6px 12px;
+  background: #444;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.toolbar button:hover {
+  background: #555;
+}
+.toolbar .status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f44;
+}
+.status-dot.connected {
+  background: #4f4;
+}
+.container {
+  overflow: auto;
+  height: calc(100vh - 50px);
+  background: white;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: auto;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 100px;
+}
+th.metric {
+  background: #4CAF50;
+  color: white;
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  font-weight: bold;
+}
+th.port {
+  background: #2196F3;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+th.total {
+  background: #FF9800;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.group-header {
+  background: #e0e0e0;
+  font-weight: bold;
+  text-align: left;
+}
+.group-header td {
+  background: #e0e0e0;
+}
+.xstats {
+  background: #fff8e1;
+}
+.xstats-group {
+  background: #fff8e1;
+}
+.xstats-group th.metric {
+  background: #FFA726;
+  color: white;
+}
+.xstats-group td {
+  background: #ffecb3;
+}
+.error-value {
+  color: #f44336;
+  font-weight: bold;
+}
+.value-main {
+  font-size: 14px;
+  font-weight: bold;
+  min-height: 18px;
+}
+.value-delta {
+  font-size: 11px;
+  color: #666;
+  min-height: 14px;
+}
+.value-rate {
+  font-size: 11px;
+  color: #2196F3;
+  min-height: 14px;
+}
+.no-data {
+  padding: 40px;
+  text-align: center;
+  color: #999;
+}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button onclick="toggleConnection()" id="connectBtn">Connect</button>
+  <button onclick="toggleMode()">Mode: <span id="mode">Formatted</span></button>
+  <button onclick="toggleRate()">Rate: <span id="rateMode">ON</span></button>
+  <button onclick="toggleTotal()">Total: <span id="totalMode">SHOW</span></button>
+  <div class="status">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Disconnected</span>
+  </div>
+</div>
+<div class="container">
+  <div id="noData" class="no-data">Click Connect to start receiving data...</div>
+  <table id="metrics" style="display: none;"></table>
+</div>
+<script>
+let ws = null;
+let prev = {};
+let prevTs = 0;
+let displayMode = "FORMATTED"; // FORMATTED or RAW
+let rateEnabled = true;
+let xstatsVisible = true;
+let totalVisible = true;
+let isConnected = false;
+
+const STATS_ORDER = ['ipackets', 'opackets', 'ibytes', 'obytes', 'imissed', 'ierrors', 'oerrors', 'rx_nombuf'];
+const ERROR_KEYS = ['imissed', 'ierrors', 'oerrors', 'rx_nombuf'];
+
+function toggleConnection() {
+  if (isConnected) {
+    disconnect();
+  } else {
+    connect();
+  }
+}
+
+function connect() {
+  try {
+	// const wsScheme = (location.protocol === "https:") ? "wss://" : "ws://";
+	// const wsUrl = wsScheme + location.host + "/wsURL";
+	// ws = new WebSocket(wsUrl, "Company.ProtoName.json");
+	ws = new WebSocket("/wsURL", "Company.ProtoName.json");
+
+    ws.onopen = () => {
+      isConnected = true;
+      document.getElementById('statusDot').classList.add('connected');
+      document.getElementById('statusText').innerText = 'Connected';
+      document.getElementById('connectBtn').innerText = 'Disconnect';
+    };
+
+    ws.onmessage = e => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.ports) {
+          render(data);
+        }
+      } catch (err) {
+        console.error('Parse error:', err);
+      }
+    };
+
+    ws.onerror = () => {
+      console.error('WebSocket error');
+    };
+
+    ws.onclose = () => {
+      isConnected = false;
+      document.getElementById('statusDot').classList.remove('connected');
+      document.getElementById('statusText').innerText = 'Disconnected';
+      document.getElementById('connectBtn').innerText = 'Connect';
+    };
+  } catch (err) {
+    console.error('Connection error:', err);
+  }
+}
+
+function disconnect() {
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+}
+
+function toggleMode() {
+  displayMode = displayMode === "FORMATTED" ? "RAW" : "FORMATTED";
+  document.getElementById("mode").innerText = displayMode === "FORMATTED" ? "Formatted" : "Raw";
+}
+
+function toggleRate() {
+  rateEnabled = !rateEnabled;
+  document.getElementById("rateMode").innerText = rateEnabled ? "ON" : "OFF";
+}
+
+function toggleTotal() {
+  totalVisible = !totalVisible;
+  document.getElementById("totalMode").innerText = totalVisible ? "SHOW" : "HIDE";
+  document.querySelectorAll(".total-col").forEach(e => {
+    e.style.display = totalVisible ? "" : "none";
+  });
+}
+
+function formatNumber(v) {
+  if (displayMode === "RAW") return v.toLocaleString();
+  if (v >= 1e12) return (v / 1e12).toFixed(2) + ' T';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + ' G';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + ' M';
+  if (v >= 1e3) return (v / 1e3).toFixed(2) + ' K';
+  return v.toLocaleString();
+}
+
+function formatRate(rate, isBytes) {
+  if (!rate || rate === 0) return '0';
+  if (isBytes) {
+    const bits = rate * 8;
+    if (bits >= 1e9) return (bits / 1e9).toFixed(2) + ' Gbps';
+    if (bits >= 1e6) return (bits / 1e6).toFixed(2) + ' Mbps';
+    if (bits >= 1e3) return (bits / 1e3).toFixed(2) + ' Kbps';
+    return bits.toFixed(0) + ' bps';
+  } else {
+    if (rate >= 1e6) return (rate / 1e6).toFixed(2) + ' Mpps';
+    if (rate >= 1e3) return (rate / 1e3).toFixed(2) + ' Kpps';
+    return rate.toFixed(0) + ' pps';
+  }
+}
+
+function render(data) {
+  document.getElementById('noData').style.display = 'none';
+  const table = document.getElementById('metrics');
+  table.style.display = 'table';
+  table.innerHTML = "";
+
+  const ports = Object.keys(data.ports).sort();
+  const currentTs = data.meta?.timestamp_ns || Date.now() * 1e6;
+  const timeDelta = prevTs ? (currentTs - prevTs) / 1e9 : 1;
+
+  // Header row
+  let headerRow = document.createElement("tr");
+  headerRow.innerHTML = `<th class="metric">Metric</th>`;
+  if (totalVisible) {
+    headerRow.innerHTML += `<th class="port total total-col">Total</th>`;
+  }
+  ports.forEach(p => {
+    headerRow.innerHTML += `<th class="port">Port ${p}</th>`;
+  });
+  table.appendChild(headerRow);
+
+  // Render STATS group
+  renderGroup(table, "STATS", STATS_ORDER, data, ports, timeDelta, false, null);
+
+  // Render XSTATS - handle flat structure
+  if (data.ports[ports[0]].xstats) {
+    const allXstatsKeys = Object.keys(data.ports[ports[0]].xstats);
+
+    if (allXstatsKeys.length > 0) {
+      // Group xstats by prefix (rx_, tx_, etc.)
+      const groups = {
+        'RX': [],
+        'TX': [],
+        'Queue': [],
+        'PHY': [],
+        'Other': []
+      };
+
+      allXstatsKeys.forEach(key => {
+        if (key.startsWith('rx_q') || key.startsWith('tx_q')) {
+          groups['Queue'].push(key);
+        } else if (key.startsWith('rx_phy') || key.startsWith('tx_phy')) {
+          groups['PHY'].push(key);
+        } else if (key.startsWith('rx_')) {
+          groups['RX'].push(key);
+        } else if (key.startsWith('tx_')) {
+          groups['TX'].push(key);
+        } else {
+          groups['Other'].push(key);
+        }
+      });
+
+      // Render each group
+      Object.keys(groups).forEach(groupName => {
+        if (groups[groupName].length > 0) {
+          renderGroup(table, `XSTATS - ${groupName}`, groups[groupName], data, ports, timeDelta, true, 'flat');
+        }
+      });
+    }
+  }
+
+  // Save previous data
+  prevTs = currentTs;
+  prev = {};
+  ports.forEach(p => {
+    prev[p] = {
+      stats: { ...data.ports[p].stats },
+      xstats: { ...data.ports[p].xstats } // Flat structure
+    };
+  });
+}
+
+function renderGroup(table, title, keys, data, ports, timeDelta, isXstats, category = null) {
+  // Group header
+  let groupRow = document.createElement("tr");
+  groupRow.className = isXstats ? "xstats-group" : "";
+  groupRow.innerHTML = `<th class="metric group-header">${title}</th>`;
+  if (totalVisible) {
+    groupRow.innerHTML += `<td class="group-header total-col"></td>`;
+  }
+  ports.forEach(() => {
+    groupRow.innerHTML += `<td class="group-header"></td>`;
+  });
+  table.appendChild(groupRow);
+
+  // Data rows
+  keys.forEach(key => {
+    let row = document.createElement("tr");
+    row.className = isXstats ? "xstats" : "";
+
+    // Metric name
+    row.innerHTML = `<th class="metric">${key}</th>`;
+
+    // Calculate total
+    let total = 0;
+    let prevTotal = 0;
+    ports.forEach(p => {
+      const portData = data.ports[p];
+      let current = 0;
+      let previous = 0;
+
+      if (!isXstats) {
+        current = portData.stats[key] || 0;
+        previous = prev[p]?.stats[key] || current;
+      } else {
+        // Handle flat xstats structure
+        current = portData.xstats?.[key] || 0;
+        previous = prev[p]?.xstats?.[key] || current;
+      }
+
+      total += current;
+      prevTotal += previous;
+    });
+
+    // Total column
+    if (totalVisible) {
+      const delta = total - prevTotal;
+      const rate = timeDelta > 0 ? delta / timeDelta : 0;
+      const isBytes = key.includes('bytes') || key.includes('byte');
+      const isPackets = key.includes('packets') || key.includes('packet');
+      const isError = ERROR_KEYS.includes(key) || key.includes('error') || key.includes('missed');
+      const canCalculateRate = isBytes || isPackets;
+
+      let cellHtml = `<td class="total-col ${isError && total > 0 ? 'error-value' : ''}">`;
+      cellHtml += `<div class="value-main">${formatNumber(total)}</div>`;
+
+      // Always reserve space for delta
+      if (delta !== 0) {
+        cellHtml += `<div class="value-delta">Δ ${delta >= 0 ? '+' : ''}${formatNumber(delta)}</div>`;
+      } else {
+        cellHtml += `<div class="value-delta">&nbsp;</div>`;
+      }
+
+      // Always reserve space for rate if applicable
+      if (canCalculateRate) {
+        if (rateEnabled && rate !== 0) {
+          cellHtml += `<div class="value-rate">${formatRate(rate, isBytes)}</div>`;
+        } else {
+          cellHtml += `<div class="value-rate">&nbsp;</div>`;
+        }
+      }
+
+      cellHtml += `</td>`;
+      row.innerHTML += cellHtml;
+    }
+
+    // Port columns
+    ports.forEach(p => {
+      const portData = data.ports[p];
+      let current = 0;
+      let previous = 0;
+
+      if (!isXstats) {
+        current = portData.stats[key] || 0;
+        previous = prev[p]?.stats[key] || current;
+      } else {
+        // Handle flat xstats structure
+        current = portData.xstats?.[key] || 0;
+        previous = prev[p]?.xstats?.[key] || current;
+      }
+
+      const delta = current - previous;
+      const rate = timeDelta > 0 ? delta / timeDelta : 0;
+      const isBytes = key.includes('bytes') || key.includes('byte');
+      const isPackets = key.includes('packets') || key.includes('packet');
+      const isError = ERROR_KEYS.includes(key) || key.includes('error') || key.includes('missed');
+      const canCalculateRate = isBytes || isPackets;
+
+      let cellHtml = `<td class="${isError && current > 0 ? 'error-value' : ''}">`;
+      cellHtml += `<div class="value-main">${formatNumber(current)}</div>`;
+
+      // Always reserve space for delta
+      if (delta !== 0) {
+        cellHtml += `<div class="value-delta">Δ ${delta >= 0 ? '+' : ''}${formatNumber(delta)}</div>`;
+      } else {
+        cellHtml += `<div class="value-delta">&nbsp;</div>`;
+      }
+
+      // Always reserve space for rate if applicable
+      if (canCalculateRate) {
+        if (rateEnabled && rate !== 0) {
+          cellHtml += `<div class="value-rate">${formatRate(rate, isBytes)}</div>`;
+        } else {
+          cellHtml += `<div class="value-rate">&nbsp;</div>`;
+        }
+      }
+
+      cellHtml += `</td>`;
+      row.innerHTML += cellHtml;
+    });
+
+    table.appendChild(row);
+  });
+}
+
+// Auto-connect on load
+window.addEventListener('load', () => {
+  // Optionally auto-connect
+  // connect();
+});
+</script>
+</body>
+</html>

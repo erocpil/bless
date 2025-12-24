@@ -341,7 +341,7 @@ int config_check_file(char *filename)
 DONE:
 	if (res == -1) {
 		printf("无法打开文件 \"%s\"。\n", filename);
-		return EXIT_FAILURE;
+		return -EXIT_FAILURE;
 	} else if (res == 1) {
 		printf("文件 \"%s\" 是文本文件。\n", filename);
 	} else {
@@ -351,12 +351,9 @@ DONE:
 	return res;
 }
 
-Node *config_init(int argc, char *argv[])
+Node *config_init(char *f)
 {
-	if (2 != argc) {
-		return NULL;
-	}
-	Node *root = parse_yaml(argv[1]);
+	Node *root = parse_yaml(f);
 	if (!root) {
 		fprintf(stderr, "Failed to parse YAML\n");
 	}
@@ -559,8 +556,12 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 		if (NODE_SCALAR == node->type) {
 			printf("%s %s\n", path, node->value);
 			int len = strlen(node->value);
+			if (len > 0) {
 			cfg->uri = (char*)malloc(len + 1);
 			strncpy(cfg->uri, node->value, len + 1);
+			} else {
+				cfg->uri = NULL;
+			}
 		}
 		path = "server.service.http";
 		node = find_by_path(root, path);

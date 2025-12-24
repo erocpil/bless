@@ -26,7 +26,7 @@ dpdk:
 
 server:
   service:
-    websocket: /uri
+    websocket: /wsURL
     http:
       - /api/control
       - /api/stats
@@ -36,6 +36,9 @@ server:
     num_threads: 4
     enable_keep_alive: yes
     request_timeout_ms: 2000
+    document_root: /root/src/bless/www
+    access_log_file: /root/src/bless/log/access.log
+    error_log_file: /root/src/bless/log/error.log
 
 injector:
   p: 0xf
