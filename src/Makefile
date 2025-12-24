@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 APP     := bless
-O       ?= build
+O       ?= build/$(BUILD)
 BUILD   ?= release
 STATIC  ?= 0
 V       ?= 0
@@ -18,8 +18,8 @@ MAKEFLAGS += -rR
 # ============================================================
 # Paths
 # ============================================================
-OBJDIR := $(O)/$(BUILD)/obj
-BINDIR := $(O)/$(BUILD)/bin
+OBJDIR := $(O)/obj
+BINDIR := $(O)/bin
 TARGET := $(BINDIR)/$(APP)
 
 CIVET_DIR := 3rd/civetweb
@@ -78,7 +78,7 @@ $(TARGET): $(OBJ)
 	@mkdir -p $(@D)
 	$(ECHO) "  LD      $@"
 	$(Q)$(CC) $(OBJ) -o $@ $(LDFLAGS)
-	$(Q)ln -sf bin/$(APP) $(O)/$(BUILD)/$(APP)
+	$(Q)ln -sf bin/$(APP) $(O)/$(APP)
 
 $(OBJDIR)/%.o: %.c
 	@mkdir -p $(@D)

@@ -1,7 +1,7 @@
 #include "bless.h"
 #include "worker.h"
 #include "metric.h"
-#include "ws_server.h"
+#include "server.h"
 #include "cJSON.h"
 
 struct bless_conf *bconf = NULL;
@@ -192,7 +192,7 @@ char *metrics_to_json(uint16_t port_id, const char *log_text)
 	cJSON_AddNumberToObject(metric, "ibytes", stats.ibytes);
 	cJSON_AddNumberToObject(metric, "obytes", stats.obytes);
 	cJSON_AddNumberToObject(metric, "imissed", stats.imissed);
-	cJSON_AddNumberToObject(metric, "rx_nobuf", stats.rx_nombuf);
+	cJSON_AddNumberToObject(metric, "rx_nombuf", stats.rx_nombuf);
 	cJSON_AddNumberToObject(metric, "ierrors", stats.ierrors);
 	cJSON_AddNumberToObject(metric, "oerrors", stats.oerrors);
 
@@ -206,6 +206,31 @@ char *metrics_to_json(uint16_t port_id, const char *log_text)
 
 	cJSON_Delete(root);
 	return json_str;   /* 由调用方 free */
+}
+
+void dpdk_generate_stats(void)
+{
+    // int active = atomic_load_explicit(&g_stats_active_idx, memory_order_relaxed);
+	int active = stats_get_active_index();
+    int inactive = active ^ 1;
+
+    struct stats_snapshot *s = stats_get(inactive);
+
+	char *msg = encode_stats_to_json(enabled_port_mask, "");
+    /* JSON */
+    s->json_len = snprintf(s->json, STATS_JSON_MAX, "%s\n", msg);
+	free(msg);
+
+    /* Prometheus */
+	s->metric_len = encode_stats_to_text(enabled_port_mask, s->metric, STATS_METRIC_MAX);
+
+    s->ts_ns = rte_get_tsc_cycles();
+
+    /* 发布快照 */
+	stats_set(inactive);
+
+    /* 同步推送 WS */
+    ws_broadcast_stats();
 }
 
 void main_loop(void *data)
@@ -232,11 +257,12 @@ void main_loop(void *data)
 			/* do this only on main core */
 			if (lcore_id == rte_get_main_lcore()) {
 				timer_tsc = 0;
-				// char *msg = encode_all_ports_json(enabled_port_mask);
+				dpdk_generate_stats();
+				/*
 				char *msg = encode_stats_to_json(enabled_port_mask, "");
-
 				ws_broadcast(msg);
 				free(msg);
+				*/
 
 			}
 		}
@@ -751,7 +777,7 @@ static void check_all_ports_link_status(uint32_t port_mask)
 			if (force_quit) {
 				return;
 			}
-			if ((port_mask & (1 << portid)) == 0) {
+			if ((port_mask & (1u << portid)) == 0) {
 				continue;
 			}
 			memset(&link, 0, sizeof(link));
@@ -875,10 +901,11 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
 	}
 
-	struct ws_user_data wsud = {
-		.state = &g_state,
-	};
-	struct mg_context *ctx = ws_server_start((void*)&wsud);
+	struct server_options_cfg cfg;
+	if (config_parse_server(conf_root, &cfg) < 0) {
+		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
+	}
+	struct mg_context *ctx = ws_server_start(&cfg);
 
 	int ret = rte_eal_init(targc, targv);
 	if (ret < 0) {
@@ -987,7 +1014,7 @@ int main(int argc, char **argv)
 		uint32_t pid = 0;
 		memset(lcore_queue_conf, 0, sizeof(struct lcore_queue_conf) * RTE_MAX_LCORE);
 		RTE_ETH_FOREACH_DEV(pid) {
-			if ((enabled_port_mask & (1 << pid)) == 0) {
+			if ((enabled_port_mask & (1u << pid)) == 0) {
 				printf("skip port %d\n", pid);
 				continue;
 			}
@@ -1036,7 +1063,7 @@ int main(int argc, char **argv)
 		uint32_t nb_ports_in_mask = 0;
 		RTE_ETH_FOREACH_DEV(portid) {
 			/* skip ports that are not enabled */
-			if ((enabled_port_mask & (1 << portid)) == 0) {
+			if ((enabled_port_mask & (1u << portid)) == 0) {
 				continue;
 			}
 
@@ -1063,7 +1090,7 @@ int main(int argc, char **argv)
 	uint32_t nb_lcores = 0;
 	RTE_ETH_FOREACH_DEV(portid) {
 		/* skip ports that are not enabled */
-		if ((enabled_port_mask & (1 << portid)) == 0) {
+		if ((enabled_port_mask & (1u << portid)) == 0) {
 			continue;
 		}
 
@@ -1112,7 +1139,7 @@ int main(int argc, char **argv)
 		struct rte_eth_dev_info dev_info;
 
 		/* skip ports that are not enabled */
-		if ((enabled_port_mask & (1 << portid)) == 0) {
+		if ((enabled_port_mask & (1u << portid)) == 0) {
 			printf("Skipping disabled port %u\n", portid);
 			continue;
 		}
@@ -1312,7 +1339,7 @@ int main(int argc, char **argv)
 	}
 
 	RTE_ETH_FOREACH_DEV(portid) {
-		if ((enabled_port_mask & (1 << portid)) == 0) {
+		if ((enabled_port_mask & (1u << portid)) == 0) {
 			continue;
 		}
 		printf("Closing port %d...", portid);

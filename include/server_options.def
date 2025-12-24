@@ -1,0 +1,5 @@
+/* name,                  type,   civet_key,            default */
+X(listening_ports,        STR,    "listening_ports",    "8000")
+X(num_threads,            INT,    "num_threads",        "4")
+X(enable_keep_alive,      BOOL,   "enable_keep_alive",  "yes")
+X(request_timeout_ms,     INT,    "request_timeout_ms", "2000")

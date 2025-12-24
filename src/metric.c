@@ -1,31 +1,52 @@
 #include "metric.h"
 
-static int collect_port_stats(uint16_t port_id,
-		struct rte_eth_stats *stats,
-		struct rte_eth_xstat_name **xnames,
-		struct rte_eth_xstat **xvalues,
-		int *xcount)
+#define APPEND(fmt, ...) do {                                      \
+	if (len >= max_len) {                                        \
+		return max_len;                                        \
+	} \
+	int n = snprintf(msg + len, max_len - len, fmt, __VA_ARGS__); \
+	if (n < 0) {                                                  \
+		return len;                                            \
+	} \
+	if ((size_t)n >= max_len - len) {                          \
+		len = max_len;                                         \
+		return len;                                            \
+	}                                                          \
+	len += (size_t)n;                                          \
+} while (0)
+
+size_t encode_stats_to_text(uint32_t port_mask, char *msg, size_t max_len)
 {
-	if (rte_eth_stats_get(port_id, stats) != 0) {
-		return -1;
+	size_t len = 0;
+	uint16_t portid;
+	RTE_ETH_FOREACH_DEV(portid) {
+		if ((port_mask & (1u << portid)) == 0) {
+			continue;
+		}
+		struct rte_eth_stats stats;
+		if (rte_eth_stats_get(portid, &stats) != 0) {
+			return 0;
+		}
+
+		APPEND("dpdk_ipackets{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.ipackets);
+		APPEND("dpdk_opackets{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.opackets);
+		APPEND("dpdk_ibytes{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.ibytes);
+		APPEND("dpdk_obytes{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.obytes);
+		APPEND("dpdk_imissed{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.imissed);
+		APPEND("dpdk_ierrors{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.ierrors);
+		APPEND("dpdk_oerrors{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.oerrors);
+		APPEND("dpdk_rx_nobuf{port=\"%u\"} %" PRIu64 "\n",
+				portid, stats.rx_nombuf);
 	}
 
-	int n = rte_eth_xstats_get_names(port_id, NULL, 0);
-	if (n <= 0) {
-		return -1;
-	}
-
-	*xnames  = calloc(n, sizeof(**xnames));
-	*xvalues = calloc(n, sizeof(**xvalues));
-	if (!*xnames || !*xvalues) {
-		return -1;
-	}
-
-	rte_eth_xstats_get_names(port_id, *xnames, n);
-	rte_eth_xstats_get(port_id, *xvalues, n);
-	*xcount = n;
-
-	return 0;
+	return len;
 }
 
 static cJSON * encode_eth_stats(const struct rte_eth_stats *s)
@@ -45,59 +66,29 @@ static cJSON * encode_eth_stats(const struct rte_eth_stats *s)
 }
 
 /*
- * 解析 rx_q0_packets / tx_q1_bytes
- * 返回 1 表示是 queue xstat
- */
-static int parse_queue_xstat(const char *name,
-		char *dir,        /* "rx" or "tx" */
-		int *qid,
-		const char **metric)
-{
-	/* rx_q0_packets */
-	if (!(strncmp(name, "rx_q", 4) == 0 ||
-				strncmp(name, "tx_q", 4) == 0))
-		return 0;
-
-	*dir = name[0];  /* r or t */
-
-	const char *p = name + 4; /* q<id>_xxx */
-	if (!isdigit(*p))
-		return 0;
-
-	*qid = atoi(p);
-
-	p = strchr(p, '_');
-	if (!p || *(p + 1) == '\0')
-		return 0;
-
-	*metric = p + 1;
-	return 1;
-}
-
-/*
-static const char * xstat_group(const char *name)
-{
-	if (strstr(name, "_q") || strstr(name, "queue")) {
-		char dir;
-		int qid;
-		const char *metric;
-		printf("queue(%s):\n\t", name);
-		if (parse_queue_xstat(name, &dir, &qid, &metric)) {
-			char qkey[16];
-			snprintf(qkey, sizeof(qkey), "q%d", qid);
-			printf("dir %c name %s qkey %s metric %s ", dir, name, qkey, metric);
-		}
-		return "queue";
-	}
-	if (strncmp(name, "rx_", 3) == 0)
-		return "rx";
-	if (strncmp(name, "tx_", 3) == 0)
-		return "tx";
-	if (strstr(name, "drop") || strstr(name, "discard"))
-		return "drop";
-	return "other";
-}
-*/
+   static const char * xstat_group(const char *name)
+   {
+   if (strstr(name, "_q") || strstr(name, "queue")) {
+   char dir;
+   int qid;
+   const char *metric;
+   printf("queue(%s):\n\t", name);
+   if (parse_queue_xstat(name, &dir, &qid, &metric)) {
+   char qkey[16];
+   snprintf(qkey, sizeof(qkey), "q%d", qid);
+   printf("dir %c name %s qkey %s metric %s ", dir, name, qkey, metric);
+   }
+   return "queue";
+   }
+   if (strncmp(name, "rx_", 3) == 0)
+   return "rx";
+   if (strncmp(name, "tx_", 3) == 0)
+   return "tx";
+   if (strstr(name, "drop") || strstr(name, "discard"))
+   return "drop";
+   return "other";
+   }
+   */
 
 static cJSON * encode_xstats(uint16_t portid)
 {
@@ -137,12 +128,12 @@ static cJSON * encode_xstats(uint16_t portid)
 
 	for (int i = 0; i < n; i++) {
 		/*
-		const char *g = xstat_group(names[i].name);
-		if (!strncmp(g, "queue", 5)) {
-			printf("value %lu\n", values[i].value);
-		}
-		cJSON *grp = cJSON_GetObjectItem(root, g);
-		*/
+		   const char *g = xstat_group(names[i].name);
+		   if (!strncmp(g, "queue", 5)) {
+		   printf("value %lu\n", values[i].value);
+		   }
+		   cJSON *grp = cJSON_GetObjectItem(root, g);
+		   */
 		cJSON_AddNumberToObject(root, names[i].name, values[i].value);
 	}
 
@@ -175,17 +166,20 @@ static cJSON * encode_port(uint16_t portid)
 	return port;
 }
 
-
 char * encode_stats_to_json(uint32_t port_mask, char *log_text)
 {
 	cJSON *root = cJSON_CreateObject();
 
 	/* meta */
 	cJSON *meta = cJSON_CreateObject();
-	cJSON_AddNumberToObject(meta,
-			"timestamp_ns",
-			rte_get_timer_cycles() * 1000000000ULL /
-			rte_get_timer_hz());
+
+	uint64_t cycles = rte_get_timer_cycles();
+	uint64_t hz = rte_get_timer_hz();
+	uint64_t sec  = cycles / hz;
+	uint64_t rem  = cycles % hz;
+	uint64_t timestamp_ns = sec * 1000000000ULL + rem * 1000000000ULL / hz;
+
+	cJSON_AddNumberToObject(meta, "timestamp_ns", timestamp_ns);
 	cJSON_AddStringToObject(meta, "source", "Bless Injector");
 	cJSON_AddNumberToObject(meta, "schema_version", 1);
 	cJSON_AddItemToObject(root, "meta", meta);
@@ -194,9 +188,9 @@ char * encode_stats_to_json(uint32_t port_mask, char *log_text)
 	cJSON *ports = cJSON_CreateObject();
 	cJSON_AddItemToObject(root, "ports", ports);
 
-	uint16_t portid = -1;
+	uint16_t portid;
 	RTE_ETH_FOREACH_DEV(portid) {
-		if ((port_mask & (1 << portid)) == 0) {
+		if ((port_mask & (1u << portid)) == 0) {
 			continue;
 		}
 		char key[8];
@@ -276,6 +270,64 @@ static void encode_port_to_json(cJSON *ports,
 	}
 }
 
+/*
+ * 解析 rx_q0_packets / tx_q1_bytes
+ * 返回 1 表示是 queue xstat
+ */
+static int parse_queue_xstat(const char *name,
+		char *dir,        /* "rx" or "tx" */
+		int *qid,
+		const char **metric)
+{
+	/* rx_q0_packets */
+	if (!(strncmp(name, "rx_q", 4) == 0 ||
+				strncmp(name, "tx_q", 4) == 0))
+		return 0;
+
+	*dir = name[0];  /* r or t */
+
+	const char *p = name + 4; /* q<id>_xxx */
+	if (!isdigit(*p))
+		return 0;
+
+	*qid = atoi(p);
+
+	p = strchr(p, '_');
+	if (!p || *(p + 1) == '\0')
+		return 0;
+
+	*metric = p + 1;
+	return 1;
+}
+
+static int collect_port_stats(uint16_t port_id,
+		struct rte_eth_stats *stats,
+		struct rte_eth_xstat_name **xnames,
+		struct rte_eth_xstat **xvalues,
+		int *xcount)
+{
+	if (rte_eth_stats_get(port_id, stats) != 0) {
+		return -1;
+	}
+
+	int n = rte_eth_xstats_get_names(port_id, NULL, 0);
+	if (n <= 0) {
+		return -1;
+	}
+
+	*xnames  = calloc(n, sizeof(**xnames));
+	*xvalues = calloc(n, sizeof(**xvalues));
+	if (!*xnames || !*xvalues) {
+		return -1;
+	}
+
+	rte_eth_xstats_get_names(port_id, *xnames, n);
+	rte_eth_xstats_get(port_id, *xvalues, n);
+	*xcount = n;
+
+	return 0;
+}
+
 char * encode_all_ports_json(uint32_t port_mask)
 {
 	cJSON *root = cJSON_CreateObject();
@@ -284,7 +336,7 @@ char * encode_all_ports_json(uint32_t port_mask)
 
 	uint16_t port_id = -1;
 	RTE_ETH_FOREACH_DEV(port_id) {
-		if ((port_mask & (1 << port_id)) == 0) {
+		if ((port_mask & (1u << port_id)) == 0) {
 			continue;
 		}
 		struct rte_eth_stats stats;

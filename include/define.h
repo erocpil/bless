@@ -40,24 +40,7 @@ enum {
 	STATE_EXIT = 3,
 };
 
-struct ws_user_data {
-	atomic_int *state;
-};
-
 typedef uint64_t (*mutation_func)(void **mbufs, unsigned int n, void *data);
-
-// TODO
-static unsigned int make_power_of_2(unsigned int n)
-{
-	if (!n) return n;
-	n -= 1;
-	int c = 0;
-	while (n) {
-		c++;
-		n >>= 1;
-	}
-	return 1 << c;
-}
 
 /* 计算 16-bit one's complement checksum */
 static uint16_t icmp_calc_cksum(const void *buf, size_t len)

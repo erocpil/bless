@@ -1,5 +1,6 @@
-SRCDIR := src
-O ?= build
+SRCDIR   := src
+O        ?= build/$(BUILD)
+BUILD    ?= release
 BUILDDIR := build
 
 .PHONY: all clean

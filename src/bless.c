@@ -677,6 +677,18 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 	free(frac);
 }
 
+static unsigned int make_power_of_2(unsigned int n)
+{
+	if (!n) return n;
+	n -= 1;
+	int c = 0;
+	while (n) {
+		c++;
+		n >>= 1;
+	}
+	return 1 << c;
+}
+
 int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bless_encap_params *bep)
 {
 	uint32_t weight[TYPE_MAX - 1] = { 0 };

@@ -1,6 +1,7 @@
 #include "config.h"
 #include "bless.h"
 #include "erroneous.h"
+#include "server.h"
 
 static struct offload_table_item offload_table[] = {
 	{ "ipv4", OF_IPV4 },
@@ -331,13 +332,11 @@ int config_check_file(char *filename)
 	}
 	printf("检测文件 \"%s\" 中的控制字符。\n", filename);
 
-	/* TODO
 	// 如果二进制字符占比超过 10%，认为是二进制文件
 	if ((double)binary_count / nread > 0.1) {
-	printf("文件 \"%s\" 中的控制字符超过 10%% 。\n", filename);
-	res = 0;
+		printf("文件 \"%s\" 中的控制字符超过 10%% 。\n", filename);
+		res = 0;
 	}
-	*/
 
 DONE:
 	if (res == -1) {
@@ -495,6 +494,87 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 	*targc = i;
 	*targv = argv;
 	return i;
+}
+
+int config_parse_server(Node *root, struct server_options_cfg *cfg)
+{
+	if (!cfg) return -1;
+
+	/* 1. defaults */
+	server_options_set_defaults(cfg);
+
+	char *path = "server.options";
+	Node *node = find_by_path(root, path);
+	if (!node) {
+		printf("No server found\n");
+		return 0;
+	}
+
+	/* 2. YAML override */
+	path = "server.options";
+	node = find_by_path(root, path);
+	if (node) {
+		if (NODE_MAPPING == node->type) {
+			printf("%s:\n", path);
+			for (Node *n = node->child; n; n = n->next) {
+				printf("  %s: %s\n", n->key, n->value);
+				const char *k = n->key, *v = n->value;
+#define X(name, type, civet_key, def)        \
+				if (strcmp(k, civet_key) == 0) { \
+					SERVER_PARSE_##type(cfg->name, v); \
+					continue; \
+				}
+
+#include "server_options.def"
+#undef X
+
+			}
+		} else {
+			printf("No valid server options found, use default\n");
+		}
+	} else {
+		printf("No server options found, use default\n");
+	}
+	/* 3. cfg -> kv[] */
+	// struct civet_kv kv[16];              /* 每个 option 一项 */
+	int n = build_civet_options(cfg, cfg->kv, 16);
+	/* 4. kv[] -> civet const char * */
+	// const char *civet_opts[32 + 1];      /* key,value,...,NULL */
+	int i = 0;
+	for (i = 0; i < n; i++) {
+		cfg->civet_opts[i * 2]     = cfg->kv[i].key;
+		cfg->civet_opts[i * 2 + 1] = cfg->kv[i].val;
+	}
+	cfg->civet_opts[i * 2] = NULL;
+
+	for (int i = 0; i < n; i++) {
+		printf("%s => %s\n", cfg->civet_opts[i * 2], cfg->civet_opts[i * 2 + 1]);
+	}
+
+	path = "server.service";
+	node = find_by_path(root, path);
+	if (node) {
+		path = "server.service.websocket";
+		node = find_by_path(root, path);
+		if (NODE_SCALAR == node->type) {
+			printf("%s %s\n", path, node->value);
+			int len = strlen(node->value);
+			cfg->uri = (char*)malloc(len + 1);
+			strncpy(cfg->uri, node->value, len + 1);
+		}
+		path = "server.service.http";
+		node = find_by_path(root, path);
+		if (NODE_SEQUENCE == node->type) {
+			printf("%s:\n", path);
+			for (Node *n = node->child; n; n = n->next) {
+				printf("  %s\n", n->value);
+			}
+		}
+	} else {
+		printf("No server service found\n");
+	}
+
+	return 0;
 }
 
 #define MAX_EAL_PARAMS 128
