@@ -514,8 +514,11 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 		if (NODE_MAPPING == node->type) {
 			printf("%s:\n", path);
 			for (Node *n = node->child; n; n = n->next) {
-				printf("  %s: %s\n", n->key, n->value);
 				const char *k = n->key, *v = n->value;
+				if (strlen(n->key) > SERVER_KV_MAX || strlen(n->value) > SERVER_KV_MAX) {
+					printf("String too long %s => %s\n, omit.", n->key, n->value);
+					continue;
+				}
 #define X(name, type, civet_key, def)        \
 				if (strcmp(k, civet_key) == 0) { \
 					SERVER_PARSE_##type(cfg->name, v); \
@@ -527,6 +530,7 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 
 			}
 		} else {
+			cfg->civet_opts[0] = NULL;
 			printf("No valid server options found, use default\n");
 		}
 	} else {
@@ -1343,11 +1347,6 @@ static int config_parse_bless_ether_type_ipv4(Node *root, Cnode *cnode)
 ERROR:
 	printf("yaml config parse error %s: %s\n", path, node->value);
 	exit(-1);
-}
-
-static int config_parse_bless_ether_type(Node *root, Cnode *cnode)
-{
-	return 1;
 }
 
 static int config_parse_bless_vxlan(Node *root, Cnode *cnode)

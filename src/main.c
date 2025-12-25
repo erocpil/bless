@@ -16,7 +16,7 @@ static uint32_t enabled_lcores = 0;
 /* A tsc-based timer responsible for triggering statistics printout */
 uint64_t timer_period = 1; /* default period is 10 seconds */
 
-atomic_int g_state = ATOMIC_VAR_INIT(STATE_INIT);
+atomic_int g_state = STATE_INIT;
 
 static volatile bool force_quit;
 
@@ -210,27 +210,27 @@ char *metrics_to_json(uint16_t port_id, const char *log_text)
 
 void dpdk_generate_stats(void)
 {
-    // int active = atomic_load_explicit(&g_stats_active_idx, memory_order_relaxed);
+	// int active = atomic_load_explicit(&g_stats_active_idx, memory_order_relaxed);
 	int active = stats_get_active_index();
-    int inactive = active ^ 1;
+	int inactive = active ^ 1;
 
-    struct stats_snapshot *s = stats_get(inactive);
+	struct stats_snapshot *s = stats_get(inactive);
 
 	char *msg = encode_stats_to_json(enabled_port_mask, "");
-    /* JSON */
-    s->json_len = snprintf(s->json, STATS_JSON_MAX, "%s\n", msg);
+	/* JSON */
+	s->json_len = snprintf(s->json, STATS_JSON_MAX, "%s\n", msg);
 	free(msg);
 
-    /* Prometheus */
+	/* Prometheus */
 	s->metric_len = encode_stats_to_text(enabled_port_mask, s->metric, STATS_METRIC_MAX);
 
-    s->ts_ns = rte_get_tsc_cycles();
+	s->ts_ns = rte_get_tsc_cycles();
 
-    /* 发布快照 */
+	/* 发布快照 */
 	stats_set(inactive);
 
-    /* 同步推送 WS */
-    ws_broadcast_stats();
+	/* 同步推送 WS */
+	ws_broadcast_stats();
 }
 
 void main_loop(void *data)
@@ -259,10 +259,10 @@ void main_loop(void *data)
 				timer_tsc = 0;
 				dpdk_generate_stats();
 				/*
-				char *msg = encode_stats_to_json(enabled_port_mask, "");
-				ws_broadcast(msg);
-				free(msg);
-				*/
+				   char *msg = encode_stats_to_json(enabled_port_mask, "");
+				   ws_broadcast(msg);
+				   free(msg);
+				   */
 
 			}
 		}
@@ -880,6 +880,8 @@ int mbuf_dynfield_init()
 
 int main(int argc, char **argv)
 {
+	daemon(1, 1);
+
 	int targc = argc;
 	char **targv = argv;
 	Node *conf_root = NULL;
@@ -1333,6 +1335,7 @@ int main(int argc, char **argv)
 	// DISTRIBUTION_DUMP(bconf->dist);
 
 	// printf("Bless is waiting ...\n");
+
 	ret = 0;
 	/* launch per-lcore init on every lcore */
 	uint32_t lcore_id = 0;

@@ -178,13 +178,14 @@ static void ws_close_handler(const struct mg_connection *conn, void *ud)
 static int http_control_handler(struct mg_connection *conn, void *ud)
 {
 	(void)ud;
+	const struct stats_snapshot *s = stats_get_active();
 
 	mg_printf(conn,
 			"HTTP/1.1 200 OK\r\n"
 			"Content-Type: application/json\r\n"
-			"Cache-Control: no-cache\r\n\r\n");
-
-	printf("[%s %d]\n", __func__, __LINE__);
+			"Cache-Control: no-cache\r\n\r\n"
+			"Content-Length: %zu\r\n\r\n%lu",
+			sizeof(uint64_t), s->ts_ns);
 
 	return 200;
 }
@@ -213,8 +214,7 @@ static int http_metrics_handler(struct mg_connection *conn, void *ud)
 			"HTTP/1.1 200 OK\r\n"
 			"Content-Type: text/plain; version=0.0.4\r\n"
 			"Cache-Control: no-cache\r\n\r\n"
-			"Content-Length: %zu\r\n\r\n%s",
-			s->metric_len, s->metric);
+			"\r\n%s", s->metric);
 
 	return 200;
 }
@@ -223,8 +223,7 @@ static int http_metrics_handler(struct mg_connection *conn, void *ud)
 /* Broadcast                                                         */
 /* ================================================================ */
 
-	void
-ws_broadcast_stats(void)
+void ws_broadcast_stats(void)
 {
 	const struct stats_snapshot *s = stats_get_active();
 
@@ -247,13 +246,12 @@ struct mg_context * ws_server_start(void *data)
 {
 	mg_init_library(0);
 
-
 	struct server_options_cfg *cfg = (struct server_options_cfg*)data;
 
 	struct mg_callbacks cb = {0};
 	struct mg_init_data init = {
 		.callbacks = &cb,
-		.configuration_options = cfg->civet_opts,
+		.configuration_options = cfg->civet_opts[0] ? cfg->civet_opts : SERVER_OPTIONS,
 	};
 
 	struct mg_context *ctx = mg_start2(&init, NULL);
@@ -289,8 +287,8 @@ int ws_server_stop(struct mg_context *ctx)
 	return 0;
 }
 
+#if 0
 /* ========= itoa / bool ========= */
-
 static void u32toa(char *buf, size_t sz, uint32_t v)
 {
 	char tmp[16];
@@ -319,6 +317,7 @@ static const char *bool_to_str(int v)
 {
 	return v ? "yes" : "no";
 }
+#endif
 
 void server_options_set_defaults(struct server_options_cfg *cfg)
 {

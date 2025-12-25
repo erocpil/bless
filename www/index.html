@@ -30,6 +30,38 @@ body {
 .toolbar button:hover {
   background: #555;
 }
+.toolbar button:disabled {
+  background: #333;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.toolbar input {
+  padding: 6px 10px;
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+  min-width: 250px;
+}
+.toolbar input:disabled {
+  background: #2a2a2a;
+  cursor: not-allowed;
+}
+.toolbar input:focus {
+  outline: none;
+  border-color: #2196F3;
+}
+.toolbar label {
+  font-size: 12px;
+  color: #aaa;
+}
+.url-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .toolbar .status {
   margin-left: auto;
   display: flex;
@@ -134,6 +166,10 @@ th.total {
 </head>
 <body>
 <div class="toolbar">
+  <div class="url-group">
+    <label for="wsUrlInput">Server:</label>
+    <input type="text" id="wsUrlInput" placeholder="ws://localhost:8080/wsURL" />
+  </div>
   <button onclick="toggleConnection()" id="connectBtn">Connect</button>
   <button onclick="toggleMode()">Mode: <span id="mode">Formatted</span></button>
   <button onclick="toggleRate()">Rate: <span id="rateMode">ON</span></button>
@@ -160,6 +196,42 @@ let isConnected = false;
 const STATS_ORDER = ['ipackets', 'opackets', 'ibytes', 'obytes', 'imissed', 'ierrors', 'oerrors', 'rx_nombuf'];
 const ERROR_KEYS = ['imissed', 'ierrors', 'oerrors', 'rx_nombuf'];
 
+// Initialize WebSocket URL from localStorage or default
+const DEFAULT_WS_URL = '/wsURL';
+let wsUrl = localStorage.getItem('dpdk_ws_url') || DEFAULT_WS_URL;
+
+// Initialize UI
+window.addEventListener('load', () => {
+  const urlInput = document.getElementById('wsUrlInput');
+  urlInput.value = wsUrl;
+
+  // Allow Enter key to connect
+  urlInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !isConnected) {
+      toggleConnection();
+    }
+  });
+});
+
+function normalizeWsUrl(url) {
+  // Trim whitespace
+  url = url.trim();
+
+  // If URL starts with /, treat as relative path
+  if (url.startsWith('/')) {
+    return url;
+  }
+
+  // Auto-add protocol if missing
+  if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+    // Use wss:// if page is https://, otherwise ws://
+    const protocol = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+    url = protocol + url;
+  }
+
+  return url;
+}
+
 function toggleConnection() {
   if (isConnected) {
     disconnect();
@@ -169,17 +241,26 @@ function toggleConnection() {
 }
 
 function connect() {
+  const urlInput = document.getElementById('wsUrlInput');
+
+  // Get and normalize URL
+  wsUrl = normalizeWsUrl(urlInput.value);
+
+  // Save to localStorage
+  localStorage.setItem('dpdk_ws_url', wsUrl);
+
+  // Update input to show normalized URL
+  urlInput.value = wsUrl;
+
   try {
-	// const wsScheme = (location.protocol === "https:") ? "wss://" : "ws://";
-	// const wsUrl = wsScheme + location.host + "/wsURL";
-	// ws = new WebSocket(wsUrl, "Company.ProtoName.json");
-	ws = new WebSocket("/wsURL", "Company.ProtoName.json");
+    ws = new WebSocket(wsUrl, "Company.ProtoName.json");
 
     ws.onopen = () => {
       isConnected = true;
       document.getElementById('statusDot').classList.add('connected');
       document.getElementById('statusText').innerText = 'Connected';
       document.getElementById('connectBtn').innerText = 'Disconnect';
+      urlInput.disabled = true;
     };
 
     ws.onmessage = e => {
@@ -193,8 +274,9 @@ function connect() {
       }
     };
 
-    ws.onerror = () => {
-      console.error('WebSocket error');
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      document.getElementById('statusText').innerText = 'Connection Error';
     };
 
     ws.onclose = () => {
@@ -202,9 +284,12 @@ function connect() {
       document.getElementById('statusDot').classList.remove('connected');
       document.getElementById('statusText').innerText = 'Disconnected';
       document.getElementById('connectBtn').innerText = 'Connect';
+      urlInput.disabled = false;
     };
   } catch (err) {
     console.error('Connection error:', err);
+    document.getElementById('statusText').innerText = 'Connection Failed';
+    urlInput.disabled = false;
   }
 }
 
@@ -451,12 +536,6 @@ function renderGroup(table, title, keys, data, ports, timeDelta, isXstats, categ
     table.appendChild(row);
   });
 }
-
-// Auto-connect on load
-window.addEventListener('load', () => {
-  // Optionally auto-connect
-  // connect();
-});
 </script>
 </body>
 </html>

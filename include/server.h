@@ -42,11 +42,12 @@ typedef int          INT;
 typedef int          BOOL;
 
 #define SERVER_OPTS_MAX 16
+#define SERVER_KV_MAX 128
 
 /* civetweb options kv */
 struct civet_kv {
 	const char *key;
-	char        val[32];
+	char        val[SERVER_KV_MAX + 1];
 };
 
 /* ====== YAML → struct ====== */
