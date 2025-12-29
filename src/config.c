@@ -1,7 +1,7 @@
-#include "config.h"
 #include "bless.h"
 #include "erroneous.h"
 #include "server.h"
+#include "config.h"
 
 static struct offload_table_item offload_table[] = {
 	{ "ipv4", OF_IPV4 },
@@ -226,7 +226,9 @@ void traverse_node(Node *node, int depth, NodeVisitor pre, NodeVisitor post, voi
 	printf("======\n");
 }
 
-void print_pre(Node *node, int depth, void *userdata) {
+void print_pre(Node *node, int depth, void *userdata)
+{
+	(void)userdata;
 	for (int i = 0; i < depth; i++) {
 		printf("  ");
 	}
@@ -243,6 +245,7 @@ void print_pre(Node *node, int depth, void *userdata) {
 
 void print_post(Node *node, int depth, void *userdata)
 {
+	(void)userdata;
 	if (node->type == NODE_MAPPING) {
 		for (int i = 0; i < depth; i++) printf("  ");
 		printf("}\n");
@@ -561,8 +564,8 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 			printf("%s %s\n", path, node->value);
 			int len = strlen(node->value);
 			if (len > 0) {
-			cfg->uri = (char*)malloc(len + 1);
-			strncpy(cfg->uri, node->value, len + 1);
+				cfg->uri = (char*)malloc(len + 1);
+				strncpy(cfg->uri, node->value, len + 1);
 			} else {
 				cfg->uri = NULL;
 			}
@@ -572,12 +575,25 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 		if (NODE_SEQUENCE == node->type) {
 			printf("%s:\n", path);
 			for (Node *n = node->child; n; n = n->next) {
+				// TODO
 				printf("  %s\n", n->value);
 			}
 		}
 	} else {
-		printf("No server service found\n");
+		printf("No server service found, use default\n");
 	}
+
+	cfg->daemonize = 0;
+	path = "server.daemonize";
+	node = find_by_path(root, path);
+	if (node) {
+		if (NODE_SCALAR == node->type) {
+			if (0 == strcmp(node->value, "yes")) {
+				cfg->daemonize = 1;
+			}
+		}
+	}
+	printf("server daemonize: %s\n", cfg->daemonize ? "yes" : "no");
 
 	return 0;
 }
@@ -894,7 +910,7 @@ static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array, 
  */
 static int config_parse_ipv4_maybe_range_to_array(Node *node, uint32_t *addr, int64_t *range, uint32_t limit)
 {
-	int n = 0;
+	uint32_t n = 0;
 
 	switch (node->type) {
 		case NODE_SCALAR:

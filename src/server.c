@@ -1,5 +1,3 @@
-#include "server.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -8,8 +6,7 @@
 #include <stdatomic.h>
 
 #include "civetweb.h"
-
-struct ws_user_data wsud;
+#include "server.h"
 
 /* ================================================================ */
 /* Server options                                                    */
@@ -69,11 +66,6 @@ static _Atomic int g_stats_active_idx = 0;
 /* 全局双缓冲 */
 static struct stats_snapshot g_stats_buf[2];
 static _Atomic int g_stats_active_idx = 0;
-
-inline struct ws_user_data *ws_get_ud()
-{
-	return &wsud;
-}
 
 /* ================================================================ */
 /* Helper                                                           */
@@ -147,12 +139,17 @@ static int ws_data_handler(struct mg_connection *conn, int opcode,
 		char *data, size_t datasize, void *ud)
 {
 	(void)conn;
-	(void)ud;
 	(void)datasize;
 
 	if ((opcode & 0xf) == MG_WEBSOCKET_OPCODE_TEXT) {
 		printf("WS recv: %.*s\n", (int)datasize, data);
 	}
+
+	if (datasize) {
+		struct ws_user_data *wsud = (struct ws_user_data*)ud;
+		wsud->func(data, datasize);
+	}
+
 	return 1;
 }
 
@@ -222,7 +219,6 @@ static int http_metrics_handler(struct mg_connection *conn, void *ud)
 /* ================================================================ */
 /* Broadcast                                                         */
 /* ================================================================ */
-
 void ws_broadcast_stats(void)
 {
 	const struct stats_snapshot *s = stats_get_active();
@@ -238,19 +234,33 @@ void ws_broadcast_stats(void)
 	pthread_mutex_unlock(&mgc_lock);
 }
 
-/* ================================================================ */
-/* Server lifecycle                                                  */
-/* ================================================================ */
+void ws_broadcast_log(char *log, size_t len)
+{
+	pthread_mutex_lock(&mgc_lock);
+	printf("%s\n", log);
+	for (int i = 0; i < n_mgc; i++) {
+		mg_websocket_write(
+				(struct mg_connection *)mgc[i],
+				MG_WEBSOCKET_OPCODE_TEXT,
+				log, len);
+	}
+	pthread_mutex_unlock(&mgc_lock);
+}
 
+/* ================================================================ */
+/* Server lifecycle                                                 */
+/* ================================================================ */
 struct mg_context * ws_server_start(void *data)
 {
 	mg_init_library(0);
 
-	struct server_options_cfg *cfg = (struct server_options_cfg*)data;
+	struct ws_user_data *wsud = (struct ws_user_data*)data;
+	struct server_options_cfg *cfg = wsud->data;
 
 	struct mg_callbacks cb = {0};
 	struct mg_init_data init = {
 		.callbacks = &cb,
+		.user_data = data,
 		.configuration_options = cfg->civet_opts[0] ? cfg->civet_opts : SERVER_OPTIONS,
 	};
 
@@ -263,7 +273,7 @@ struct mg_context * ws_server_start(void *data)
 			ws_ready_handler,
 			ws_data_handler,
 			ws_close_handler,
-			NULL);
+			data);
 
 	mg_set_request_handler(ctx, "/api/control",
 			http_control_handler, NULL);

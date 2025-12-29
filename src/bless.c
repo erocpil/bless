@@ -9,6 +9,10 @@
 #define PORT 9000
 #define PORT_OFFSET 10000
 
+static char *BLESS_TYPE_STR[] = {
+	"arp", "icmp", "tcp", "udp", "erroneous", "max",
+};
+
 int bless_parse_port_range(char *data, uint16_t *port, int32_t *range)
 {
 	if (!data || strlen(data) < 1) {
@@ -413,6 +417,9 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 
 uint64_t bless_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
+	(void)mbufs;
+	(void)n;
+	(void)data;
 	return 0;
 }
 
@@ -612,7 +619,7 @@ void dist_ratio_init(struct dist_ratio *dr)
 	}
 }
 
-struct bless_conf *bless_init(int argc, char *argv[])
+struct bless_conf *bless_init()
 {
 	struct bless_conf *bconf = (struct bless_conf*)malloc(sizeof(struct bless_conf));
 	if (!bconf) {
@@ -633,7 +640,7 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 
 	int sum = 0;
 	// Step1: 基础分配，每个先分到1
-	for (int i = 0; i < n; i++) {
+	for (uint32_t i = 0; i < n; i++) {
 		result[i] = 1;
 		sum += weights[i];
 	}
@@ -649,7 +656,7 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 
 	volatile uint64_t allocated = 0;
 	double t = (double)total / sum;
-	for (int i = 0; i < n; i++) {
+	for (uint32_t i = 0; i < n; i++) {
 		temp[i] = t * weights[i];
 		uint64_t add = (uint64_t)temp[i];     // 整数部分
 		result[i] += add;
@@ -664,7 +671,7 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 	// printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
 	while (remain > 0) {
 		int idx = 0;
-		for (int i = 1; i < n; i++) {
+		for (uint32_t i = 1; i < n; i++) {
 			if (frac[i] > frac[idx]) idx = i;
 		}
 		result[idx]++;
@@ -758,7 +765,7 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 			continue;
 		}
 		printf("type %d %s\n", q, BLESS_TYPE_STR[i]);
-		for (int j = 0; j < result[q]; j++) {
+		for (uint32_t j = 0; j < result[q]; j++) {
 			dist->data[pos++] = i;
 		}
 		q++;

@@ -44,7 +44,6 @@
 #include <rte_telemetry.h>
 
 #include "config.h"
-// #include "define.h"
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -90,10 +89,6 @@ enum BLESS_TYPE {
 #define OFFLOAD_IPV6(cnode) ((cnode)->offload & OF_IPV4_VAL)
 #define OFFLOAD_TCP(cnode) ((cnode)->offload & OF_TCP_VAL)
 #define OFFLOAD_UDP(cnode) ((cnode)->offload & OF_UDP_VAL)
-
-static char *BLESS_TYPE_STR[] = {
-	"arp", "icmp", "tcp", "udp", "erroneous", "max",
-};
 
 struct dist_ratio {
 	uint64_t num;
@@ -174,7 +169,6 @@ struct bless_conf {
 	struct port_statistics **stats;
 	uint32_t *dst_ports;
 	uint64_t timer_period;
-	volatile bool *force_quit;
 	atomic_int *state;
 	pthread_barrier_t *barrier;
 	Cnode *cnode;
@@ -211,7 +205,7 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data);
 uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data);
 uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data);
 uint64_t bless_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data);
-struct bless_conf *bless_init(int argc, char *argv[]);
+struct bless_conf *bless_init();
 int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bless_encap_params *bep);
 int32_t bless_parse_type(enum BLESS_TYPE type, char *optarg);
 void dist_ratio_init(struct dist_ratio *dr);

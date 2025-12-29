@@ -44,47 +44,83 @@ DPDK_CFLAGS := $(shell $(PKGCONF) --cflags libdpdk 2>/dev/null)
 DPDK_LDFLAGS := $(shell $(PKGCONF) $(if $(filter 1,$(STATIC)),--static) --libs libdpdk 2>/dev/null)
 
 CFLAGS := -I../include -I$(CIVET_INC) -I$(CJSON_INC) -Wall \
-          -DALLOW_EXPERIMENTAL_API \
-          -DNO_SSL -DNO_CGI -DNO_FILESYSTEM -DUSE_WEBSOCKET \
-          $(DPDK_CFLAGS)
+		  -DALLOW_EXPERIMENTAL_API \
+		  -DNO_SSL -DNO_CGI -DNO_FILESYSTEM -DUSE_WEBSOCKET \
+		  $(DPDK_CFLAGS)
 
 ifeq ($(BUILD),debug)
-CFLAGS += -O0 -g -DDEBUG
+	CFLAGS += -O0 -g -DDEBUG
 else
-CFLAGS += -O2 -DNDEBUG
+	CFLAGS += -O2 -DNDEBUG
 endif
 
-LDFLAGS := $(DPDK_LDFLAGS) -lyaml -lcrypto
+LDFLAGS := $(DPDK_LDFLAGS) -lyaml -lcrypto -L$(O)/lib -lcivetweb -lcjson
 
 # ============================================================
 # Verbose control
 # ============================================================
 ifeq ($(V),1)
-Q :=
-ECHO := @true
+	Q :=
+	ECHO := @true
 else
-Q := @
-ECHO := @echo
+	Q := @
+	ECHO := @echo
 endif
+
+# ============================================================
+# Library build options
+# ============================================================
+STATIC_LIB := $(if $(filter 1,$(STATIC)),a,so)
 
 # ============================================================
 # Targets
 # ============================================================
-.PHONY: all clean
+.PHONY: all clean libcivetweb libcjson
 
+# Main target
 all: $(TARGET)
 
-$(TARGET): $(OBJ)
+$(TARGET): $(OBJ) libcivetweb libcjson
 	@mkdir -p $(@D)
 	$(ECHO) "  LD      $@"
-	$(Q)$(CC) $(OBJ) -o $@ $(LDFLAGS)
+	$(Q)$(CC) $(OBJ) -o $@ $(LDFLAGS) -L$(O)/lib -lcivetweb -lcjson
 	$(Q)ln -sf bin/$(APP) $(O)/$(APP)
 
+# Library build rules
+libcivetweb: $(O)/lib/libcivetweb.$(STATIC_LIB)
+libcjson: $(O)/lib/libcjson.$(STATIC_LIB)
+
+# Build civetweb as a static or dynamic library
+$(O)/lib/libcivetweb.a: $(CIVET_SRC)
+	@mkdir -p $(O)/lib
+	$(ECHO) "  AR      $@"
+	$(Q)$(CC) -c $(CIVET_SRC) -o $(OBJDIR)/civetweb.o $(CFLAGS)
+	$(Q)ar rcs $@ $(OBJDIR)/civetweb.o
+
+$(O)/lib/libcivetweb.so: $(CIVET_SRC)
+	@mkdir -p $(O)/lib
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) -fPIC -shared $(CIVET_SRC) -o $@ $(CFLAGS)
+
+# Build cJSON as a static or dynamic library
+$(O)/lib/libcjson.a: $(CJSON_SRC)
+	@mkdir -p $(O)/lib
+	$(ECHO) "  AR      $@"
+	$(Q)$(CC) -c $(CJSON_SRC) -o $(OBJDIR)/cjson.o $(CFLAGS)
+	$(Q)ar rcs $@ $(OBJDIR)/cjson.o
+
+$(O)/lib/libcjson.so: $(CJSON_SRC)
+	@mkdir -p $(O)/lib
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) -fPIC -shared $(CJSON_SRC) -o $@ $(CFLAGS)
+
+# General object rule
 $(OBJDIR)/%.o: %.c
 	@mkdir -p $(@D)
 	$(ECHO) "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+# Clean rule
 clean:
 	$(Q)rm -rf $(O)
 

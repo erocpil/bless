@@ -1,17 +1,11 @@
 #include "worker.h"
 
-static uint32_t l2fwd_enabled_port_mask = 0;
-// RTE_DEFINE_PER_LCORE(volatile struct port_statistics, port_statistics);
-
 void worker_loop_txonly(void *data)
 {
-	// struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
 	struct rte_mbuf *mbufs[1024];
 	unsigned lcore_id;
-	// unsigned i;
 	uint16_t portid = 0;
 	struct lcore_queue_conf *qconf;
-	// struct rte_eth_dev_tx_buffer *buffer;
 
 	lcore_id = rte_lcore_id();
 
@@ -29,7 +23,6 @@ void worker_loop_txonly(void *data)
 		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(bless_conf)\n",
 				__func__, __LINE__);
 	}
-
 	// DISTRIBUTION_DUMP(bconf->dist);
 
 	uint16_t dsize = bconf->dist->size;
@@ -66,9 +59,7 @@ void worker_loop_txonly(void *data)
 		rte_exit(EXIT_FAILURE, "[%s %d] no config.yaml\n", __func__, __LINE__);
 	}
 
-	l2fwd_enabled_port_mask = conf->enabled_port_mask;
 	qconf = conf->qconf; // bconf->qconf + lcore_id;
-	volatile bool *force_quit = conf->force_quit;
 	atomic_int *state = conf->state;
 	// uint32_t *l2fwd_dst_ports = conf->dst_ports;
 
@@ -108,28 +99,13 @@ void worker_loop_txonly(void *data)
 	CPU_ZERO(&cpuset);
 
 	// 获取当前线程 CPU 亲和性
-	int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-	if (s != 0) {
-		perror("pthread_getaffinity_np");
-		pthread_exit(NULL);
+	{
+		int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+		if (s != 0) {
+			perror("pthread_getaffinity_np");
+			pthread_exit(NULL);
+		}
 	}
-
-	/*
-	   printf("Thread running on CPUs: ");
-	   for (int i = 0; i < CPU_SETSIZE; i++) {
-	   if (CPU_ISSET(i, &cpuset)) {
-	   printf("%d ", i);
-	   }
-	   }
-	   printf("\n");
-	   */
-
-	/* XXX
-	   for (i = 0; i < qconf->n_rx_port; i++) {
-	   portid = qconf->rx_port_list[i];
-	   RTE_LOG(INFO, BLESS, " -- lcoreid=%u portid=%u\n", lcore_id, portid);
-	   }
-	   */
 
 	printf(" >>> %d pthread_barrier_wait(%p);\n", lcore_id, bconf->barrier);
 	pthread_barrier_wait(bconf->barrier);
@@ -139,9 +115,6 @@ void worker_loop_txonly(void *data)
 	struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(16384, name);
 
 	bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch + 1);
-
-	// struct rte_ring *ring = (struct rte_ring*)(pktmbuf_pool->pool_data);
-	// printf("size %u mask %u capacity %u\n", ring->size, ring->mask, ring->capacity);
 
 	uint64_t num = conf->num;
 	// printf("num %lu\n", num);
@@ -153,7 +126,6 @@ void worker_loop_txonly(void *data)
 		batch = num;
 	}
 	uint16_t nb_tx = batch;
-	// printf("[%s %d] lcore %d send %lu batch %u\n", __func__, __LINE__, lcore_id, size, batch);
 
 	portid = qconf->txp_id;
 	uint16_t qid = qconf->txq_id;
@@ -174,35 +146,48 @@ void worker_loop_txonly(void *data)
 		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
 	}
 
-	while (!*force_quit) {
+	uint64_t val = atomic_load_explicit(state, memory_order_acquire);
+	uint64_t i = 0;
+	while (val != STATE_EXIT) {
+		if (unlikely(val != STATE_RUNNING)) {
+			i = 0;
+			while (unlikely(val == STATE_STOPPED)) {
+				if (!i) {
+					printf("Detect STOPPED %d\n", qconf->txl_id);
+				}
+				i++;
+				rte_delay_ms(1000);
+				val = atomic_load_explicit(state, memory_order_acquire);
+			}
+			if (val == STATE_INIT) {
+				printf("Detect INIT %d\n", qconf->txl_id);
+				goto INIT;
+			} else if (val == STATE_EXIT) {
+				printf("Detect EXIT %d\n", qconf->txl_id);
+				goto EXIT;
+			}
+
+			if (val == STATE_RUNNING) {
+				printf("Detect START %d %d %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
+			}
+		}
+
 		if (unlikely(num <= 0)) {
+			printf("Finished: lcore_id %d lid %d pid %d qid %d\n", rte_lcore_id(),
+					qconf->txl_id, qconf->txp_id, qconf->txq_id);
 			break;
 		}
-		if (unlikely(atomic_load_explicit(state, memory_order_acquire) == STATE_STOPPED)) {
-			printf("Detect STOPPED\n");
-			rte_delay_ms(1000);
-		}
 
-		/*
-		 * TX burst queue
-		 */
-		// for (i = 0; i < qconf->n_rx_port; i++) {
-		// portid = l2fwd_dst_ports[qconf->rx_port_list[i]];
-		// rte_eth_macaddrs_get(portid, &bep.inner->src_addr, 1);
-		// TODO
-		// rte_eth_macaddr_get();
-		// sent = rte_eth_tx_buffer_flush(portid, 0, buffer);
 		int type = -1;
 
-		// srandom(rte_rdtsc());
 		for (int j = 0; j < nb_tx; j++) {
 			uint64_t tx_bytes = 0;
 			/* should this mbuf be a mutation? */
 			uint64_t tsc = rte_rdtsc();
 			tsc = tsc ^ (tsc >> 8);
 			enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
-			// if (1) {
-			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation && (tsc & 1023) < cnode->erroneous.ratio) {
+			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation &&
+					(tsc & 1023) < cnode->erroneous.ratio) {
 				int n = tsc % cnode->erroneous.n_mutation;
 				mutation_func func = cnode->erroneous.func[n];
 				int r = func((void**)&mbufs[j], 1, (void*)cnode);
@@ -220,8 +205,6 @@ void worker_loop_txonly(void *data)
 			}
 			rte_atomic64_inc(&(conf->stats[portid] + type)->tx_pkts);
 			rte_atomic64_add(&(conf->stats[portid] + type)->tx_bytes, tx_bytes);
-			// (conf->stats[portid] + type)->tx_pkts++;
-			// (conf->stats[portid] + type)->tx_bytes += tx_bytes;
 		}
 
 		/* FIXME stats of type */
@@ -243,7 +226,14 @@ void worker_loop_txonly(void *data)
 			// (conf->stats[portid] + type)->dropped_bytes += dropped_bytes;
 			rte_pktmbuf_free_bulk(&mbufs[sent], nb_tx - sent);
 		}
-		// rte_delay_ms(1);
-		// }
+
+		val = atomic_load_explicit(state, memory_order_acquire);
 	}
+
+
+INIT:
+	printf("core %d init\n", qconf->txl_id);
+
+EXIT:
+	printf("core %d exit\n", qconf->txl_id);
 }

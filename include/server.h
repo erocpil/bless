@@ -7,15 +7,13 @@
 #include <unistd.h> /* for sleep() */
 #include "civetweb.h"
 
-struct ws_user_data {
-	uint16_t listening_ports;
-	uint16_t num_threads;
-	uint16_t request_timeout_ms;
-	uint8_t enable_keep_alive;
-};
-
 #define STATS_JSON_MAX     8192
 #define STATS_METRIC_MAX   8192
+
+struct ws_user_data {
+	void *data;
+	void (*func)(void *data, size_t size);
+};
 
 struct stats_snapshot {
     uint64_t ts_ns;
@@ -31,6 +29,7 @@ struct mg_context *ws_server_start(void*);
 int ws_server_stop(struct mg_context *ctx);
 // int ws_broadcast(const char *msg);
 void ws_broadcast_stats();
+void ws_broadcast_log(char *log, size_t len);
 const struct stats_snapshot * stats_get_active(void);
 int stats_get_active_index(void);
 struct stats_snapshot * stats_get(int idx);
@@ -59,6 +58,7 @@ struct server_options_cfg {
 	struct civet_kv kv[SERVER_OPTS_MAX];              /* 每个 option 一项 */
 	const char *civet_opts[(SERVER_OPTS_MAX << 1) + 1];      /* key,value,...,NULL */
 	char *uri;
+	uint8_t daemonize;
 };
 
 /* YAML value -> cfg */

@@ -94,6 +94,7 @@ bless:
       other: [ toa ]
 
 server:
+  daemonize: yes
   service:
     websocket: /wsURL
     http:
@@ -101,7 +102,7 @@ server:
       - /api/stats
       - /metrics
   options:
-    listening_ports: 9000
+    listening_ports: 8000
     num_threads: 4
     enable_keep_alive: yes
     request_timeout_ms: 2000

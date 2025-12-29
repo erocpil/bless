@@ -2,7 +2,6 @@
 #include "worker.h"
 #include "metric.h"
 #include "server.h"
-#include "cJSON.h"
 
 struct bless_conf *bconf = NULL;
 
@@ -17,8 +16,6 @@ static uint32_t enabled_lcores = 0;
 uint64_t timer_period = 1; /* default period is 10 seconds */
 
 atomic_int g_state = STATE_INIT;
-
-static volatile bool force_quit;
 
 struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
@@ -99,113 +96,15 @@ static struct rte_eth_conf port_conf = {
 
 struct rte_mempool * l2fwd_pktmbuf_pool = NULL;
 
-#if 0
-/* Print out statistics on packets dropped */
-static void print_stats(struct port_statistics **port_statistics)
+void dpdk_generate_log(const char *str)
 {
-	uint64_t total_packets_tx_pkts = 0;
-	uint64_t total_packets_tx_bytes = 0;
-	uint64_t total_packets_rx = 0;
-	uint64_t total_packets_dropped_pkts = 0;
-	uint64_t total_packets_dropped_bytes = 0;
-	unsigned portid;
-	static uint64_t pps = 0;
-	static uint64_t bps = 0;
-
-	const char clr[] = { 27, '[', '2', 'J', '\0' };
-	const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
-
-	/* Clear screen and move to top left */
-	printf("%s%s", clr, topLeft);
-
-	printf("\nPort statistics ====================================");
-
-	for (portid = 0; portid < RTE_MAX_ETHPORTS; portid++) {
-		/* skip disabled ports */
-		if ((enabled_port_mask & (1 << portid)) == 0) {
-			// printf("\nskipped %d\n", portid);
-			continue;
-		}
-		if (!port_statistics[portid]) {
-			continue;
-		}
-		for (int i = 0; i < TYPE_MAX; i++) {
-			/*
-			   printf("\nStatistics for port %u ------------------------------"
-			   "\nPackets sent: %24"PRIu64
-			   "\nBytes sent: %24"PRIu64
-			   "\nPackets received: %20"PRIu64
-			   "\nPackets dropped: %21"PRIu64
-			   "\nBytes dropped: %21"PRIu64,
-			   portid,
-			   (port_statistics[portid] + i)->tx_pkts,
-			   (port_statistics[portid] + i)->tx_bytes,
-			   (port_statistics[portid] + i)->rx,
-			   (port_statistics[portid] + i)->dropped_pkts,
-			   (port_statistics[portid] + i)->dropped_bytes);
-			   */
-			total_packets_tx_pkts += rte_atomic64_read(&(port_statistics[portid] + i)->tx_pkts);
-			total_packets_tx_bytes += rte_atomic64_read(&(port_statistics[portid] + i)->tx_bytes);
-			total_packets_dropped_pkts += rte_atomic64_read(&(port_statistics[portid] + i)->dropped_pkts);
-			total_packets_dropped_bytes += rte_atomic64_read(&(port_statistics[portid] + i)->dropped_bytes);
-			total_packets_rx += rte_atomic64_read(&(port_statistics[portid] + i)->rx);
-		}
+	if (!str || !strlen(str)) {
+		return;
 	}
-	printf("\nAggregate statistics ==============================="
-			"\nTotal packets sent: %18"PRIu64
-			"\nTotal bytes sent: %18"PRIu64
-			"\nTotal packets received: %14"PRIu64
-			"\nTotal packets dropped: %15"PRIu64
-			"\nTotal bytes dropped: %15"PRIu64,
-			total_packets_tx_pkts, total_packets_tx_bytes,
-			total_packets_rx,
-			total_packets_dropped_pkts, total_packets_dropped_bytes);
-	printf("\n====================================================\n");
-	printf("PPS: %lu = %lu - %lu\n", total_packets_tx_pkts - pps, total_packets_tx_pkts, pps);
-	printf("bPS: %lu = (%lu - %lu) * 8\n", (total_packets_tx_bytes - bps) << 3 , total_packets_tx_bytes, bps);
-	pps = total_packets_tx_pkts;
-	bps = total_packets_tx_bytes;
-
-	fflush(stdout);
-}
-#endif
-
-char *metrics_to_json(uint16_t port_id, const char *log_text)
-{
-	struct rte_eth_stats stats;
-	cJSON *root = NULL;
-	cJSON *metric = NULL;
-	cJSON *log = NULL;
-	char *json_str = NULL;
-
-	if (rte_eth_stats_get(port_id, &stats) != 0) {
-		return NULL;
-	}
-
-	root = cJSON_CreateObject();
-	metric = cJSON_CreateObject();
-	log = cJSON_CreateObject();
-
-	/* metric */
-	cJSON_AddNumberToObject(metric, "ipps", stats.ipackets);
-	cJSON_AddNumberToObject(metric, "opps", stats.opackets);
-	cJSON_AddNumberToObject(metric, "ibytes", stats.ibytes);
-	cJSON_AddNumberToObject(metric, "obytes", stats.obytes);
-	cJSON_AddNumberToObject(metric, "imissed", stats.imissed);
-	cJSON_AddNumberToObject(metric, "rx_nombuf", stats.rx_nombuf);
-	cJSON_AddNumberToObject(metric, "ierrors", stats.ierrors);
-	cJSON_AddNumberToObject(metric, "oerrors", stats.oerrors);
-
-	/* log */
-	cJSON_AddStringToObject(log, "text", log_text ? log_text : "");
-
-	cJSON_AddItemToObject(root, "metric", metric);
-	cJSON_AddItemToObject(root, "log", log);
-
-	json_str = cJSON_PrintUnformatted(root);
-
-	cJSON_Delete(root);
-	return json_str;   /* 由调用方 free */
+	char *msg = encode_log_to_json(str);
+	/* 同步推送 WS */
+	ws_broadcast_log(msg, strlen(msg));
+	free(msg);
 }
 
 void dpdk_generate_stats(void)
@@ -216,7 +115,9 @@ void dpdk_generate_stats(void)
 
 	struct stats_snapshot *s = stats_get(inactive);
 
-	char *msg = encode_stats_to_json(enabled_port_mask, "");
+	char tmp[128];
+	sprintf(tmp, "log: %lu", rte_rdtsc());
+	char *msg = encode_stats_to_json(enabled_port_mask, tmp);
 	/* JSON */
 	s->json_len = snprintf(s->json, STATS_JSON_MAX, "%s\n", msg);
 	free(msg);
@@ -235,8 +136,7 @@ void dpdk_generate_stats(void)
 
 void main_loop(void *data)
 {
-	uint64_t prev_tsc = 0, diff_tsc = 0, cur_tsc = 0;
-	uint64_t timer_tsc;
+	uint64_t prev_tsc = 0, diff_tsc = 0, cur_tsc = 0, timer_tsc = 0;
 
 	unsigned int lcore_id = rte_lcore_id();
 	struct bless_conf *conf = (struct bless_conf*)data;
@@ -246,7 +146,7 @@ void main_loop(void *data)
 	printf("pthread_barrier_wait(&conf->barrier);");
 	pthread_barrier_wait(conf->barrier);
 
-	while (!force_quit) {
+	while (atomic_load_explicit(&g_state, memory_order_acquire) != STATE_EXIT) {
 		rte_delay_ms(100);
 		cur_tsc = rte_rdtsc();
 		diff_tsc = cur_tsc - prev_tsc;
@@ -577,7 +477,7 @@ static int parse_args(int argc, char **argv)
 				if (rte_ether_unformat_addr(optarg, &mc_inner->dst_addr) < 0) {
 					rte_exit(EXIT_FAILURE, "Invalid mac address.\n");
 				}
-				strncpy((char*)mc_inner->str.dst_addr, optarg, 18);
+				strncpy((char*)mc_inner->str.dst_addr, optarg, 17);
 				bless_print_mac(&mc_inner->dst_addr);
 				printf("%s\n", mc_inner->str.dst_addr);
 				break;
@@ -769,12 +669,12 @@ static void check_all_ports_link_status(uint32_t port_mask)
 	printf("\nChecking link status");
 	fflush(stdout);
 	for (count = 0; count <= MAX_CHECK_TIME; count++) {
-		if (force_quit) {
+		if (atomic_load_explicit(&g_state, memory_order_acquire) == STATE_EXIT) {
 			return;
 		}
 		all_ports_up = 1;
 		RTE_ETH_FOREACH_DEV(portid) {
-			if (force_quit) {
+			if (atomic_load_explicit(&g_state, memory_order_acquire) != STATE_EXIT) {
 				return;
 			}
 			if ((port_mask & (1u << portid)) == 0) {
@@ -825,9 +725,7 @@ static void check_all_ports_link_status(uint32_t port_mask)
 static void signal_handler(int signum)
 {
 	if (signum == SIGINT || signum == SIGTERM) {
-		printf("\n\nSignal %d received, preparing to exit...\n",
-				signum);
-		force_quit = true;
+		printf("\n\nSignal %d received, preparing to exit...\n", signum);
 		atomic_store(&g_state, STATE_EXIT);
 	}
 }
@@ -859,7 +757,7 @@ int mbuf_dynfield_init()
 		},
 	};
 
-	for (int i = 0; i < NELEMS(mbuf_bless_fields); i++) {
+	for (int i = 0; i < (int)NELEMS(mbuf_bless_fields); i++) {
 		if (mbuf_bless_fields[i].size == 0) { continue; }
 		const struct rte_mbuf_dynfield *md = &mbuf_bless_fields[i];
 		int offset = rte_mbuf_dynfield_register(md);
@@ -878,10 +776,54 @@ int mbuf_dynfield_init()
 	return 0;
 }
 
+const char *ws_json_get_string(cJSON *obj, const char *key)
+{
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, key);
+    return cJSON_IsString(item) ? item->valuestring : NULL;
+}
+
+void ws_user_func(void *data, size_t size)
+{
+	printf("8<\n");
+	printf("[%s %d] %s %lu\n", __func__, __LINE__, (char*)data, size);
+	printf("\n>8\n");
+
+	cJSON *root = cJSON_Parse(data);
+	if (!root) {
+		printf("JSON parse error\n");
+		return;
+	}
+	const char *cmd = ws_json_get_string(root, "cmd");
+	if (cmd) {
+		printf("cmd = %s\n", cmd);
+		if (strcmp(cmd, "start") == 0) {
+			printf("Received START command\n");
+			atomic_store(&g_state, STATE_RUNNING);
+			cmd = "started";
+		} else if (strcmp(cmd, "stop") == 0) {
+			printf("Received STOP command\n");
+			atomic_store(&g_state, STATE_STOPPED);
+			cmd = "stopped";
+		} else if (strcmp(cmd, "init") == 0) {
+			printf("Received INIT command\n");
+			// TODO reinit
+			// atomic_store(&g_state, STATE_INIT);
+			cmd = "inited";
+		} else if (strcmp(cmd, "exit") == 0) {
+			printf("Received EXIT command\n");
+			atomic_store(&g_state, STATE_EXIT);
+			cmd = "exited";
+		}
+	} else {
+		printf("cmd missing or not a string\n");
+		cmd = "cmd missing or not a string";
+	}
+	cJSON_Delete(root);
+	dpdk_generate_log(cmd);
+}
+
 int main(int argc, char **argv)
 {
-	daemon(1, 1);
-
 	int targc = argc;
 	char **targv = argv;
 	Node *conf_root = NULL;
@@ -895,6 +837,7 @@ int main(int argc, char **argv)
 	}
 
 	conf_root = config_init(f);
+
 	config_parse_dpdk(conf_root, &targc, &targv);
 	if (!conf_root) {
 		rte_exit(EXIT_FAILURE, "Cannot parse %s\n", f);
@@ -904,7 +847,7 @@ int main(int argc, char **argv)
 		printf("'%s' ", targv[i]);
 	}
 	printf("\n");
-	bconf = bless_init(targc, targv);
+	bconf = bless_init();
 	if (!bconf) {
 		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
 	}
@@ -913,7 +856,15 @@ int main(int argc, char **argv)
 	if (config_parse_server(conf_root, &cfg) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
 	}
-	struct mg_context *ctx = ws_server_start(&cfg);
+	if (cfg.daemonize) {
+		daemon(1, 1);
+	}
+
+	struct ws_user_data wsud = {
+		.data = (void*)&cfg,
+		.func = ws_user_func,
+	};
+	struct mg_context *ctx = ws_server_start(&wsud);
 
 	int ret = rte_eal_init(targc, targv);
 	if (ret < 0) {
@@ -939,7 +890,6 @@ int main(int argc, char **argv)
 
 	register_my_metrics();
 
-	force_quit = false;
 	atomic_store(&g_state, STATE_RUNNING);
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
@@ -1000,7 +950,7 @@ int main(int argc, char **argv)
 		uint32_t mid = rte_get_main_lcore();
 		printf("main %d\n", mid);
 		uint32_t lid = 0;
-		int nlcore = 0;
+		unsigned int nlcore = 0;
 		RTE_LCORE_FOREACH_WORKER(lid) {
 			printf("worker %d\n", lid);
 			nlcore += ROLE_RTE == rte_eal_lcore_role(lid);
@@ -1215,7 +1165,7 @@ int main(int argc, char **argv)
 		fflush(stdout);
 		txq_conf = dev_info.default_txconf;
 		txq_conf.offloads = local_port_conf.txmode.offloads;
-		for (int i = 0; i < rxtxq_per_lcore; i++) {
+		for (uint16_t i = 0; i < rxtxq_per_lcore; i++) {
 			ret = rte_eth_tx_queue_setup(portid, i, nb_txd,
 					rte_eth_dev_socket_id(portid), &txq_conf);
 			if (ret < 0) {
@@ -1321,7 +1271,6 @@ int main(int argc, char **argv)
 	bconf->stats = rte_malloc(NULL, sizeof(bconf->stats) * RTE_MAX_ETHPORTS, 0);
 	// printf("port_statistics %p\n", port_statistics);
 	bconf->dst_ports = l2fwd_dst_ports;
-	bconf->force_quit = &force_quit;
 	bconf->state = &g_state;
 	printf("g_state %p\n", &g_state);
 	bconf->timer_period = timer_period;
@@ -1333,8 +1282,6 @@ int main(int argc, char **argv)
 	printf("\n\n >> %d nb_lcores %d\n\n", rte_lcore_id(), nb_lcores + 1);
 
 	// DISTRIBUTION_DUMP(bconf->dist);
-
-	// printf("Bless is waiting ...\n");
 
 	ret = 0;
 	/* launch per-lcore init on every lcore */
