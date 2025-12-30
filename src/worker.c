@@ -107,7 +107,7 @@ void worker_loop_txonly(void *data)
 		}
 	}
 
-	printf(" >>> %d pthread_barrier_wait(%p);\n", lcore_id, bconf->barrier);
+	printf("[%s %d] >>> %d pthread_barrier_wait(%p);\n", __func__, __LINE__, lcore_id, bconf->barrier);
 	pthread_barrier_wait(bconf->barrier);
 
 	sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool",

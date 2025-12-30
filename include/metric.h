@@ -14,6 +14,7 @@
 // #include "define.h"
 
 char * encode_all_ports_json(uint32_t port_mask);
+char * encode_cmdReply_to_json(const char *reply);
 char * encode_log_to_json(const char *log_text);
 char * encode_stats_to_json(uint32_t port_mask, char *log_text);
 size_t encode_stats_to_text(uint32_t port_mask, char *msg, size_t len);

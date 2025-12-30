@@ -96,12 +96,25 @@ static struct rte_eth_conf port_conf = {
 
 struct rte_mempool * l2fwd_pktmbuf_pool = NULL;
 
+void dpdk_generate_cmdReply(const char *str)
+{
+	if (!str || !strlen(str)) {
+		return;
+	}
+	char *reply = encode_cmdReply_to_json(str);
+	printf("cmdReply %s\n", reply);
+	/* 同步推送 WS */
+	ws_broadcast_log(reply, strlen(reply));
+	free(reply);
+}
+
 void dpdk_generate_log(const char *str)
 {
 	if (!str || !strlen(str)) {
 		return;
 	}
 	char *msg = encode_log_to_json(str);
+	printf("msg %s\n", msg);
 	/* 同步推送 WS */
 	ws_broadcast_log(msg, strlen(msg));
 	free(msg);
@@ -143,30 +156,33 @@ void main_loop(void *data)
 
 	uint64_t timer_period = conf->timer_period;
 
-	printf("pthread_barrier_wait(&conf->barrier);");
+	printf("[%s %d] pthread_barrier_wait(&conf->barrier);", __func__, __LINE__);
 	pthread_barrier_wait(conf->barrier);
 
-	while (atomic_load_explicit(&g_state, memory_order_acquire) != STATE_EXIT) {
+	static uint64_t i = 0;
+	uint64_t val = 0;
+	while ((val = atomic_load_explicit(&g_state, memory_order_acquire)) != STATE_EXIT) {
 		rte_delay_ms(100);
 		cur_tsc = rte_rdtsc();
 		diff_tsc = cur_tsc - prev_tsc;
 		timer_tsc += diff_tsc;
+		prev_tsc = cur_tsc;
 		/* if timer has reached its timeout */
-
 		if (unlikely(timer_tsc >= timer_period * 1)) {
 			/* do this only on main core */
 			if (lcore_id == rte_get_main_lcore()) {
 				timer_tsc = 0;
-				dpdk_generate_stats();
-				/*
-				   char *msg = encode_stats_to_json(enabled_port_mask, "");
-				   ws_broadcast(msg);
-				   free(msg);
-				   */
-
+				if (val == STATE_STOPPED) {
+					if (i) {
+						dpdk_generate_stats();
+					}
+					i = 0;
+				} else {
+					dpdk_generate_stats();
+					i++;
+				}
 			}
 		}
-		prev_tsc = cur_tsc;
 	}
 }
 
@@ -798,7 +814,7 @@ void ws_user_func(void *data, size_t size)
 
 	cJSON *root = cJSON_Parse(data);
 	if (!root) {
-		printf("JSON parse error\n");
+		printf("[%s %d] JSON parse error\n", __func__, __LINE__);
 		return;
 	}
 	const char *cmd = ws_json_get_string(root, "cmd");
@@ -827,7 +843,7 @@ void ws_user_func(void *data, size_t size)
 		cmd = "cmd missing or not a string";
 	}
 	cJSON_Delete(root);
-	dpdk_generate_log(cmd);
+	dpdk_generate_cmdReply(cmd);
 }
 
 int main(int argc, char **argv)
@@ -898,10 +914,6 @@ int main(int argc, char **argv)
 
 	register_my_metrics();
 
-	atomic_store(&g_state, bconf->auto_start ? STATE_RUNNING : STATE_INIT);
-	signal(SIGINT, signal_handler);
-	signal(SIGTERM, signal_handler);
-
 	/* parse application arguments (after the EAL ones) */
 	ret = parse_args(targc, targv);
 	if (ret < 0) {
@@ -909,17 +921,12 @@ int main(int argc, char **argv)
 	}
 	/* >8 End of init EAL. */
 
+	atomic_store(&g_state, bconf->auto_start ? STATE_RUNNING : STATE_INIT);
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
+
 	if (conf_root && !bconf->cnode) {
 		bconf->cnode = config_parse_bless(conf_root);
-		/*
-		   if (bconf->cnode) {
-		   printf("\n\n\ncnode %p\n\n\n\n", bconf->cnode);
-		   for (int i = 0; i < bconf->cnode->erroneous.n_mutation; i++) {
-		   printf("[%s %d] %d %p\n", __func__, __LINE__, i, bconf->cnode->erroneous.func[i]);
-		   }
-		   getchar();
-		   }
-		   */
 	}
 
 	printf("MAC updating %s\n", mac_updating ? "enabled" : "disabled");

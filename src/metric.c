@@ -141,6 +141,17 @@ static cJSON * encode_port(uint16_t portid)
 	return port;
 }
 
+char * encode_cmdReply_to_json(const char *reply)
+{
+	cJSON *root = cJSON_CreateObject();
+
+	cJSON_AddStringToObject(root, "cmdReply", reply ? reply : "null");
+	char *out = cJSON_PrintUnformatted(root);
+	cJSON_Delete(root);
+
+	return out;   /* caller free() */
+}
+
 char * encode_log_to_json(const char *log_text)
 {
 	cJSON *root = cJSON_CreateObject();

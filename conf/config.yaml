@@ -25,12 +25,12 @@ dpdk:
   file-prefix: null # bless
 
 injector:
-  p: 0x3
-  q: 2
+  p: 0x1
+  q: 1
   P:
   T: 1
   no-mac-updating:
-  auto-start: false
+  auto-start: true
   portmap: null # (0, 1)
   batch: 512
   num: -1
