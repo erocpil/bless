@@ -319,6 +319,7 @@ static const char short_options[] =
 
 #define CMD_LINE_OPT_NO_MAC_UPDATING "no-mac-updating"
 #define CMD_LINE_OPT_PORTMAP_CONFIG "portmap"
+#define CMD_LINE_OPT_AUTO_START "auto-start"
 #define CMD_LINE_OPT_NUM "num"
 #define CMD_LINE_OPT_BATCH "batch"
 #define CMD_LINE_OPT_ARP "arp"
@@ -340,6 +341,7 @@ enum {
 	 * conflict with short options */
 	CMD_LINE_OPT_NO_MAC_UPDATING_NUM = 256,
 	CMD_LINE_OPT_PORTMAP_NUM,
+	CMD_LINE_OPT_AUTO_START_NUM,
 	CMD_LINE_OPT_NUM_NUM,
 	CMD_LINE_OPT_BATCH_NUM,
 	CMD_LINE_OPT_ARP_NUM,
@@ -358,6 +360,7 @@ enum {
 static const struct option lgopts[] = {
 	{ CMD_LINE_OPT_NO_MAC_UPDATING, no_argument, 0, CMD_LINE_OPT_NO_MAC_UPDATING_NUM },
 	{ CMD_LINE_OPT_PORTMAP_CONFIG, 1, 0, CMD_LINE_OPT_PORTMAP_NUM },
+	{ CMD_LINE_OPT_AUTO_START, 1, 0, CMD_LINE_OPT_AUTO_START_NUM },
 	{ CMD_LINE_OPT_NUM, 1, 0, CMD_LINE_OPT_NUM_NUM },
 	{ CMD_LINE_OPT_BATCH, 1, 0, CMD_LINE_OPT_BATCH_NUM },
 	{ CMD_LINE_OPT_ARP, 1, 0, CMD_LINE_OPT_ARP_NUM },
@@ -468,7 +471,12 @@ static int parse_args(int argc, char **argv)
 					return -1;
 				}
 				break;
-
+			case CMD_LINE_OPT_AUTO_START_NUM:
+				if (optarg && 0 == strcmp(optarg, "true")) {
+					bconf->auto_start = 1;
+				}
+				printf("auto start %d\n", bconf->auto_start);
+				break;
 			case CMD_LINE_OPT_NO_MAC_UPDATING_NUM:
 				mac_updating = 0;
 				break;
@@ -784,9 +792,9 @@ const char *ws_json_get_string(cJSON *obj, const char *key)
 
 void ws_user_func(void *data, size_t size)
 {
-	printf("8<\n");
-	printf("[%s %d] %s %lu\n", __func__, __LINE__, (char*)data, size);
-	printf("\n>8\n");
+	if (!size) {
+		return;
+	}
 
 	cJSON *root = cJSON_Parse(data);
 	if (!root) {
@@ -808,7 +816,7 @@ void ws_user_func(void *data, size_t size)
 			printf("Received INIT command\n");
 			// TODO reinit
 			// atomic_store(&g_state, STATE_INIT);
-			cmd = "inited";
+			cmd = "already inited";
 		} else if (strcmp(cmd, "exit") == 0) {
 			printf("Received EXIT command\n");
 			atomic_store(&g_state, STATE_EXIT);
@@ -890,7 +898,7 @@ int main(int argc, char **argv)
 
 	register_my_metrics();
 
-	atomic_store(&g_state, STATE_RUNNING);
+	atomic_store(&g_state, bconf->auto_start ? STATE_RUNNING : STATE_INIT);
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
 

@@ -571,12 +571,12 @@
       "-x",
       "c",
       "-o",
-      "/tmp/civetweb-145bf7.o",
+      "/tmp/civetweb-10d7b7.o",
       "3rd/civetweb/src/civetweb.c"
     ],
     "directory": "/root/src/bless/src",
     "file": "/root/src/bless/src/3rd/civetweb/src/civetweb.c",
-    "output": "/tmp/civetweb-145bf7.o"
+    "output": "/tmp/civetweb-10d7b7.o"
   },
   {
     "arguments": [
@@ -871,11 +871,11 @@
       "-x",
       "c",
       "-o",
-      "/tmp/cJSON-b22200.o",
+      "/tmp/cJSON-f7fab5.o",
       "3rd/cJSON/cJSON.c"
     ],
     "directory": "/root/src/bless/src",
     "file": "/root/src/bless/src/3rd/cJSON/cJSON.c",
-    "output": "/tmp/cJSON-b22200.o"
+    "output": "/tmp/cJSON-f7fab5.o"
   }
 ]

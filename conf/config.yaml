@@ -30,6 +30,7 @@ injector:
   P:
   T: 1
   no-mac-updating:
+  auto-start: false
   portmap: null # (0, 1)
   batch: 512
   num: -1

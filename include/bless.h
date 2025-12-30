@@ -174,6 +174,7 @@ struct bless_conf {
 	Cnode *cnode;
 
 	int64_t num;
+	uint8_t auto_start;
 	uint16_t batch;
 	struct distribution *dist;
 	struct dist_ratio dist_ratio;

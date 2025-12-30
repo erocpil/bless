@@ -54,7 +54,7 @@ else
 	CFLAGS += -O2 -DNDEBUG
 endif
 
-LDFLAGS := $(DPDK_LDFLAGS) -lyaml -lcrypto -L$(O)/lib -lcivetweb -lcjson
+LDFLAGS := $(DPDK_LDFLAGS) -lyaml -lcrypto
 
 # ============================================================
 # Verbose control

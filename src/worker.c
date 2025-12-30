@@ -152,21 +152,23 @@ void worker_loop_txonly(void *data)
 		if (unlikely(val != STATE_RUNNING)) {
 			i = 0;
 			while (unlikely(val == STATE_STOPPED)) {
-				if (!i) {
+				if (!i++) {
 					printf("Detect STOPPED %d\n", qconf->txl_id);
 				}
-				i++;
 				rte_delay_ms(1000);
 				val = atomic_load_explicit(state, memory_order_acquire);
 			}
-			if (val == STATE_INIT) {
-				printf("Detect INIT %d\n", qconf->txl_id);
-				goto INIT;
-			} else if (val == STATE_EXIT) {
+			while (unlikely(val == STATE_INIT)) {
+				if (!i++) {
+					printf("Detect INIT %d\n", qconf->txl_id);
+				}
+				rte_delay_ms(1000);
+				val = atomic_load_explicit(state, memory_order_acquire);
+			}
+			if (val == STATE_EXIT) {
 				printf("Detect EXIT %d\n", qconf->txl_id);
 				goto EXIT;
 			}
-
 			if (val == STATE_RUNNING) {
 				printf("Detect START %d %d %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
 			}
@@ -229,10 +231,6 @@ void worker_loop_txonly(void *data)
 
 		val = atomic_load_explicit(state, memory_order_acquire);
 	}
-
-
-INIT:
-	printf("core %d init\n", qconf->txl_id);
 
 EXIT:
 	printf("core %d exit\n", qconf->txl_id);

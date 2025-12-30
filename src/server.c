@@ -237,7 +237,6 @@ void ws_broadcast_stats(void)
 void ws_broadcast_log(char *log, size_t len)
 {
 	pthread_mutex_lock(&mgc_lock);
-	printf("%s\n", log);
 	for (int i = 0; i < n_mgc; i++) {
 		mg_websocket_write(
 				(struct mg_connection *)mgc[i],
