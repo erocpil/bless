@@ -341,6 +341,7 @@ static const char short_options[] =
 #define CMD_LINE_OPT_AUTO_START "auto-start"
 #define CMD_LINE_OPT_NUM "num"
 #define CMD_LINE_OPT_BATCH "batch"
+#define CMD_LINE_OPT_BATCH_DELAY_US "batch-delay-us"
 #define CMD_LINE_OPT_ARP "arp"
 #define CMD_LINE_OPT_ICMP "icmp"
 #define CMD_LINE_OPT_TCP "tcp"
@@ -363,6 +364,7 @@ enum {
 	CMD_LINE_OPT_AUTO_START_NUM,
 	CMD_LINE_OPT_NUM_NUM,
 	CMD_LINE_OPT_BATCH_NUM,
+	CMD_LINE_OPT_BATCH_DELAY_US_NUM,
 	CMD_LINE_OPT_ARP_NUM,
 	CMD_LINE_OPT_ICMP_NUM,
 	CMD_LINE_OPT_TCP_NUM,
@@ -382,6 +384,7 @@ static const struct option lgopts[] = {
 	{ CMD_LINE_OPT_AUTO_START, 1, 0, CMD_LINE_OPT_AUTO_START_NUM },
 	{ CMD_LINE_OPT_NUM, 1, 0, CMD_LINE_OPT_NUM_NUM },
 	{ CMD_LINE_OPT_BATCH, 1, 0, CMD_LINE_OPT_BATCH_NUM },
+	{ CMD_LINE_OPT_BATCH_DELAY_US, 1, 0, CMD_LINE_OPT_BATCH_DELAY_US_NUM },
 	{ CMD_LINE_OPT_ARP, 1, 0, CMD_LINE_OPT_ARP_NUM },
 	{ CMD_LINE_OPT_ICMP, 1, 0, CMD_LINE_OPT_ICMP_NUM },
 	{ CMD_LINE_OPT_TCP, 1, 0, CMD_LINE_OPT_TCP_NUM },
@@ -466,6 +469,10 @@ static int parse_args(int argc, char **argv)
 			case CMD_LINE_OPT_BATCH_NUM:
 				bconf->batch = optarg ? atoi(optarg) : 256;
 				printf("batch %s %d %d\n", optarg, atoi(optarg), bconf->batch);
+				break;
+			case CMD_LINE_OPT_BATCH_DELAY_US_NUM:
+				bconf->batch_delay_us = optarg ? atoi(optarg) : 0;
+				printf("batch delay us %s %d %d\n", optarg, atoi(optarg), bconf->batch);
 				break;
 			case CMD_LINE_OPT_ARP_NUM:
 				ratio.weight[TYPE_ARP] = bless_parse_type(TYPE_ARP, optarg);

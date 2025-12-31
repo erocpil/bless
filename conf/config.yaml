@@ -33,6 +33,7 @@ injector:
   auto-start: true
   portmap: null # (0, 1)
   batch: 512
+  batch-delay-us: 1500
   num: -1
   arp: 0
   icmp: 0

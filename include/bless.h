@@ -176,6 +176,7 @@ struct bless_conf {
 	int64_t num;
 	uint8_t auto_start;
 	uint16_t batch;
+	uint64_t batch_delay_us;
 	struct distribution *dist;
 	struct dist_ratio dist_ratio;
 

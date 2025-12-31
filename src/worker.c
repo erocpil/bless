@@ -133,6 +133,7 @@ void worker_loop_txonly(void *data)
 
 	uint64_t num = conf->num;
 	uint16_t batch = bconf->batch;
+	uint64_t batch_delay_us = bconf->batch_delay_us;
 	if (batch > 2048) {
 		batch = 2048;
 		printf("batch -> 2048\n");
@@ -246,6 +247,9 @@ void worker_loop_txonly(void *data)
 			rte_pktmbuf_free_bulk(&mbufs[sent], nb_tx - sent);
 		}
 
+		if (batch_delay_us) {
+			rte_delay_us(batch_delay_us);
+		}
 		val = atomic_load_explicit(state, memory_order_acquire);
 	}
 
