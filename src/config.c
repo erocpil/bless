@@ -512,7 +512,7 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 	}
 
 	path = "daemonize";
-	Node *node = find_by_path(root, path);
+	Node *node = find_by_path(system_node, path);
 	if (node) {
 		if (NODE_SCALAR == node->type && node->value && 0 == strcmp(node->value, "true")) {
 			cfg->daemonize = 1;
