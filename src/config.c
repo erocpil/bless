@@ -496,14 +496,47 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 	return i;
 }
 
+int config_parse_system(Node *root, struct system_cfg *cfg)
+{
+	system_set_defaults(cfg);
+
+	if (!cfg) {
+		return -1;
+	}
+
+	char *path = "system";
+	Node *system_node = find_by_path(root, path);
+	if (!system_node) {
+		printf("No system found\n");
+		return -1;
+	}
+
+	path = "daemonize";
+	Node *node = find_by_path(root, path);
+	if (node) {
+		if (NODE_SCALAR == node->type && node->value && 0 == strcmp(node->value, "true")) {
+			cfg->daemonize = 1;
+		}
+	}
+	printf("system daemonize: %s\n", cfg->daemonize ? "yes" : "no");
+
+	if (config_parse_server(system_node, &cfg->srvcfg) < 0) {
+		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
+	}
+
+	return 0;
+}
+
 int config_parse_server(Node *root, struct server_options_cfg *cfg)
 {
-	if (!cfg) return -1;
-
 	/* 1. defaults */
 	server_options_set_defaults(cfg);
 
-	char *path = "server.options";
+	if (!cfg) {
+		return -1;
+	}
+
+	char *path = "server";
 	Node *node = find_by_path(root, path);
 	if (!node) {
 		printf("No server found\n");
@@ -560,7 +593,7 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 	if (node) {
 		path = "server.service.websocket";
 		node = find_by_path(root, path);
-		if (NODE_SCALAR == node->type) {
+		if (node && NODE_SCALAR == node->type) {
 			printf("%s %s\n", path, node->value);
 			int len = strlen(node->value);
 			if (len > 0) {
@@ -572,7 +605,7 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 		}
 		path = "server.service.http";
 		node = find_by_path(root, path);
-		if (NODE_SEQUENCE == node->type) {
+		if (node && NODE_SEQUENCE == node->type) {
 			printf("%s:\n", path);
 			for (Node *n = node->child; n; n = n->next) {
 				// TODO
@@ -582,18 +615,6 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 	} else {
 		printf("No server service found, use default\n");
 	}
-
-	cfg->daemonize = 0;
-	path = "server.daemonize";
-	node = find_by_path(root, path);
-	if (node) {
-		if (NODE_SCALAR == node->type) {
-			if (0 == strcmp(node->value, "yes")) {
-				cfg->daemonize = 1;
-			}
-		}
-	}
-	printf("server daemonize: %s\n", cfg->daemonize ? "yes" : "no");
 
 	return 0;
 }

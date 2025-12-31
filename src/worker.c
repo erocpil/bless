@@ -2,7 +2,7 @@
 
 void worker_loop_txonly(void *data)
 {
-	struct rte_mbuf *mbufs[1024];
+	struct rte_mbuf **mbufs = NULL;
 	unsigned lcore_id;
 	uint16_t portid = 0;
 	struct lcore_queue_conf *qconf;
@@ -29,7 +29,7 @@ void worker_loop_txonly(void *data)
 	dsize = bconf->dist->capacity;
 
 	conf->dist = rte_malloc(NULL, sizeof(struct distribution) + sizeof(uint8_t) * dsize, 0);
-	if (!conf->dist) {
+	if (unlikely(!conf->dist)) {
 		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(distribution)\n",
 				__func__, __LINE__);
 	}
@@ -37,7 +37,7 @@ void worker_loop_txonly(void *data)
 	memcpy(conf, bconf, offsetof(struct bless_conf, dist_ratio));
 	struct distribution *dist = conf->dist;
 	conf->qconf = rte_malloc(NULL, sizeof(struct lcore_queue_conf), 0);
-	if (!conf->qconf) {
+	if (unlikely(!conf->qconf)) {
 		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(qconf)\n",
 				__func__, __LINE__);
 	}
@@ -91,47 +91,60 @@ void worker_loop_txonly(void *data)
 	   }
 	   */
 
-	RTE_LOG(INFO, BLESS, "entering worker loop %s: pid %d tid %d self %lu lcore %d port %d txq %d\n", name,
-			getpid(), rte_gettid(), (unsigned long)rte_thread_self().opaque_id,
+	RTE_LOG(INFO, BLESS, "entering worker loop %s: lid %d pid %d tid %d self %lu lcore %d port %d txq %d\n",
+			name, lcore_id, getpid(), rte_gettid(), (unsigned long)rte_thread_self().opaque_id,
 			qconf->txl_id, qconf->txp_id, qconf->txq_id);
-
-	cpu_set_t cpuset;
-	CPU_ZERO(&cpuset);
 
 	// 获取当前线程 CPU 亲和性
 	{
+		cpu_set_t cpuset;
+		CPU_ZERO(&cpuset);
 		int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 		if (s != 0) {
 			perror("pthread_getaffinity_np");
 			pthread_exit(NULL);
 		}
+		printf("cpu set: ");
+		for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+			if (CPU_ISSET(cpu, &cpuset)) {
+				printf("%d ", cpu);
+			}
+		}
+		printf("\n");
 	}
-
-	printf("[%s %d] >>> %d pthread_barrier_wait(%p);\n", __func__, __LINE__, lcore_id, bconf->barrier);
-	pthread_barrier_wait(bconf->barrier);
 
 	sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool",
 			qconf->txl_id, qconf->txp_id, qconf->txq_id);
-	struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(16384, name);
 
-	bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch + 1);
+	mbufs = rte_malloc(NULL, conf->batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
+	if (unlikely(!mbufs)) {
+		rte_exit(EXIT_FAILURE, "mbufs alloc failed");
+	}
+
+	struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
+
+	if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
+		printf("bless_alloc_mbufs() failed\n");
+	}
+
+	printf("cpu=%d lcore=%u lid=%d pid=%d qid=%d tid=%lu\n", sched_getcpu(), rte_lcore_id(),
+			qconf->txp_id, qconf->txq_id, qconf->txl_id, pthread_self());
+	assert(qconf->txl_id == rte_lcore_id());
 
 	uint64_t num = conf->num;
-	// printf("num %lu\n", num);
 	uint16_t batch = bconf->batch;
-	if (batch > 1024) {
-		batch = 1024;
+	if (batch > 2048) {
+		batch = 2048;
+		printf("batch -> 2048\n");
 	}
 	if (batch > num) {
 		batch = num;
 	}
 	uint16_t nb_tx = batch;
+	printf("num %lu batch %u\n", num, batch);
 
 	portid = qconf->txp_id;
 	uint16_t qid = qconf->txq_id;
-	printf("lcore_id %d lid %d pid %d qid %d\n", rte_lcore_id(),
-			qconf->txl_id, qconf->txp_id, qconf->txq_id);
-	assert(qconf->txl_id == rte_lcore_id());
 
 	/* check if src mac address is provided */
 	if (!cnode->ether.n_src) {
@@ -145,6 +158,10 @@ void worker_loop_txonly(void *data)
 		printf("injector vxlan will use local port mac address:\n");
 		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
 	}
+
+	printf("[%s %d] >>> %d pthread_barrier_wait(%p);\n",
+			__func__, __LINE__, lcore_id, bconf->barrier);
+	pthread_barrier_wait(bconf->barrier);
 
 	uint64_t val = atomic_load_explicit(state, memory_order_acquire);
 	uint64_t i = 0;

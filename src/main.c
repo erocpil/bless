@@ -2,6 +2,7 @@
 #include "worker.h"
 #include "metric.h"
 #include "server.h"
+#include "system.h"
 
 struct bless_conf *bconf = NULL;
 
@@ -156,6 +157,8 @@ void main_loop(void *data)
 
 	uint64_t timer_period = conf->timer_period;
 
+	printf("lcore=%u cpu=%d\n", rte_lcore_id(), sched_getcpu());
+
 	printf("[%s %d] pthread_barrier_wait(&conf->barrier);", __func__, __LINE__);
 	pthread_barrier_wait(conf->barrier);
 
@@ -189,13 +192,13 @@ void main_loop(void *data)
 static int bless_launch_one_lcore(void *conf)
 {
 	unsigned int lcore_id = rte_lcore_id();
-	printf("lcore %d\n", lcore_id);
 
 	if (lcore_id == rte_get_main_lcore()) {
+		printf("main lcore %d\n", lcore_id);
 		main_loop((void*)conf);
 	} else {
 		if (!lcore_queue_conf[lcore_id].enabled) {
-			// printf("skip unused lcore %d\n", lcore_id);
+			printf("skip unused lcore %d\n", lcore_id);
 			return 0;
 		}
 		printf("lcore %d enable %d lid %d pid %d qid %d\n", lcore_id,
@@ -462,6 +465,7 @@ static int parse_args(int argc, char **argv)
 				break;
 			case CMD_LINE_OPT_BATCH_NUM:
 				bconf->batch = optarg ? atoi(optarg) : 256;
+				printf("batch %s %d %d\n", optarg, atoi(optarg), bconf->batch);
 				break;
 			case CMD_LINE_OPT_ARP_NUM:
 				ratio.weight[TYPE_ARP] = bless_parse_type(TYPE_ARP, optarg);
@@ -802,8 +806,8 @@ int mbuf_dynfield_init()
 
 const char *ws_json_get_string(cJSON *obj, const char *key)
 {
-    cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, key);
-    return cJSON_IsString(item) ? item->valuestring : NULL;
+	cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, key);
+	return cJSON_IsString(item) ? item->valuestring : NULL;
 }
 
 void ws_user_func(void *data, size_t size)
@@ -876,16 +880,16 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
 	}
 
-	struct server_options_cfg cfg;
-	if (config_parse_server(conf_root, &cfg) < 0) {
+	struct system_cfg syscfg;
+	if (config_parse_system(conf_root, &syscfg) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
 	}
-	if (cfg.daemonize) {
+	if (syscfg.daemonize) {
 		daemon(1, 1);
 	}
 
 	struct ws_user_data wsud = {
-		.data = (void*)&cfg,
+		.data = (void*)&syscfg.srvcfg,
 		.func = ws_user_func,
 	};
 	struct mg_context *ctx = ws_server_start(&wsud);

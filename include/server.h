@@ -58,7 +58,6 @@ struct server_options_cfg {
 	struct civet_kv kv[SERVER_OPTS_MAX];              /* 每个 option 一项 */
 	const char *civet_opts[(SERVER_OPTS_MAX << 1) + 1];      /* key,value,...,NULL */
 	char *uri;
-	uint8_t daemonize;
 };
 
 /* YAML value -> cfg */

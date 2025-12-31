@@ -7,7 +7,7 @@
 # --erroneous=...
 
 dpdk:
-  main-lcore: 39
+  main-lcore: 0
   l: 0-39
   n: 4
   lcores: null
@@ -94,19 +94,20 @@ bless:
       udp: [ len, cksum, vxlan ] # 22, 23, 24
       other: [ toa ]
 
-server:
-  daemonize: yes
-  service:
-    websocket: /wsURL
-    http:
-      - /api/control
-      - /api/stats
-      - /metrics
-  options:
-    listening_ports: 8000
-    num_threads: 4
-    enable_keep_alive: yes
-    request_timeout_ms: 2000
-    document_root: /root/src/bless/www
-    access_log_file: /root/src/bless/log/access.log
-    error_log_file: /root/src/bless/log/error.log
+system:
+  daemonize: true
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: 8000
+      num_threads: 4
+      enable_keep_alive: yes
+      request_timeout_ms: 2000
+      document_root: /root/src/bless/www
+      access_log_file: /root/src/bless/log/access.log
+      error_log_file: /root/src/bless/log/error.log
