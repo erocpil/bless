@@ -25,7 +25,7 @@
 #define TX_DESC_DEFAULT 1024
 
 #define MAX_RX_QUEUE_PER_LCORE 16
-#define MAX_TX_QUEUE_PER_PORT 16
+#define MAX_TX_QUEUE_PER_PORT 512
 
 #ifndef NELEMS
 #define NELEMS(a) (sizeof(a) / sizeof((a)[0]))

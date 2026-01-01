@@ -295,7 +295,7 @@ Node *find_by_path(Node *root, const char *path)
 	return cur;
 }
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 int config_check_file(char *filename)
 {
 	// 检查文件是否存在
@@ -1656,8 +1656,11 @@ uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range
 	}
 
 	tsc = (uint32_t)(ra ^ (ra >> 8));
-	int offset = tsc % labs(range);
-	return rte_cpu_to_be_32(rte_cpu_to_be_32(*array) + (range > 0 ? offset : -offset));
+	int offset = (int)(tsc % labs(range));
+	uint32_t v = rte_be_to_cpu_32(*array);
+	int delta = (range > 0) ? offset : -offset;
+	v += delta;
+	return rte_cpu_to_be_32(v);
 }
 
 /** random_array_elem_uint32_t_with_peer - special case for ipv4:vni
@@ -1668,12 +1671,13 @@ uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, u
 {
 	uint32_t index = 0;
 	uint64_t tsc = rdtsc64();
+	uint64_t val = 0;
 	tsc = tsc ^ (tsc >> 8);
 
 	/* pure array: [ 0, 1, ..., n ] */
 	if (num) {
 		index = tsc % num;
-		uint64_t val = (uint64_t)array[index];
+		val = (uint64_t)array[index];
 		val |= ((uint64_t)peer[index] << 32);
 		return val;
 	}
@@ -1684,7 +1688,7 @@ uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, u
 		return (uint64_t)*array | ((uint64_t)*peer << 32);
 	}
 
-	index = tsc % labs(range);
+	index = (uint32_t)(tsc % (uint64_t)labs(range));
 	return rte_cpu_to_be_32(rte_cpu_to_be_32(*array) + (range > 0 ? index : -index))
 		| ((uint64_t)(*peer + index) << 32);
 }

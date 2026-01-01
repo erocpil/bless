@@ -1,3 +1,4 @@
+#include "bless.h"
 #include "worker.h"
 
 void worker_loop_txonly(void *data)

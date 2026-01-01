@@ -16,7 +16,7 @@ dpdk:
   block: null # [ 00:03.0, 00:04.0 ]
   vdev: null # net_tap0,iface=tap0
   proc-type: primary
-  log-level: info
+  log-level: info # --log-level=pmd.net.af_xdp:debug
   trace: regex-match
   trace-dir: /tmp
   trace-bufsz: 100M
@@ -25,8 +25,8 @@ dpdk:
   file-prefix: null # bless
 
 injector:
-  p: 0x1
-  q: 1
+  p: 0x1 # port
+  q: 2 # queues on each port
   P:
   T: 1
   no-mac-updating:
@@ -96,7 +96,7 @@ bless:
       other: [ toa ]
 
 system:
-  daemonize: true
+  daemonize: yes
   server:
     service:
       websocket: /wsURL

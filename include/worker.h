@@ -1,7 +1,7 @@
 #ifndef __WORKER_H__
 #define __WORKER_H__
 
-#include "bless.h"
+#include "define.h"
 
 /* TODO rte_eth_hairpin_peer */
 /* List of queues to be polled for a given lcore. 8< */

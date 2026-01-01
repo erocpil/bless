@@ -14,11 +14,11 @@ static uint32_t enabled_lcores = 0;
 
 #define MAX_TIMER_PERIOD 86400 /* 1 day max */
 /* A tsc-based timer responsible for triggering statistics printout */
-uint64_t timer_period = 1; /* default period is 10 seconds */
+static uint64_t timer_period = 1; /* default period is 10 seconds */
 
 atomic_int g_state = STATE_INIT;
 
-struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
+static struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
 void register_my_metrics(void)
 {
@@ -67,7 +67,7 @@ static struct port_pair_params port_pair_params_array[RTE_MAX_ETHPORTS / 2];
 static struct port_pair_params *port_pair_params;
 static uint16_t nb_port_pair_params;
 
-static unsigned int rxtxq_per_lcore = 1;
+static unsigned int rxtxq_per_port = 1;
 
 // static struct rte_eth_dev_tx_buffer *tx_buffer[RTE_MAX_ETHPORTS];
 
@@ -307,8 +307,10 @@ static unsigned int l2fwd_parse_nqueue(const char *q_arg)
 		return 0;
 	if (n == 0)
 		return 0;
+	/*
 	if (n >= MAX_RX_QUEUE_PER_LCORE)
 		return 0;
+		*/
 
 	return n;
 }
@@ -438,8 +440,8 @@ static int parse_args(int argc, char **argv)
 
 				/* nqueue */
 			case 'q':
-				rxtxq_per_lcore = l2fwd_parse_nqueue(optarg);
-				if (rxtxq_per_lcore == 0) {
+				rxtxq_per_port = l2fwd_parse_nqueue(optarg);
+				if (rxtxq_per_port == 0) {
 					printf("invalid queue number\n");
 					l2fwd_usage(prgname);
 					return -1;
@@ -983,16 +985,16 @@ int main(int argc, char **argv)
 		}
 		int nport = rte_eth_dev_count_avail();
 		printf("rte lcore %d\n", nlcore);
-		printf("rxtxq_per_lcore %d\n", rxtxq_per_lcore);
+		printf("rxtxq_per_port %d\n", rxtxq_per_port);
 		printf("nport %d\n", nport);
 		printf("enabled_port_mask 0x%x\n", enabled_port_mask);
 		int n_enabled_port = rte_popcount32(enabled_port_mask);
-		if (nlcore < rxtxq_per_lcore * n_enabled_port) {
+		if (nlcore < rxtxq_per_port * n_enabled_port) {
 			rte_exit(EXIT_FAILURE, "Not enough cores %d < %d * %d\n",
-					nlcore, rxtxq_per_lcore, n_enabled_port);
-		} else if (nlcore > rxtxq_per_lcore * n_enabled_port) {
+					nlcore, rxtxq_per_port, n_enabled_port);
+		} else if (nlcore > rxtxq_per_port * n_enabled_port) {
 			printf("%d lcore will not be used\n",
-					nlcore - rxtxq_per_lcore * n_enabled_port);
+					nlcore - rxtxq_per_port * n_enabled_port);
 		}
 		lid = 0;
 		uint32_t pid = 0;
@@ -1005,7 +1007,7 @@ int main(int argc, char **argv)
 
 			printf("Port %d\n", pid);
 
-			for (uint32_t qid = 0; qid < rxtxq_per_lcore; qid++) {
+			for (uint32_t qid = 0; qid < rxtxq_per_port; qid++) {
 				/* get the lcore_id for this port */
 				while (!rte_lcore_is_enabled(lid) ||
 						lid == rte_get_main_lcore()) {
@@ -1022,7 +1024,7 @@ int main(int argc, char **argv)
 				lcore_queue_conf[lid].txq_id = qid;
 				lid++;
 			}
-			enabled_lcores += rxtxq_per_lcore;
+			enabled_lcores += rxtxq_per_port;
 		}
 	}
 	/* lcore view */
@@ -1082,7 +1084,7 @@ int main(int argc, char **argv)
 		while (rx_lcore_id == rte_get_main_lcore() ||
 				(rte_lcore_is_enabled(rx_lcore_id) == 0 ||
 				 lcore_queue_conf[rx_lcore_id].n_rx_port ==
-				 rxtxq_per_lcore)) {
+				 rxtxq_per_port)) {
 			rx_lcore_id++;
 			if (rx_lcore_id >= RTE_MAX_LCORE) {
 				rte_exit(EXIT_FAILURE, "Not enough cores\n");
@@ -1117,7 +1119,6 @@ int main(int argc, char **argv)
 
 	/* Initialise each port */
 	RTE_ETH_FOREACH_DEV(portid) {
-		struct rte_eth_rxconf rxq_conf;
 		struct rte_eth_txconf txq_conf;
 		struct rte_eth_conf local_port_conf = port_conf;
 		struct rte_eth_dev_info dev_info;
@@ -1150,7 +1151,7 @@ int main(int argc, char **argv)
 		}
 #endif
 		/* Configure the number of queues for a port. */
-		ret = rte_eth_dev_configure(portid, 1, rxtxq_per_lcore, &local_port_conf);
+		ret = rte_eth_dev_configure(portid, 0, rxtxq_per_port, &local_port_conf);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%u\n",
 					ret, portid);
@@ -1174,8 +1175,10 @@ int main(int argc, char **argv)
 					ret, portid);
 		}
 
+#if 0
 		/* init one RX queue */
 		fflush(stdout);
+		struct rte_eth_rxconf rxq_conf;
 		rxq_conf = dev_info.default_rxconf;
 		rxq_conf.offloads = local_port_conf.rxmode.offloads;
 		/* RX queue setup. 8< */
@@ -1186,12 +1189,13 @@ int main(int argc, char **argv)
 					ret, portid);
 		}
 		/* >8 End of RX queue setup. */
+#endif
 
 		/* Init one TX queue on each port. 8< */
 		fflush(stdout);
 		txq_conf = dev_info.default_txconf;
 		txq_conf.offloads = local_port_conf.txmode.offloads;
-		for (uint16_t i = 0; i < rxtxq_per_lcore; i++) {
+		for (uint16_t i = 0; i < rxtxq_per_port; i++) {
 			ret = rte_eth_tx_queue_setup(portid, i, nb_txd,
 					rte_eth_dev_socket_id(portid), &txq_conf);
 			if (ret < 0) {
