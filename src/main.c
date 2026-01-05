@@ -1158,8 +1158,7 @@ int main(int argc, char **argv)
 		}
 		/* >8 End of configuration of the number of queues for a port. */
 
-		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd,
-				&nb_txd);
+		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd, &nb_txd);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE,
 					"Cannot adjust number of descriptors: err=%d, port=%u\n",
@@ -1167,14 +1166,12 @@ int main(int argc, char **argv)
 		}
 		printf("TODO nb_txd %d\n", nb_txd);
 
-		ret = rte_eth_macaddr_get(portid,
-				&l2fwd_ports_eth_addr[portid]);
+		ret = rte_eth_macaddr_get(portid, &l2fwd_ports_eth_addr[portid]);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE,
 					"Cannot get MAC address: err=%d, port=%u\n",
 					ret, portid);
 		}
-
 #if 0
 		/* init one RX queue */
 		fflush(stdout);
@@ -1227,8 +1224,7 @@ int main(int argc, char **argv)
 		ret = rte_eth_dev_set_ptypes(portid, RTE_PTYPE_UNKNOWN, NULL,
 				0);
 		if (ret < 0) {
-			printf("Port %u, Failed to disable Ptype parsing\n",
-					portid);
+			printf("Port %u, Failed to disable Ptype parsing\n", portid);
 		}
 		/* Start device */
 		ret = rte_eth_dev_start(portid);
@@ -1240,10 +1236,11 @@ int main(int argc, char **argv)
 		printf("done: \n");
 		if (promiscuous_on) {
 			ret = rte_eth_promiscuous_enable(portid);
-			if (ret != 0)
+			if (ret != 0) {
 				rte_exit(EXIT_FAILURE,
 						"rte_eth_promiscuous_enable:err=%s, port=%u\n",
 						rte_strerror(-ret), portid);
+			}
 		}
 
 		{
@@ -1259,7 +1256,6 @@ int main(int argc, char **argv)
 			printf("mtu [%d, %d]\n", dev_info->min_mtu, dev_info->max_mtu);
 			printf("nb rx queues %u\n", dev_info->nb_rx_queues);
 			printf("nb tx queues %u\n", dev_info->nb_tx_queues);
-			// getchar();
 		}
 
 		/* initialize port stats */
@@ -1272,7 +1268,6 @@ int main(int argc, char **argv)
 	}
 
 	check_all_ports_link_status(enabled_port_mask);
-
 
 	char name[16];
 	pthread_getname_np(pthread_self(), name, sizeof(name));
@@ -1302,7 +1297,6 @@ int main(int argc, char **argv)
 	// printf("port_statistics %p\n", port_statistics);
 	bconf->dst_ports = l2fwd_dst_ports;
 	bconf->state = &g_state;
-	printf("g_state %p\n", &g_state);
 	bconf->timer_period = timer_period;
 	bconf->enabled_port_mask = enabled_port_mask;
 	pthread_barrier_t barrier;
@@ -1310,8 +1304,6 @@ int main(int argc, char **argv)
 	bconf->barrier = &barrier;
 
 	printf("\n\n >> %d nb_lcores %d\n\n", rte_lcore_id(), nb_lcores + 1);
-
-	// DISTRIBUTION_DUMP(bconf->dist);
 
 	ret = 0;
 	/* launch per-lcore init on every lcore */

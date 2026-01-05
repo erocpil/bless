@@ -7,6 +7,7 @@
 /* List of queues to be polled for a given lcore. 8< */
 struct lcore_queue_conf {
 	int enabled;
+	int numa;
 	uint16_t txl_id;
 	uint16_t txp_id;
 	uint16_t txq_id;

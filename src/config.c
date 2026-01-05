@@ -2,6 +2,7 @@
 #include "erroneous.h"
 #include "server.h"
 #include "config.h"
+#include <ctype.h>    // isprint()
 
 static struct offload_table_item offload_table[] = {
 	{ "ipv4", OF_IPV4 },
@@ -1550,7 +1551,7 @@ static int config_parse_bless_erroneous(Node *root, Cnode *cnode)
 	cnode->erroneous.n_mutation = res;
 	printf("> parsed %d erroneous mutations:\n", res);
 	int pos = 0;
-	mutation_func *func = malloc(sizeof(mutation_func) * res);
+	mutation_func *func = malloc(sizeof(mutation_func) * (uint64_t)res);
 	for (int i = 0; i < cnode->erroneous.n_clas; i++) {
 		struct ec_clas *clas = &cnode->erroneous.clas[i];
 		printf("  %d_%s: ", i, clas->name);
@@ -1622,45 +1623,63 @@ Cnode *config_parse_bless(Node *root)
 	return cnode;
 }
 
+static __thread uint32_t rand_s;
+
+inline uint32_t fast_rand_next()
+{
+	return rand_s = rand_s * 1664525u + 1013904223u;
+}
+
 uint16_t random_array_elem_uint16_t(uint16_t *array, uint16_t num, int32_t range)
 {
-	uint64_t ra = rte_rdtsc();
-	uint16_t tsc = 0;
+	uint32_t rs = fast_rand_next();
+	uint16_t r = rs ^ (rs >> 16);
 
-	if (num) {
-		tsc =  (uint16_t)(ra ^ (ra >> 8)) & (BLESS_CONFIG_MAX - 1);
-		return rte_cpu_to_be_16(array[tsc % num]);
+	/* 离散集合 */
+	if (likely(num)) {
+		if ((num & (num - 1)) == 0) {
+			return array[r & (num - 1)];
+		}
+		return array[r % num];
 	}
 
-	if (!range) {
-		return rte_cpu_to_be_16(*array);
+	/* 连续区间 */
+	if (unlikely(range == 0 || range == 1)) {
+		return array[0];
 	}
 
-	tsc = (ra ^ (ra >> 8)) & (uint16_t)(-1);
-	int offset = tsc % labs(range);
-	return rte_cpu_to_be_16(*array + (range > 0 ? offset : -offset));
+	int32_t abs_range = (range >= 0) ? range : -range;
+	uint16_t off = r % abs_range;
+
+	return rte_cpu_to_be_16((range > 0) ?
+		(uint16_t)(array[0] + off) :
+		(uint16_t)(array[0] - off));
 }
 
 uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range)
 {
-	uint64_t ra = rte_rdtsc();
-	uint32_t tsc = 0;
+	uint32_t r = fast_rand_next();
+	r ^= r >> 16;
 
-	if (num) {
-		tsc = (uint32_t)(ra ^ (ra >> 8)) & (BLESS_CONFIG_MAX - 1);
-		return array[tsc % num];
+	/* 离散集合 */
+	if (likely(num)) {
+		if ((num & (num - 1)) == 0) {
+			return array[r & (num - 1)];
+		}
+		return array[r % num];
 	}
 
-	if (!range) {
-		return *array;
+	/* 连续区间 */
+	if (unlikely(range == 0 || range == 1)) {
+		return array[0];
 	}
 
-	tsc = (uint32_t)(ra ^ (ra >> 8));
-	int offset = (int)(tsc % labs(range));
-	uint32_t v = rte_be_to_cpu_32(*array);
-	int delta = (range > 0) ? offset : -offset;
-	v += delta;
-	return rte_cpu_to_be_32(v);
+	int64_t abs_range = (range >= 0) ? range : -range;
+	uint32_t off = r % abs_range;
+
+	return rte_cpu_to_be_32((range > 0) ?
+		(uint32_t)(array[0] + off) :
+		(uint32_t)(array[0] - off));
 }
 
 /** random_array_elem_uint32_t_with_peer - special case for ipv4:vni
@@ -1669,26 +1688,34 @@ uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range
  */
 uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, uint16_t num, int64_t range)
 {
-	uint32_t index = 0;
-	uint64_t tsc = rdtsc64();
-	uint64_t val = 0;
-	tsc = tsc ^ (tsc >> 8);
+    uint32_t r = fast_rand_next();
+    r ^= r >> 16;
 
-	/* pure array: [ 0, 1, ..., n ] */
-	if (num) {
-		index = tsc % num;
-		val = (uint64_t)array[index];
-		val |= ((uint64_t)peer[index] << 32);
-		return val;
-	}
+    uint32_t idx;
 
-	/* range [ val, val + n ] */
-	if (!range) {
-		index = 0;
-		return (uint64_t)*array | ((uint64_t)*peer << 32);
-	}
+    /* 离散集合：array[i] <-> peer[i] 强绑定 */
+    if (likely(num)) {
+        if ((num & (num - 1)) == 0)
+            idx = r & (num - 1);
+        else
+            idx = r % num;
 
-	index = (uint32_t)(tsc % (uint64_t)labs(range));
-	return rte_cpu_to_be_32(rte_cpu_to_be_32(*array) + (range > 0 ? index : -index))
-		| ((uint64_t)(*peer + index) << 32);
+        return ((uint64_t)peer[idx] << 32) | array[idx];
+    }
+
+	/* TODO range */
+    /* 连续区间 */
+    if (unlikely(range == 0 || range == 1))
+        return ((uint64_t)peer[0] << 32) | array[0];
+
+    uint32_t abs_range = (range >= 0) ? range : -range;
+    idx = r % abs_range;
+
+    uint32_t ip = (range >= 0) ?
+                  (array[0] + idx) :
+                  (array[0] - idx);
+
+    uint32_t vni = peer[0] + idx;
+
+    return rte_cpu_to_be_32((uint64_t)vni << 32) | ip;
 }

@@ -662,8 +662,9 @@ uint64_t mutation_ip_ecn(void **mbufs, unsigned int n, void *data)
 		memset(ip_hdr, 0, sizeof(*ip_hdr));
 		ip_hdr->version_ihl   = (4 << 4) | (sizeof(struct rte_ipv4_hdr) / 4);
 		/* mutation: ecn of 0, 1, 2, 3 */
-		uint64_t tsc = rte_rdtsc();
-		tsc ^= tsc >> 8;
+		// FIXME
+		// uint64_t tsc = rte_rdtsc();
+		uint32_t tsc = fast_rand_next();
 		ip_hdr->type_of_service = tsc % 4;
 		ip_hdr->total_length  = rte_cpu_to_be_16(sizeof(struct rte_ipv4_hdr) +
 				sizeof(struct rte_icmp_hdr));

@@ -78,15 +78,15 @@ else
 endif
 
 ifeq ($(CC),clang)
-	APP_CFLAGS := -Weverything -Wno-padded
+	XAPP_CFLAGS := -Weverything -Wno-padded -Wno-declaration-after-statement
 	ifeq ($(BUILD),debug)
-	ifeq ($(STATIC),0)
-	# NOTE:
-	# When using ASan with DPDK, consider:
-	# export ASAN_OPTIONS=detect_leaks=0
-	APP_CFLAGS += -fsanitize=address,undefined
-	LAPP_DFLAGS += -fsanitize=address,undefined
-endif
+		ifeq ($(STATIC),0)
+			# NOTE:
+			# When using ASan with DPDK, consider:
+			# export ASAN_OPTIONS=detect_leaks=0
+			APP_CFLAGS += -fsanitize=address,undefined
+			APP_LDFLAGS += -fsanitize=address,undefined
+		endif
 	endif
 else
 	CFLAGS += -Wextra

@@ -199,14 +199,13 @@ void worker_loop_txonly(void *data)
 			break;
 		}
 
-		int type = -1;
+		// int type = -1;
 
 		for (int j = 0; j < nb_tx; j++) {
-			uint64_t tx_bytes = 0;
+			// uint64_t tx_bytes = 0;
 			/* should this mbuf be a mutation? */
-			uint64_t tsc = rte_rdtsc();
+			uint64_t tsc = 1; // rte_rdtsc();
 			tsc = tsc ^ (tsc >> 8);
-			enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
 			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation &&
 					(tsc & 1023) < cnode->erroneous.ratio) {
 				int n = tsc % cnode->erroneous.n_mutation;
@@ -215,27 +214,28 @@ void worker_loop_txonly(void *data)
 				if (!r) {
 					rte_exit(EXIT_FAILURE, "Cannot mutate(%d)\n", n);
 				}
-				tx_bytes += r;
+				// tx_bytes += r;
 			} else {
 				enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
 				int r = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
 				if (!r) {
 					rte_exit(EXIT_FAILURE, "Cannot bless_mbuf()\n");
 				}
-				tx_bytes += r;
+				// tx_bytes += r;
 			}
-			rte_atomic64_inc(&(conf->stats[portid] + type)->tx_pkts);
-			rte_atomic64_add(&(conf->stats[portid] + type)->tx_bytes, tx_bytes);
+			// rte_atomic64_inc(&(conf->stats[portid] + type)->tx_pkts);
+			// rte_atomic64_add(&(conf->stats[portid] + type)->tx_bytes, tx_bytes);
 		}
 
 		/* FIXME stats of type */
-		// rte_pktmbuf_dump(stdout, mbufs[0], 1000);
+		// rte_pktmbuf_dump(stdout, mbufs[0], 2000);
 		uint16_t sent = rte_eth_tx_burst(portid, qid, mbufs, nb_tx);
 		if (sent) {
 			num -= sent;
 			// printf("lcore %u port %u sent %d remain %lu\n", lcore_id, portid, sent, size);
 		}
 		if (sent != nb_tx) {
+			/*
 			uint64_t dropped_bytes = 0;
 			for (int i = sent; i < nb_tx; i++) {
 				dropped_bytes += mbufs[i]->pkt_len;
@@ -245,10 +245,11 @@ void worker_loop_txonly(void *data)
 			rte_atomic64_add(&(conf->stats[portid] + type)->dropped_bytes, dropped_bytes);
 			// (conf->stats[portid] + type)->dropped_pkts += nb_tx - sent;
 			// (conf->stats[portid] + type)->dropped_bytes += dropped_bytes;
+			*/
 			rte_pktmbuf_free_bulk(&mbufs[sent], nb_tx - sent);
 		}
 
-		if (batch_delay_us) {
+		if (unlikely(batch_delay_us)) {
 			rte_delay_us(batch_delay_us);
 		}
 		val = atomic_load_explicit(state, memory_order_acquire);

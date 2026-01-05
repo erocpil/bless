@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>   // access()
-#include <ctype.h>    // isprint()
 #include <stdatomic.h>
 #include <stdint.h>
 #include <arpa/inet.h>
@@ -14,15 +13,15 @@
 
 #define RTE_LOGTYPE_BLESS RTE_LOGTYPE_USER1
 
-#define MAX_PKT_BURST 32
+#define MAX_PKT_BURST 64
 #define BURST_TX_DRAIN_US 100 /* TX drain every ~100us */
 #define MEMPOOL_CACHE_SIZE 256
 
 /*
  * Configurable number of RX/TX ring descriptors
  */
-#define RX_DESC_DEFAULT 1024
-#define TX_DESC_DEFAULT 1024
+#define RX_DESC_DEFAULT 4096
+#define TX_DESC_DEFAULT 4096
 
 #define MAX_RX_QUEUE_PER_LCORE 16
 #define MAX_TX_QUEUE_PER_PORT 512
@@ -32,6 +31,14 @@
 #endif
 
 #define MBUF_DYNFIELDS_MAX  8
+
+#ifndef max
+#define max(a, b) (a) > (b) ? (a) : (b)
+#endif
+
+#ifndef min
+#define min(a, b) (a) < (b) ? (a) : (b)
+#endif
 
 enum {
 	STATE_INIT = 0,

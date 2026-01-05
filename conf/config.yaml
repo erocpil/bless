@@ -8,7 +8,7 @@
 
 dpdk:
   main-lcore: 0
-  l: 0-39
+  l: 0-8
   n: 4
   lcores: null
   socket-mem: null
@@ -26,48 +26,48 @@ dpdk:
 
 injector:
   p: 0x1 # port
-  q: 2 # queues on each port
+  q: 8 # queues on each port
   P:
   T: 1
   no-mac-updating:
   auto-start: true
   portmap: null # (0, 1)
-  batch: 512
-  batch-delay-us: 1500
+  batch: 32
+  batch-delay-us: 0
   num: -1
-  arp: 0
-  icmp: 0
-  tcp: 0
+  arp: 1
+  icmp: 1
+  tcp: 1
   udp: 1
 
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 0 # size of ether payload, may result in error if vxlan enabled
+    mtu: 1450 # size of ether payload, may result in error if vxlan enabled
     dst: 10:70:fd:af:21:10
     src:
     type:
       arp:
         src: [ 10.0.0.1 ]
-        dst: [ 20.0.0.2, 30.0.0.3, 40.0.0.4 ]
+        dst: [ 20.0.0.2, 30.0.0.3 ]
       ipv4:
         src: 172.16.1.1
-        dst: [ 192.168.0.1, 192.168.1.1, 192.168.2.1 ]
+        dst: [ 192.168.0.1, 192.168.1.1 ]
         icmp:
           ident: [ 0x1234, 0xface ]
           payload: "injector: icmp payload." # not used, yet
         tcp:
           src: [ 80, 808, 8080, 8888 ]
-          dst: 9000+1000
+          dst: 9000+1024
           payload: "injector: tcp payload."
         udp:
-          src: 8000+-2000
+          src: 8000+-2048
           dst: [ 10000, 10001, 10003 ]
           payload: "injector: udp payload."
         proto: [ 0, 0x8C-0xFF ] # https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
   vxlan:
     enable: true
-    ratio: 0
+    ratio: 30
     ether:
       dst: 10:70:fd:af:21:10
       src:
@@ -83,7 +83,7 @@ bless:
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 1000
+    ratio: 1
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3
@@ -96,7 +96,7 @@ bless:
       other: [ toa ]
 
 system:
-  daemonize: yes
+  daemonize: true
   server:
     service:
       websocket: /wsURL
