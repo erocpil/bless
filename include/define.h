@@ -49,6 +49,15 @@ enum {
 
 typedef uint64_t (*mutation_func)(void **mbufs, unsigned int n, void *data);
 
+#ifndef likely
+#define likely(x)	__builtin_expect(!!(x), 1)
+#endif
+#ifndef unlikely
+#define unlikely(x)	__builtin_expect(!!(x), 0)
+#endif
+
+uint32_t fast_rand_next();
+
 /* 计算 16-bit one's complement checksum */
 uint16_t icmp_calc_cksum(const void *buf, size_t len);
 

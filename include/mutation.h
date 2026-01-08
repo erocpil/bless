@@ -207,8 +207,8 @@ uint64_t mutation_mac_multicast(void **mbufs, unsigned int n, void *data)
 		/* 以太网头: 目的 MAC = 组播 MAC, 源 MAC 可以取端口的 MAC 或自定义 */
 		struct rte_ether_addr dst_mac;
 		uint32_t dst_ip_be = 0;
-		uint64_t ra = rdtsc8();
-		int mcast_type = ((ra ^ (ra >> 4)) & 3) % 3;
+		uint32_t ra = fast_rand_next();
+		int mcast_type = (ra ^ (ra >> 4)) & 3;
 		switch (mcast_type) {
 			case 0:
 				/* 本地子网控制（例如 OSPF, RIP2, IGMP） */
@@ -223,6 +223,8 @@ uint64_t mutation_mac_multicast(void **mbufs, unsigned int n, void *data)
 				/* 管理域组播（组织内部使用） */
 				dst_ip_be = rte_cpu_to_be_32((239 << 24) | 1);
 			default:
+				/* 0 */
+				dst_ip_be = rte_cpu_to_be_32((239 << 24) | 1);
 				break;
 		}
 		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &dst_mac);

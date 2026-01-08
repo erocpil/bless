@@ -95,7 +95,7 @@ static struct rte_eth_conf port_conf = {
 	},
 };
 
-struct rte_mempool * l2fwd_pktmbuf_pool = NULL;
+struct rte_mempool * rx_pktmbuf_pool = NULL;
 
 void dpdk_generate_cmdReply(const char *str)
 {
@@ -159,8 +159,9 @@ void main_loop(void *data)
 
 	printf("lcore=%u cpu=%d\n", rte_lcore_id(), sched_getcpu());
 
-	printf("[%s %d] pthread_barrier_wait(&conf->barrier);", __func__, __LINE__);
+	printf("[%s %d] pthread_barrier_wait(&conf->barrier);\n", __func__, __LINE__);
 	pthread_barrier_wait(conf->barrier);
+	printf("Bless pid %d is running ...\n", getpid());
 
 	static uint64_t i = 0;
 	uint64_t val = 0;
@@ -308,9 +309,9 @@ static unsigned int l2fwd_parse_nqueue(const char *q_arg)
 	if (n == 0)
 		return 0;
 	/*
-	if (n >= MAX_RX_QUEUE_PER_LCORE)
-		return 0;
-		*/
+	   if (n >= MAX_RX_QUEUE_PER_LCORE)
+	   return 0;
+	   */
 
 	return n;
 }
@@ -341,6 +342,7 @@ static const char short_options[] =
 #define CMD_LINE_OPT_NO_MAC_UPDATING "no-mac-updating"
 #define CMD_LINE_OPT_PORTMAP_CONFIG "portmap"
 #define CMD_LINE_OPT_AUTO_START "auto-start"
+#define CMD_LINE_OPT_MODE "mode"
 #define CMD_LINE_OPT_NUM "num"
 #define CMD_LINE_OPT_BATCH "batch"
 #define CMD_LINE_OPT_BATCH_DELAY_US "batch-delay-us"
@@ -364,6 +366,7 @@ enum {
 	CMD_LINE_OPT_NO_MAC_UPDATING_NUM = 256,
 	CMD_LINE_OPT_PORTMAP_NUM,
 	CMD_LINE_OPT_AUTO_START_NUM,
+	CMD_LINE_OPT_MODE_NUM,
 	CMD_LINE_OPT_NUM_NUM,
 	CMD_LINE_OPT_BATCH_NUM,
 	CMD_LINE_OPT_BATCH_DELAY_US_NUM,
@@ -384,6 +387,7 @@ static const struct option lgopts[] = {
 	{ CMD_LINE_OPT_NO_MAC_UPDATING, no_argument, 0, CMD_LINE_OPT_NO_MAC_UPDATING_NUM },
 	{ CMD_LINE_OPT_PORTMAP_CONFIG, 1, 0, CMD_LINE_OPT_PORTMAP_NUM },
 	{ CMD_LINE_OPT_AUTO_START, 1, 0, CMD_LINE_OPT_AUTO_START_NUM },
+	{ CMD_LINE_OPT_MODE, 1, 0, CMD_LINE_OPT_MODE_NUM },
 	{ CMD_LINE_OPT_NUM, 1, 0, CMD_LINE_OPT_NUM_NUM },
 	{ CMD_LINE_OPT_BATCH, 1, 0, CMD_LINE_OPT_BATCH_NUM },
 	{ CMD_LINE_OPT_BATCH_DELAY_US, 1, 0, CMD_LINE_OPT_BATCH_DELAY_US_NUM },
@@ -505,6 +509,18 @@ static int parse_args(int argc, char **argv)
 					bconf->auto_start = 1;
 				}
 				printf("auto start %d\n", bconf->auto_start);
+				break;
+			case CMD_LINE_OPT_MODE_NUM:
+				if (!optarg || !strcmp(optarg, "tx-only")) {
+					bconf->mode = BLESS_MODE_TX_ONLY;
+				} else if (!strcmp(optarg, "rx-only")) {
+					bconf->mode = BLESS_MODE_RX_ONLY;
+				} else if (!strcmp(optarg, "fwd")) {
+					bconf->mode = BLESS_MODE_FWD;
+				} else {
+					rte_exit(EXIT_FAILURE, "Invalid mode: %s.\n", optarg);
+				}
+				printf("mode %d\n", bconf->mode);
 				break;
 			case CMD_LINE_OPT_NO_MAC_UPDATING_NUM:
 				mac_updating = 0;
@@ -1107,10 +1123,10 @@ int main(int argc, char **argv)
 				nb_lcores * MEMPOOL_CACHE_SIZE), 8192U);
 
 	/* Create the mbuf pool. 8< */
-	l2fwd_pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", nb_mbufs,
+	rx_pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", nb_mbufs,
 			MEMPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
 			rte_socket_id());
-	if (l2fwd_pktmbuf_pool == NULL) {
+	if (rx_pktmbuf_pool == NULL) {
 		rte_exit(EXIT_FAILURE, "Cannot init mbuf pool\n");
 	}
 	/* >8 End of create the mbuf pool. */
@@ -1119,7 +1135,6 @@ int main(int argc, char **argv)
 
 	/* Initialise each port */
 	RTE_ETH_FOREACH_DEV(portid) {
-		struct rte_eth_txconf txq_conf;
 		struct rte_eth_conf local_port_conf = port_conf;
 		struct rte_eth_dev_info dev_info;
 
@@ -1151,7 +1166,7 @@ int main(int argc, char **argv)
 		}
 #endif
 		/* Configure the number of queues for a port. */
-		ret = rte_eth_dev_configure(portid, 0, rxtxq_per_port, &local_port_conf);
+		ret = rte_eth_dev_configure(portid, 1, rxtxq_per_port, &local_port_conf);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%u\n",
 					ret, portid);
@@ -1172,34 +1187,36 @@ int main(int argc, char **argv)
 					"Cannot get MAC address: err=%d, port=%u\n",
 					ret, portid);
 		}
-#if 0
-		/* init one RX queue */
+		fflush(stdout);
+
+		/* Init queue on each port. 8< */
 		fflush(stdout);
 		struct rte_eth_rxconf rxq_conf;
 		rxq_conf = dev_info.default_rxconf;
 		rxq_conf.offloads = local_port_conf.rxmode.offloads;
-		/* RX queue setup. 8< */
-		ret = rte_eth_rx_queue_setup(portid, 0, nb_rxd, rte_eth_dev_socket_id(portid),
-				&rxq_conf, l2fwd_pktmbuf_pool);
-		if (ret < 0) {
-			rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup:err=%d, port=%u\n",
-					ret, portid);
-		}
-		/* >8 End of RX queue setup. */
-#endif
-
-		/* Init one TX queue on each port. 8< */
-		fflush(stdout);
+		struct rte_eth_txconf txq_conf;
 		txq_conf = dev_info.default_txconf;
 		txq_conf.offloads = local_port_conf.txmode.offloads;
 		for (uint16_t i = 0; i < rxtxq_per_port; i++) {
+#if 1
+			/* RX queue setup. 8< */
+			ret = rte_eth_rx_queue_setup(portid, i, nb_rxd,
+					rte_eth_dev_socket_id(portid),
+					&rxq_conf, rx_pktmbuf_pool);
+			if (ret < 0) {
+				rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup:err=%d, port=%u\n",
+						ret, portid);
+			}
+			/* >8 End of RX queue setup. */
+#endif
+			/* init one TX queue */
 			ret = rte_eth_tx_queue_setup(portid, i, nb_txd,
 					rte_eth_dev_socket_id(portid), &txq_conf);
 			if (ret < 0) {
 				rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup:err=%d, port=%u\n", ret, portid);
 			}
 		}
-		/* >8 End of init one TX queue on each port. */
+		/* >8 End of RX queue setup. */
 
 		/* Initialize TX buffers */
 		/*
@@ -1221,8 +1238,7 @@ int main(int argc, char **argv)
 		   portid);
 		   */
 
-		ret = rte_eth_dev_set_ptypes(portid, RTE_PTYPE_UNKNOWN, NULL,
-				0);
+		ret = rte_eth_dev_set_ptypes(portid, RTE_PTYPE_UNKNOWN, NULL, 0);
 		if (ret < 0) {
 			printf("Port %u, Failed to disable Ptype parsing\n", portid);
 		}
@@ -1305,10 +1321,11 @@ int main(int argc, char **argv)
 
 	printf("\n\n >> %d nb_lcores %d\n\n", rte_lcore_id(), nb_lcores + 1);
 
-	ret = 0;
 	/* launch per-lcore init on every lcore */
-	uint32_t lcore_id = 0;
 	rte_eal_mp_remote_launch(bless_launch_one_lcore, (void*)bconf, CALL_MAIN);
+
+	ret = 0;
+	uint32_t lcore_id = 0;
 	RTE_LCORE_FOREACH_WORKER(lcore_id) {
 		if (rte_eal_wait_lcore(lcore_id) < 0) {
 			ret = -1;

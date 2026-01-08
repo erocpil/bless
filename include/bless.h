@@ -85,6 +85,13 @@ enum BLESS_TYPE {
 	TYPE_MAX,
 };
 
+enum BLESS_MODE {
+	BLESS_MODE_TX_ONLY,
+	BLESS_MODE_RX_ONLY,
+	BLESS_MODE_FWD,
+	BLESS_MODE_MAX,
+};
+
 #define OFFLOAD_IPV4(cnode) ((cnode)->offload & OF_IPV4_VAL)
 #define OFFLOAD_IPV6(cnode) ((cnode)->offload & OF_IPV4_VAL)
 #define OFFLOAD_TCP(cnode) ((cnode)->offload & OF_TCP_VAL)
@@ -175,6 +182,7 @@ struct bless_conf {
 
 	int64_t num;
 	uint8_t auto_start;
+	uint8_t mode;
 	uint16_t batch;
 	uint64_t batch_delay_us;
 	struct distribution *dist;

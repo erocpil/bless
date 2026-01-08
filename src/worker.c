@@ -1,9 +1,11 @@
 #include "bless.h"
+#include "define.h"
 #include "worker.h"
 
 void worker_loop_txonly(void *data)
 {
 	struct rte_mbuf **mbufs = NULL;
+	struct rte_mbuf **rx_mbufs = NULL;
 	unsigned lcore_id;
 	uint16_t portid = 0;
 	struct lcore_queue_conf *qconf;
@@ -117,7 +119,46 @@ void worker_loop_txonly(void *data)
 	sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool",
 			qconf->txl_id, qconf->txp_id, qconf->txq_id);
 
-	mbufs = rte_malloc(NULL, conf->batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
+	uint8_t mode = conf->mode;
+	uint64_t num = conf->num;
+	uint16_t batch = conf->batch;
+	uint64_t batch_delay_us = bconf->batch_delay_us;
+	if (batch > 2048) {
+		batch = 2048;
+		printf("batch -> 2048\n");
+	}
+	if (batch > num) {
+		batch = num;
+	}
+	portid = qconf->txp_id;
+	uint16_t qid = qconf->txq_id;
+	uint16_t nb_tx = batch;
+	printf("num %lu batch %u\n", num, batch);
+
+	/* XXX */
+	if (mode == BLESS_MODE_RX_ONLY || mode == BLESS_MODE_FWD) {
+		rx_mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
+		if (unlikely(!rx_mbufs)) {
+			rte_exit(EXIT_FAILURE, "rx_mbufs alloc failed");
+		}
+	}
+
+	if (BLESS_MODE_RX_ONLY == mode) {
+		printf("rx only\n");
+		pthread_barrier_wait(bconf->barrier);
+		uint64_t val = atomic_load_explicit(state, memory_order_acquire);
+		while (val != STATE_EXIT) {
+			const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
+			if (nb_rx) {
+				rte_pktmbuf_free_bulk(rx_mbufs, nb_rx);
+			}
+			val = atomic_load_explicit(state, memory_order_acquire);
+		}
+		printf("exit\n");
+		return;
+	}
+
+	mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
 	if (unlikely(!mbufs)) {
 		rte_exit(EXIT_FAILURE, "mbufs alloc failed");
 	}
@@ -132,21 +173,6 @@ void worker_loop_txonly(void *data)
 			qconf->txp_id, qconf->txq_id, qconf->txl_id, pthread_self());
 	assert(qconf->txl_id == rte_lcore_id());
 
-	uint64_t num = conf->num;
-	uint16_t batch = bconf->batch;
-	uint64_t batch_delay_us = bconf->batch_delay_us;
-	if (batch > 2048) {
-		batch = 2048;
-		printf("batch -> 2048\n");
-	}
-	if (batch > num) {
-		batch = num;
-	}
-	uint16_t nb_tx = batch;
-	printf("num %lu batch %u\n", num, batch);
-
-	portid = qconf->txp_id;
-	uint16_t qid = qconf->txq_id;
 
 	/* check if src mac address is provided */
 	if (!cnode->ether.n_src) {
@@ -201,20 +227,41 @@ void worker_loop_txonly(void *data)
 
 		// int type = -1;
 
+		/* fwd */
+		if (mode == BLESS_MODE_FWD) {
+			const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
+			if (nb_rx) {
+				uint16_t nb_tx = rte_eth_tx_burst(portid, qid, rx_mbufs, nb_rx);
+				if (nb_tx != nb_rx) {
+					rte_pktmbuf_free_bulk(&mbufs[nb_tx], nb_rx - nb_tx);
+				}
+			} else {
+				if (unlikely(batch_delay_us)) {
+					rte_delay_us(batch_delay_us);
+				} else {
+					rte_delay_us(1000);
+				}
+			}
+			val = atomic_load_explicit(state, memory_order_acquire);
+			continue;
+		}
+
+		/* tx-only */
 		for (int j = 0; j < nb_tx; j++) {
 			// uint64_t tx_bytes = 0;
-			/* should this mbuf be a mutation? */
-			uint64_t tsc = 1; // rte_rdtsc();
-			tsc = tsc ^ (tsc >> 8);
-			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation &&
-					(tsc & 1023) < cnode->erroneous.ratio) {
-				int n = tsc % cnode->erroneous.n_mutation;
-				mutation_func func = cnode->erroneous.func[n];
-				int r = func((void**)&mbufs[j], 1, (void*)cnode);
-				if (!r) {
-					rte_exit(EXIT_FAILURE, "Cannot mutate(%d)\n", n);
+			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation) {
+				/* should this mbuf be a mutation? */
+				uint64_t tsc = fast_rand_next();
+				tsc = tsc ^ (tsc >> 8);
+				if ((tsc & 1023) < cnode->erroneous.ratio) {
+					int n = tsc % cnode->erroneous.n_mutation;
+					mutation_func func = cnode->erroneous.func[n];
+					int r = func((void**)&mbufs[j], 1, (void*)cnode);
+					if (!r) {
+						rte_exit(EXIT_FAILURE, "Cannot mutate(%d)\n", n);
+					}
+					// tx_bytes += r;
 				}
-				// tx_bytes += r;
 			} else {
 				enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
 				int r = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
@@ -236,10 +283,10 @@ void worker_loop_txonly(void *data)
 		}
 		if (sent != nb_tx) {
 			/*
-			uint64_t dropped_bytes = 0;
-			for (int i = sent; i < nb_tx; i++) {
-				dropped_bytes += mbufs[i]->pkt_len;
-			}
+			   uint64_t dropped_bytes = 0;
+			   for (int i = sent; i < nb_tx; i++) {
+			   dropped_bytes += mbufs[i]->pkt_len;
+			   }
 			// printf("lcore %u port %u unsent %d remain %lu\n", lcore_id, portid, nb_tx - sent, size);
 			rte_atomic64_sub(&(conf->stats[portid] + type)->dropped_pkts, nb_tx - sent);
 			rte_atomic64_add(&(conf->stats[portid] + type)->dropped_bytes, dropped_bytes);
@@ -252,6 +299,7 @@ void worker_loop_txonly(void *data)
 		if (unlikely(batch_delay_us)) {
 			rte_delay_us(batch_delay_us);
 		}
+
 		val = atomic_load_explicit(state, memory_order_acquire);
 	}
 
