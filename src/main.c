@@ -1166,7 +1166,7 @@ int main(int argc, char **argv)
 		}
 #endif
 		/* Configure the number of queues for a port. */
-		ret = rte_eth_dev_configure(portid, 1, rxtxq_per_port, &local_port_conf);
+		ret = rte_eth_dev_configure(portid, rxtxq_per_port, rxtxq_per_port, &local_port_conf);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%u\n",
 					ret, portid);
