@@ -1120,10 +1120,13 @@ int main(int argc, char **argv)
 	}
 
 	uint16_t ap = __builtin_popcount(enabled_port_mask);
-	unsigned int nb_mbufs = RTE_MAX(ap * (nb_rxd + nb_txd + MAX_PKT_BURST +
-				nb_lcores * MEMPOOL_CACHE_SIZE), 8192U);
-	printf("ap %d nb_rxd %d nb_txd %d MAX_PKT_BURST %d nb_lcores %d MEMPOOL_CACHE_SIZE %d nb_mbufs %u\n",
-			ap, nb_rxd, nb_txd, MAX_PKT_BURST, nb_lcores, MEMPOOL_CACHE_SIZE, nb_mbufs);
+	unsigned int nb_mbufs =
+		ap * rxtxq_per_port * nb_rxd      /* RX ring 硬需求 */
+		+ ap * MAX_PKT_BURST * rxtxq_per_port
+		+ nb_lcores * MEMPOOL_CACHE_SIZE * 2
+		+ 8192; /* 安全冗余 */
+	printf("ap %d rxtxq_per_port %d nb_rxd %d MAX_PKT_BURST %d nb_lcores %d MEMPOOL_CACHE_SIZE %d nb_mbufs %u\n",
+			ap, rxtxq_per_port, nb_rxd, MAX_PKT_BURST, nb_lcores, MEMPOOL_CACHE_SIZE, nb_mbufs);
 
 	/* Create the mbuf pool. 8< */
 	rx_pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", nb_mbufs,
