@@ -619,13 +619,22 @@ Slider thumb	10px
 
   <div id="console-body">
 
+    <!-- Cmd Tab -->
+    <div id="tab-cmd" class="tab">
+      <div id="cmdOutput" class="cmd-output"></div>
+      <div class="cmd-input">
+        <textarea id="cmdInput" placeholder="Enter command..."></textarea>
+        <div class="cmd-hint">Ctrl + Enter to send</div>
+      </div>
+    </div>
+
     <!-- Log Tab -->
     <div id="tab-log" class="tab active">
       <div class="console-actions">
 		    <button onclick="clearLog()">Clear</button>
 
 			  <label>Max:</label>
-			  <input id="maxLogLinesInput" type="number" value="100" min="50" />
+			  <input id="maxLogLinesInput" type="number" value="20" min="50" />
 
 			  <label>
 				<input type="checkbox" id="newestFirstToggle" checked />
@@ -638,15 +647,6 @@ Slider thumb	10px
 			  </label>
       </div>
       <div id="logArea" class="log-area"></div>
-    </div>
-
-    <!-- Cmd Tab -->
-    <div id="tab-cmd" class="tab">
-      <div id="cmdOutput" class="cmd-output"></div>
-      <div class="cmd-input">
-        <textarea id="cmdInput" placeholder="Enter command..."></textarea>
-        <div class="cmd-hint">Ctrl + Enter to send</div>
-      </div>
     </div>
 
   </div>

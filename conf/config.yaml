@@ -37,8 +37,8 @@ injector:
   mode: tx-only # rx-only, rx-only, fwd
   num: -1
   arp: 0
-  icmp: 1
-  tcp: 1
+  icmp: 0
+  tcp: 0
   udp: 1
 
 bless:
