@@ -1119,8 +1119,11 @@ int main(int argc, char **argv)
 				portid, l2fwd_dst_ports[portid]);
 	}
 
-	unsigned int nb_mbufs = RTE_MAX(nb_ports * (nb_rxd + nb_txd + MAX_PKT_BURST +
+	uint16_t ap = __builtin_popcount(enabled_port_mask);
+	unsigned int nb_mbufs = RTE_MAX(ap * (nb_rxd + nb_txd + MAX_PKT_BURST +
 				nb_lcores * MEMPOOL_CACHE_SIZE), 8192U);
+	printf("ap %d nb_rxd %d nb_txd %d MAX_PKT_BURST %d nb_lcores %d MEMPOOL_CACHE_SIZE %d nb_mbufs %u\n",
+			ap, nb_rxd, nb_txd, MAX_PKT_BURST, nb_lcores, MEMPOOL_CACHE_SIZE, nb_mbufs);
 
 	/* Create the mbuf pool. 8< */
 	rx_pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", nb_mbufs,
@@ -1282,6 +1285,8 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE,
 				"All available ports are disabled. Please set portmask.\n");
 	}
+	printf("nb_ports_available %u %u\n",
+			nb_ports_available, __builtin_popcount(enabled_port_mask));
 
 	check_all_ports_link_status(enabled_port_mask);
 
