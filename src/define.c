@@ -28,9 +28,7 @@ uint16_t random_array_elem_uint16_t(uint16_t *array, uint16_t num, int32_t range
 	int32_t abs_range = (range >= 0) ? range : -range;
 	uint16_t off = r % abs_range;
 
-	return __builtin_bswap16((range > 0) ?
-		(uint16_t)(array[0] + off) :
-		(uint16_t)(array[0] - off));
+	return (range > 0) ?  (uint16_t)(array[0] + off) : (uint16_t)(array[0] - off);
 }
 
 uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range)
@@ -54,9 +52,7 @@ uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range
 	int64_t abs_range = (range >= 0) ? range : -range;
 	uint32_t off = r % abs_range;
 
-	return __builtin_bswap32((range > 0) ?
-		(uint32_t)(array[0] + off) :
-		(uint32_t)(array[0] - off));
+	return (range > 0) ?  (uint32_t)(array[0] + off) : (uint32_t)(array[0] - off);
 }
 
 /** random_array_elem_uint32_t_with_peer - special case for ipv4:vni
@@ -94,7 +90,7 @@ uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, u
 
     uint32_t vni = peer[0] + idx;
 
-    return __builtin_bswap32((uint64_t)vni << 32) | ip;
+    return ((uint64_t)vni << 32) | ip;
 }
 
 /* 计算 16-bit one's complement checksum */
@@ -110,8 +106,9 @@ uint16_t icmp_calc_cksum(const void *buf, size_t len)
 	if (len == 1) {
 		sum += *((const uint8_t *)data) << 8;
 	}
-	while (sum >> 16)
+	while (sum >> 16) {
 		sum = (sum & 0xffff) + (sum >> 16);
+	}
 
 	return (uint16_t)(~sum);
 }

@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>DPDK Metrics Dashboard</title>
+<title>Bless Metrics Dashboard</title>
 <style>
 body {
   font-family: monospace;
@@ -281,7 +281,6 @@ table tr:not(.group-header):hover td {
   background: #2e2e2e;
 }
 
-
 /* 保证 sticky 表头在暗背景上不“漏光”
  避免滚动时出现奇怪的亮线。*/
 th {
@@ -289,9 +288,6 @@ th {
   /* 横向滚动时 header 边缘有一条亮线（似乎不起作用） */
   box-shadow: inset 0 -1px 0 #333;
 }
-
-
-
 
 #console {
   position: fixed;
@@ -379,9 +375,6 @@ Console 内容	11px
 Slider thumb	10px
 关闭 X	12px
 */
-
-
-
 
 #console-tabs {
   display: flex;
@@ -530,7 +523,6 @@ Slider thumb	10px
   cursor: pointer;
 }
 
-
 /* Hover 时增加可感知性（但不变大） */
 #console input[type="range"]:hover::-webkit-slider-thumb {
   background: #fff;
@@ -539,8 +531,6 @@ Slider thumb	10px
 #console input[type="range"]:hover::-webkit-slider-runnable-track {
   background: #666;
 }
-
-
 
 /* Cmd input */
 .cmd-input {
@@ -576,12 +566,7 @@ Slider thumb	10px
   z-index: 9998;
 }
 
-
-
 </style>
-
-
-
 
 <div id="console" class="hidden">
   <div id="console-header">
@@ -654,11 +639,6 @@ Slider thumb	10px
 
 <button id="console-toggle" onclick="toggleConsole()">Console</button>
 
-
-
-
-
-
 </head>
 <body>
 <div class="toolbar">
@@ -697,7 +677,6 @@ const DEFAULT_WS_URL = '/wsURL';
 let wsUrl = localStorage.getItem('dpdk_ws_url') || DEFAULT_WS_URL;
 
 // Initialize UI
-
 
 window.addEventListener("load", () => {
   // WS URL
@@ -1188,7 +1167,6 @@ function appendLog(log) {
   }
 }
 
-
 function clearLog() {
   logArea.innerHTML = "";
 }
@@ -1232,7 +1210,6 @@ function sendCmd() {
   document.onmouseup = () => drag = false;
 })();
 
-
 const DEFAULT_OPACITY = 80;
 
 /*
@@ -1249,13 +1226,11 @@ function setConsoleOpacity(v) {
   localStorage.setItem("console_opacity", v);
 }
 
-
 function setGlassBlur(v) {
   document.documentElement.style
     .setProperty("--glass-blur", v + "px");
   localStorage.setItem("console_blur", v);
 }
-
 
 function setGlassMode(enabled) {
   if (enabled) {
@@ -1272,7 +1247,6 @@ function setGlassMode(enabled) {
 
   localStorage.setItem("console_glass", enabled ? "1" : "0");
 }
-
 
 /* 拖拽表头 */
 (function () {
@@ -1312,7 +1286,6 @@ function setGlassMode(enabled) {
   });
 })();
 
-
 const glassToggle = document.getElementById("glassToggle");
 const opacitySlider = document.getElementById("opacitySlider");
 const blurSlider    = document.getElementById("blurSlider");
@@ -1328,10 +1301,6 @@ opacitySlider.addEventListener("input", e => {
 blurSlider.addEventListener("input", e => {
   setGlassBlur(e.target.value);
 });
-
-
-
-
 
 </script>
 </body>

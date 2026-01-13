@@ -87,4 +87,8 @@ static inline uint64_t rdtsc64()
 	return rdtsc_serialized();
 }
 
+uint16_t random_array_elem_uint16_t(uint16_t *array, uint16_t num, int32_t range);
+uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range);
+uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, uint16_t num, int64_t range);
+
 #endif

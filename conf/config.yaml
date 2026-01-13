@@ -44,8 +44,8 @@ injector:
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 1500 # [46, 1500] size of ether payload, may result in error if vxlan enabled
-    copy-payload: true # copy payload to mbuf, default no
+    mtu: 1000 # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    copy-payload: true # copy payload to mbuf, default false
     dst: 10:70:fd:af:21:10
     src:
     type:
@@ -60,10 +60,10 @@ bless:
           payload: "injector: icmp payload.xxxxxxxxxxxxxxxxxxxx" # not used, yet
         tcp:
           src: [ 80, 808, 8080, 8888 ]
-          dst: 9000+1024
+          dst: 9000+100
           payload: "injector: tcp payload.xxxxxxxxxxxxxxxxxxxx"
         udp:
-          src: 8000+-2048
+          src: 8000+-100
           dst: [ 10000, 10001, 10003 ]
           payload: "injector: udp payload.xxxxxxxxxxxxxxxxxxxx"
         proto: [ 0, 0x8C-0xFF ] # https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers

@@ -30,60 +30,60 @@ typedef struct Node {
 #define PORT_MAX BLESS_CONFIG_MAX
 
 #define RANDOM_VXLAN_IP_SRC(p) \
-	random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.src, \
-			p->vxlan.ether.type.ipv4.n_src, \
-			p->vxlan.ether.type.ipv4.src_range);
+	rte_bswap32(random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.src, \
+				p->vxlan.ether.type.ipv4.n_src, \
+				p->vxlan.ether.type.ipv4.src_range));
 
 #define RANDOM_VXLAN_IP_DST(p) \
-	random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.dst, \
-			p->vxlan.ether.type.ipv4.n_dst, \
-			p->vxlan.ether.type.ipv4.dst_range);
+	rte_bswap32(random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.dst, \
+				p->vxlan.ether.type.ipv4.n_dst, \
+				p->vxlan.ether.type.ipv4.dst_range));
 
 #define RANDOM_VXLAN_IP_VNI(p) \
-	random_array_elem_uint32_t_with_peer(p->vxlan.ether.type.ipv4.src, \
-			p->vxlan.ether.type.ipv4.vni, \
-			p->vxlan.ether.type.ipv4.n_src, \
-			p->vxlan.ether.type.ipv4.src_range);
+	rte_bswap32(random_array_elem_uint32_t_with_peer(p->vxlan.ether.type.ipv4.src, \
+				p->vxlan.ether.type.ipv4.vni, \
+				p->vxlan.ether.type.ipv4.n_src, \
+				p->vxlan.ether.type.ipv4.src_range));
 
 #define RANDOM_VXLAN_UDP_SRC(p) \
-	random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.src, \
-			p->vxlan.ether.type.ipv4.udp.n_src, \
-			p->vxlan.ether.type.ipv4.udp.src_range);
+	rte_bswap16(random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.src, \
+				p->vxlan.ether.type.ipv4.udp.n_src, \
+				p->vxlan.ether.type.ipv4.udp.src_range));
 
 #define RANDOM_VXLAN_UDP_DST(p) \
-	random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.dst, \
-			p->vxlan.ether.type.ipv4.udp.n_dst, \
-			p->vxlan.ether.type.ipv4.udp.dst_range);
+	rte_bswap16(random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.dst, \
+				p->vxlan.ether.type.ipv4.udp.n_dst, \
+				p->vxlan.ether.type.ipv4.udp.dst_range));
 
 #define RANDOM_IP_SRC(p) \
-	random_array_elem_uint32_t(p->ether.type.ipv4.src, \
-			p->ether.type.ipv4.n_src, \
-			p->ether.type.ipv4.src_range);
+	rte_bswap32(random_array_elem_uint32_t(p->ether.type.ipv4.src, \
+				p->ether.type.ipv4.n_src, \
+				p->ether.type.ipv4.src_range));
 
 #define RANDOM_IP_DST(p) \
-	random_array_elem_uint32_t(p->ether.type.ipv4.dst, \
-			p->ether.type.ipv4.n_dst, \
-			p->ether.type.ipv4.dst_range);
+	rte_bswap32(random_array_elem_uint32_t(p->ether.type.ipv4.dst, \
+				p->ether.type.ipv4.n_dst, \
+				p->ether.type.ipv4.dst_range));
 
 #define RANDOM_TCP_SRC(p) \
-	random_array_elem_uint16_t(p->ether.type.ipv4.tcp.src, \
-			p->ether.type.ipv4.tcp.n_src, \
-			p->ether.type.ipv4.tcp.src_range);
+	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.tcp.src, \
+				p->ether.type.ipv4.tcp.n_src, \
+				p->ether.type.ipv4.tcp.src_range));
 
 #define RANDOM_TCP_DST(p) \
-	random_array_elem_uint16_t(p->ether.type.ipv4.tcp.dst, \
-			p->ether.type.ipv4.tcp.n_dst, \
-			p->ether.type.ipv4.tcp.dst_range);
+	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.tcp.dst, \
+				p->ether.type.ipv4.tcp.n_dst, \
+				p->ether.type.ipv4.tcp.dst_range));
 
 #define RANDOM_UDP_SRC(p) \
-	random_array_elem_uint16_t(p->ether.type.ipv4.udp.src, \
-			p->ether.type.ipv4.udp.n_src, \
-			p->ether.type.ipv4.udp.src_range);
+	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.udp.src, \
+				p->ether.type.ipv4.udp.n_src, \
+				p->ether.type.ipv4.udp.src_range));
 
 #define RANDOM_UDP_DST(p) \
-	random_array_elem_uint16_t(p->ether.type.ipv4.udp.dst, \
-			p->ether.type.ipv4.udp.n_dst, \
-			p->ether.type.ipv4.udp.dst_range);
+	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.udp.dst, \
+				p->ether.type.ipv4.udp.n_dst, \
+				p->ether.type.ipv4.udp.dst_range));
 
 enum BLESS_ERRNONEOUS_CLASS_TYPE_OFFSET {
 	EMAC = 0,
@@ -184,7 +184,7 @@ typedef struct Cnode {
 						int32_t src_range; // xxx
 						int32_t dst_range; // xxx
 						char *payload;
-					uint16_t payload_len;
+						uint16_t payload_len;
 					} udp;
 				} ipv4;
 			} type;
@@ -213,8 +213,5 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv);
 int config_parse_generic(Node *node, int *targc, char ***targv, int i, const char *prefix);
 Cnode *config_parse_bless(Node *root);
 Node *parse_node(yaml_parser_t *parser);
-uint16_t random_array_elem_uint16_t(uint16_t *array, uint16_t num, int32_t range);
-uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range);
-uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, uint16_t num, int64_t range);
 
 #endif

@@ -29,7 +29,7 @@ int bless_parse_port_range(char *data, uint16_t *port, int32_t *range)
 	if ('+' == port_range[i]) {
 		port_range[i] = '\0';
 		*range = atoi(&port_range[++i]);
-		printf("%d\n", *range);
+		// printf("%d\n", *range);
 	} else {
 		*range = 0;
 	}
@@ -119,7 +119,7 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_udp_hdr);
-	uint16_t payload_len_fixed = 0;
+	uint16_t payload_len_fixed = payload_len;
 	// printf("mtu %u payload_len %u\n", cnode->ether.mtu, payload_len);
 	if (cnode->ether.mtu) {
 		payload_len_fixed = cnode->ether.mtu - l3_len - l4_len;
@@ -256,7 +256,7 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_tcp_hdr);
-	uint16_t payload_len_fixed = 0;
+	uint16_t payload_len_fixed = payload_len;
 	if (cnode->ether.mtu) {
 		payload_len_fixed = cnode->ether.mtu - l3_len - l4_len;
 		payload_len = min(payload_len, payload_len_fixed);
@@ -369,7 +369,7 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_icmp_hdr);
-	uint16_t payload_len_fixed = 0;
+	uint16_t payload_len_fixed = payload_len;
 	if (cnode->ether.mtu) {
 		payload_len_fixed = cnode->ether.mtu - l3_len - l4_len;
 		payload_len = min(payload_len, payload_len_fixed);
@@ -395,7 +395,7 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		ip = (struct rte_ipv4_hdr *)(eth + 1);
 		ip->version_ihl = 0x45;
 		ip->type_of_service = 0;
-		ip->total_length = rte_cpu_to_be_16(l3_len + l4_len + payload_len);
+		ip->total_length = rte_cpu_to_be_16(l3_len + l4_len + payload_len_fixed);
 		ip->packet_id = htons((uint16_t)rte_rand());
 		ip->fragment_offset = 0;
 		ip->time_to_live = 64;
@@ -404,7 +404,11 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		ip->dst_addr = RANDOM_IP_DST(cnode);
 
 		ip->hdr_checksum = 0;
-		ip->hdr_checksum = rte_ipv4_cksum(ip);
+		if (OFFLOAD_IPV4(cnode)) {
+			m->ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM;
+		} else {
+			ip->hdr_checksum = rte_ipv4_cksum(ip);
+		}
 
 		static uint32_t flag = 1;
 		static uint16_t seq = 1;
@@ -427,6 +431,12 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		icmp->icmp_cksum = 0;
 		const uint16_t icmp_len = l4_len + payload_len_fixed;
 		icmp->icmp_cksum = icmp_calc_cksum(icmp, icmp_len);
+
+		m->l2_len = l2_len;
+		m->l3_len = l3_len;
+		m->l4_len = l4_len;
+
+		tx_bytes += total_pkt_size;
 	}
 
 	return tx_bytes;
@@ -585,7 +595,7 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 	if (cnode->vxlan.enable) {
 		rte_exit(EXIT_FAILURE, "[%s %d] vxlan %u\n", __func__, __LINE__, cnode->vxlan.enable);
 		/* outer */
-		uint16_t ra = rdtsc16() & 1023;
+		uint16_t ra = fast_rand_next() & 1023;
 		if (cnode->vxlan.ratio > 0 && (ra % 100) < cnode->vxlan.ratio) {
 			tx_bytes = bless_encap_outer[0](mbufs, n, cnode);
 			if (!tx_bytes) {

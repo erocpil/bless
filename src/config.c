@@ -850,13 +850,14 @@ static int config_parse_port_maybe_range_to_array(Node *node, uint16_t *port, in
 				}
 				port[0] = p;
 				*range = ra;
+				// printf("> range: %u %d\n", p, ra);
 				n++;
 			}
 			break;
 		case NODE_SEQUENCE:
 			for (Node *i = node->child; i != NULL && n <= limit; i = i->next, n++) {
 				port[n] = atoi(i->value);
-				printf("%u ", port[n]);
+				// printf("%u ", port[n]);
 			}
 			*range = 0;
 			break;
@@ -1205,7 +1206,7 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 	if (!node) {
 		return -1;
 	}
-	printf("%s: %s\n", path, node->value);
+	printf("path: %s value: %s\n", path, node->value);
 
 	int32_t range = 0;
 	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.tcp.src, &range, PORT_MAX);
@@ -1220,10 +1221,14 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  src:\n");
-	/* FIXME */
-	for (int i = 0; i < n; i++) {
-		printf("%u ", cnode->ether.type.ipv4.tcp.src[i]);
+	printf("  src: ");
+	if (range) {
+		printf("%u + %u", cnode->ether.type.ipv4.tcp.src[0],
+				cnode->ether.type.ipv4.tcp.src_range);
+	} else {
+		for (int i = 0; i < n; i++) {
+			printf("%u ", cnode->ether.type.ipv4.tcp.src[i]);
+		}
 	}
 	printf("\n");
 
@@ -1232,7 +1237,7 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 	if (!node) {
 		return -1;
 	}
-	printf("%s: %s\n", path, node->value);
+	printf("path: %s value: %s\n", path, node->value);
 	range = 0;
 	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.tcp.dst, &range, PORT_MAX);
 	if (n > 0) {
@@ -1246,10 +1251,14 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  dst:\n");
-	/* FIXME */
-	for (int i = 0; i < n; i++) {
-		printf("%u ", cnode->ether.type.ipv4.tcp.dst[i]);
+	printf("  dst: ");
+	if (range) {
+		printf("%u + %u", cnode->ether.type.ipv4.tcp.dst[0],
+				cnode->ether.type.ipv4.tcp.dst_range);
+	} else {
+		for (int i = 0; i < n; i++) {
+			printf("%u ", cnode->ether.type.ipv4.tcp.dst[i]);
+		}
 	}
 	printf("\n");
 

@@ -263,7 +263,7 @@ void worker_loop_txonly(void *data)
 					// tx_bytes += r;
 				}
 			} else {
-				enum BLESS_TYPE type = dist->data[rte_rdtsc() & dist->mask];
+				enum BLESS_TYPE type = dist->data[fast_rand_next() & dist->mask];
 				int r = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
 				if (!r) {
 					rte_exit(EXIT_FAILURE, "Cannot bless_mbuf()\n");
