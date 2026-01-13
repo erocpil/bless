@@ -1002,19 +1002,32 @@ static int config_parse_bless_ether(Node *root, Cnode *cnode)
 	Node *node = NULL;
 
 	/* TODO */
-	int64_t mtu = 64 - 8;
+	int64_t mtu = 0;
 	path = "bless.ether.mtu";
 	node = find_by_path(root, path);
 	if (node) {
 		mtu = atoll(node->value);
-		if (mtu < 64 - 8) {
-			mtu = 64 - 8;
+		if (mtu < 46) {
+			printf("set invalid mtu %lu to 0\n", mtu);
+			mtu = 0;
 		} else if (mtu > 1500) {
+			printf("set invalid mtu %lu to 0\n", mtu);
 			mtu = 1500;
 		}
 	}
 	cnode->ether.mtu = (uint16_t)mtu;
 	printf("%s: %d\n", path, cnode->ether.mtu);
+
+	path = "bless.ether.copy-payload";
+	cnode->ether.copy_payload = 0;
+	node = find_by_path(root, path);
+	if (node || strlen(node->value) || (
+				!strcmp("true", node->value) ||
+				!strcmp("TRUE", node->value)
+				)
+	   ) {
+		cnode->ether.copy_payload = 1;
+	}
 
 	path = "bless.ether.dst";
 	node = find_by_path(root, path);
@@ -1395,6 +1408,7 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 	Node *node = NULL;
 
 	path = "bless.vxlan.enable";
+	cnode->vxlan.enable = 1;
 	node = find_by_path(root, path);
 	if (!node || !strlen(node->value) || (
 				strcmp("true", node->value) &&
@@ -1402,14 +1416,14 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 				)
 	   ) {
 		printf("vxlan disabled\n");
-		// return 1;
+		cnode->vxlan.enable = 0;
 	}
 
 	path = "bless.vxlan.ratio";
 	node = find_by_path(root, path);
 	if (!node || !strlen(node->value)) {
 		printf("vxlan disabled\n");
-		return 1;
+		cnode->vxlan.enable = 0;
 	}
 
 	/* XXX do not return, mutation may use vxlan */
@@ -1419,7 +1433,6 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 		cnode->vxlan.enable = 0;
 		// return 1;
 	}
-	cnode->vxlan.enable = 1;
 	printf("%s: %s\n", path, node->value);
 
 	n = config_parse_bless_vxlan_ether(root, cnode);

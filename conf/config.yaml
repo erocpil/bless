@@ -12,7 +12,7 @@ dpdk:
   n: 4
   lcores: null
   socket-mem: null
-  allow: [ 0000:00:05.0, 0000:00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0 ]
+  allow: [ 0000:00:05.0, 0000:00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0 ] # ls -l /sys/class/net/*/device
   block: null # [ 00:03.0, 00:04.0 ]
   vdev: null # net_tap0,iface=tap0
   proc-type: primary
@@ -37,14 +37,15 @@ injector:
   mode: tx-only # rx-only, rx-only, fwd
   num: -1
   arp: 0
-  icmp: 0
-  tcp: 0
+  icmp: 1
+  tcp: 1
   udp: 1
 
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 0 # size of ether payload, may result in error if vxlan enabled
+    mtu: 1500 # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    copy-payload: true # copy payload to mbuf, default no
     dst: 10:70:fd:af:21:10
     src:
     type:
@@ -56,15 +57,15 @@ bless:
         dst: [ 192.168.0.1, 192.168.1.1 ]
         icmp:
           ident: [ 0x1234, 0xface ]
-          payload: "injector: icmp payload." # not used, yet
+          payload: "injector: icmp payload.xxxxxxxxxxxxxxxxxxxx" # not used, yet
         tcp:
           src: [ 80, 808, 8080, 8888 ]
           dst: 9000+1024
-          payload: "injector: tcp payload."
+          payload: "injector: tcp payload.xxxxxxxxxxxxxxxxxxxx"
         udp:
           src: 8000+-2048
           dst: [ 10000, 10001, 10003 ]
-          payload: "injector: udp payload."
+          payload: "injector: udp payload.xxxxxxxxxxxxxxxxxxxx"
         proto: [ 0, 0x8C-0xFF ] # https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
   vxlan:
     enable: false

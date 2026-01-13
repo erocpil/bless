@@ -613,14 +613,14 @@ Slider thumb	10px
   </div>
 
   <div id="console-tabs">
-    <button class="active" onclick="switchTab('log', event)">Log</button>
-    <button onclick="switchTab('cmd', event)">Cmd</button>
+    <button class="active" onclick="switchTab('cmd', event)">Cmd</button>
+    <button onclick="switchTab('log', event)">Log</button>
   </div>
 
   <div id="console-body">
 
     <!-- Cmd Tab -->
-    <div id="tab-cmd" class="tab">
+    <div id="tab-cmd" class="tab active">
       <div id="cmdOutput" class="cmd-output"></div>
       <div class="cmd-input">
         <textarea id="cmdInput" placeholder="Enter command..."></textarea>
@@ -629,7 +629,7 @@ Slider thumb	10px
     </div>
 
     <!-- Log Tab -->
-    <div id="tab-log" class="tab active">
+    <div id="tab-log" class="tab">
       <div class="console-actions">
 		    <button onclick="clearLog()">Clear</button>
 
@@ -734,13 +734,13 @@ window.addEventListener("load", () => {
     }
   });
 
+  switchTab(initialTab)
+
   const saved = localStorage.getItem("console_opacity") || DEFAULT_OPACITY;
   const slider = document.getElementById("opacitySlider");
   slider.value = saved;
   setConsoleOpacity(saved);
 });
-
-
 
 function normalizeWsUrl(url) {
   // Trim whitespace
@@ -1073,7 +1073,6 @@ function renderGroup(tbody, title, keys, data, ports, timeDelta, isXstats, categ
   });
 }
 
-
 const consoleEl = document.getElementById("console");
 const logArea = document.getElementById("logArea");
 const cmdOutput = document.getElementById("cmdOutput");
@@ -1100,17 +1099,53 @@ freezeToggle.onchange = () => {
   freezeLog = freezeToggle.checked;
 };
 
+// 🎯 页面加载时恢复上次的 tab 状态
+const initialTab = localStorage.getItem("console_last_tab") || 'cmd';
+
+let currentTab = 'cmd';   // 默认
+
 /* ---------- Console ---------- */
 function toggleConsole() {
+  const opening = consoleEl.classList.contains("hidden");
   consoleEl.classList.toggle("hidden");
+  if (opening) {
+    // 📖 打开时恢复上次的 tab，默认为 'cmd'
+    const lastTab = localStorage.getItem("console_last_tab") || 'cmd';
+    switchTab(lastTab);
+  }
 }
 
 function switchTab(name, ev) {
-  document.querySelectorAll("#console-tabs button").forEach(b => b.classList.remove("active"));
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.getElementById("tab-" + name).classList.add("active");
-  ev.target.classList.add("active");
-}
+    currentTab = name;   // ⭐ 记住当前 tab
+    localStorage.setItem("console_last_tab", name); // 💾 保存到 localStorage
+
+    // 移除所有 tab 按钮和内容的 active 状态
+    document.querySelectorAll("#console-tabs button")
+      .forEach(b => b.classList.remove("active"));
+
+    document.querySelectorAll(".tab")
+      .forEach(t => t.classList.remove("active"));
+
+    // 激活对应的 tab 内容
+    document.getElementById("tab-" + name)
+      .classList.add("active");
+
+    // 激活对应的 tab 按钮
+    if (ev && ev.target) {
+      // 用户点击时，直接激活被点击的按钮
+      ev.target.classList.add("active");
+    } else {
+      // JS 主动调用时，根据 name 精确匹配按钮
+      const buttons = document.querySelectorAll("#console-tabs button");
+      buttons.forEach(btn => {
+        const onclickAttr = btn.getAttribute("onclick");
+        // 精确匹配：switchTab('cmd') 或 switchTab('log')
+        if (onclickAttr && onclickAttr.includes(`'${name}'`)) {
+          btn.classList.add("active");
+        }
+      });
+    }
+  }
 
 /* ---------- Log ---------- */
 function appendLog(log) {

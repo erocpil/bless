@@ -113,13 +113,20 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	struct rte_ipv4_hdr *ip;
 	struct rte_udp_hdr *udp;
 	const char *payload = cnode->ether.type.ipv4.udp.payload;
-	uint16_t payload_len = strlen(payload) + 1;
+	uint16_t payload_len = cnode->ether.type.ipv4.udp.payload_len;
 	uint64_t tx_bytes = 0;
 
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_udp_hdr);
-	const uint16_t total_pkt_size = l2_len + max(l3_len + l4_len + payload_len, cnode->ether.mtu);
+	uint16_t payload_len_fixed = 0;
+	// printf("mtu %u payload_len %u\n", cnode->ether.mtu, payload_len);
+	if (cnode->ether.mtu) {
+		payload_len_fixed = cnode->ether.mtu - l3_len - l4_len;
+		payload_len = min(payload_len, payload_len_fixed);
+	}
+	// printf("payload_len %u payload_len_fixed %u\n", payload_len, payload_len_fixed);
+	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len_fixed;
 
 	for (int i = 0; i < (int)n; i++) {
 		struct rte_mbuf *m = mbufs[i];
@@ -140,7 +147,7 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		ip = (struct rte_ipv4_hdr *)(eth + 1);
 		ip->version_ihl = 0x45;
 		ip->type_of_service = 0;
-		ip->total_length = rte_cpu_to_be_16(l3_len + l4_len + payload_len);
+		ip->total_length = rte_cpu_to_be_16(l3_len + l4_len + payload_len_fixed);
 		ip->packet_id = htons((uint16_t)rte_rand());
 		ip->fragment_offset = 0;
 		ip->time_to_live = 64;
@@ -158,10 +165,10 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		udp = (struct rte_udp_hdr *)(ip + 1);
 		udp->src_port = RANDOM_UDP_SRC(cnode);
 		udp->dst_port = RANDOM_UDP_DST(cnode);
-		udp->dgram_len = htons(l4_len + payload_len);
+		udp->dgram_len = htons(l4_len + payload_len_fixed);
 		udp->dgram_cksum = 0;
-		if (payload && payload_len) {
-			// rte_memcpy((uint8_t *)udp + l4_len, payload, payload_len);
+		if (cnode->ether.copy_payload && payload && payload_len) {
+			rte_memcpy((uint8_t *)udp + l4_len, payload, payload_len);
 		}
 
 		if (OFFLOAD_UDP(cnode)) {
@@ -249,7 +256,12 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_tcp_hdr);
-	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
+	uint16_t payload_len_fixed = 0;
+	if (cnode->ether.mtu) {
+		payload_len_fixed = cnode->ether.mtu - l3_len - l4_len;
+		payload_len = min(payload_len, payload_len_fixed);
+	}
+	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len_fixed;
 
 	uint64_t tx_bytes = 0;
 
@@ -272,7 +284,7 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		memset(ip, 0, sizeof(*ip));
 		ip->version_ihl = (4u << 4) | (sizeof(struct rte_ipv4_hdr) >> 2);
 		ip->type_of_service = 0;
-		ip->total_length = rte_cpu_to_be_16(l3_len + l4_len + payload_len);
+		ip->total_length = rte_cpu_to_be_16(l3_len + l4_len + payload_len_fixed);
 		ip->packet_id = rte_cpu_to_be_16(0);
 		ip->fragment_offset = rte_cpu_to_be_16(RTE_IPV4_HDR_DF_FLAG);
 		ip->time_to_live = 64;
@@ -299,8 +311,8 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		tcp->tcp_flags = RTE_TCP_ACK_FLAG | RTE_TCP_PSH_FLAG;
 		tcp->rx_win = rte_cpu_to_be_16(65535);
 
-		if (payload && payload_len) {
-			// rte_memcpy((uint8_t *)tcp + l4_len, payload, payload_len);
+		if (cnode->ether.copy_payload && payload && payload_len) {
+			rte_memcpy((uint8_t *)tcp + l4_len, payload, payload_len);
 		}
 
 		tcp->cksum = 0;
@@ -348,15 +360,21 @@ static uint16_t calc_cksum(const void *buf, size_t len)
 uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	Cnode *cnode = (Cnode*)data;
-	uint64_t tx_bytes = 0;
-	const char *payload = cnode->ether.type.ipv4.icmp.payload;
-	const uint16_t payload_len = cnode->ether.type.ipv4.icmp.payload_len;
 	struct rte_ether_hdr *eth;
 	struct rte_ipv4_hdr *ip;
+	const char *payload = cnode->ether.type.ipv4.icmp.payload;
+	uint16_t payload_len = cnode->ether.type.ipv4.icmp.payload_len;
+	uint64_t tx_bytes = 0;
+
 	const uint16_t l2_len = sizeof(struct rte_ether_hdr);
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_icmp_hdr);
-	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len;
+	uint16_t payload_len_fixed = 0;
+	if (cnode->ether.mtu) {
+		payload_len_fixed = cnode->ether.mtu - l3_len - l4_len;
+		payload_len = min(payload_len, payload_len_fixed);
+	}
+	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len_fixed;
 
 	for (int i = 0; i < (int)n; i++) {
 		struct rte_mbuf *m = mbufs[i];
@@ -401,13 +419,13 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		icmp->icmp_ident = rte_cpu_to_be_16(0x1234);
 		icmp->icmp_seq_nb   = rte_cpu_to_be_16(seq);
 
-		if (payload && payload_len) {
-			// rte_memcpy((char *)icmp + sizeof(*icmp), payload, payload_len);
+		if (cnode->ether.copy_payload && payload && payload_len) {
+			rte_memcpy((char *)icmp + sizeof(*icmp), payload, payload_len);
 		}
 
 		/* checksum */
 		icmp->icmp_cksum = 0;
-		const uint16_t icmp_len = l4_len + payload_len;
+		const uint16_t icmp_len = l4_len + payload_len_fixed;
 		icmp->icmp_cksum = icmp_calc_cksum(icmp, icmp_len);
 	}
 
@@ -565,6 +583,7 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 		return 0;
 	}
 	if (cnode->vxlan.enable) {
+		rte_exit(EXIT_FAILURE, "[%s %d] vxlan %u\n", __func__, __LINE__, cnode->vxlan.enable);
 		/* outer */
 		uint16_t ra = rdtsc16() & 1023;
 		if (cnode->vxlan.ratio > 0 && (ra % 100) < cnode->vxlan.ratio) {

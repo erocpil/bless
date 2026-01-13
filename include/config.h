@@ -119,6 +119,7 @@ typedef struct Cnode {
 	uint64_t offload;
 	struct {
 		uint16_t mtu;
+		uint8_t copy_payload;
 		uint8_t dst[ETHER_ADDR_LEN];
 		uint8_t src[ETHER_ADDR_LEN];
 		uint16_t n_dst;
