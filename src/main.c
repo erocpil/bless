@@ -3,15 +3,16 @@
 #include "metric.h"
 #include "server.h"
 #include "system.h"
+#include "cJSON.h"
 
+#define DEFAULT_CONFIG_FILE "conf/config.yaml"
 struct bless_conf *bconf = NULL;
 struct config_file_map *cfm = NULL;
+struct system_status sysstat;
 
 /* mask of enabled ports */
 static uint32_t enabled_port_mask = 0;
 static uint32_t enabled_lcores = 0;
-
-// volatile static struct port_statistics *port_statistics[RTE_MAX_ETHPORTS];
 
 #define MAX_TIMER_PERIOD 86400 /* 1 day max */
 /* A tsc-based timer responsible for triggering statistics printout */
@@ -21,27 +22,16 @@ atomic_int g_state = STATE_INIT;
 
 static struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
+void *metric_cbfn()
+{
+	return (void*)&sysstat;
+}
+
 void register_my_metrics(void)
 {
-#if 0
-	rte_telemetry_register_cmd("/bless/injector", bless_handle_injector,
-			"Returns `injector' metrics for BLESS");
-	rte_telemetry_register_cmd("/bless/arp", bless_handle_arp,
-			"Returns `arp' metrics for BLESS");
-	rte_telemetry_register_cmd("/bless/icmp", bless_handle_icmp,
-			"Returns `icmp' metrics for BLESS");
-	rte_telemetry_register_cmd("/bless/udp", bless_handle_udp,
-			"Returns `udp' metrics for BLESS");
-	rte_telemetry_register_cmd("/bless/tcp", bless_handle_tcp,
-			"Returns `tcp' metrics for BLESS");
-	rte_telemetry_register_cmd("/bless/erroneous", bless_handle_erroneous,
-			"Returns `erroneous' metrics for BLESS");
-	rte_telemetry_register_cmd("/bless/vxlan", bless_handle_vxlan,
-			"Returns `vxlan' metrics for BLESS");
-
-	rte_telemetry_register_cmd("/myapp/metrics", my_custom_metrics_cb,
-			"Returns custom metrics for myapp");
-#endif
+	metric_set_cbfn(metric_cbfn);
+	rte_telemetry_register_cmd("/bless/system", bless_handle_system,
+			"Returns `system' metrics for BLESS");
 }
 
 /* MAC updating enabled by default */
@@ -778,7 +768,9 @@ static void check_all_ports_link_status(uint32_t port_mask)
 
 static void signal_handler(int signum)
 {
-	if (signum == SIGINT || signum == SIGTERM) {
+	if (signum == SIGINT) {
+		system_dump_status(&sysstat);
+	} else if (signum == SIGTERM) {
 		printf("\n\nSignal %d received, preparing to exit...\n", signum);
 		atomic_store(&g_state, STATE_EXIT);
 	}
@@ -838,7 +830,7 @@ const char *ws_json_get_string(cJSON *obj, const char *key)
 
 void ws_user_func(void *data, size_t size)
 {
-	if (!size) {
+	if (!data || !size) {
 		return;
 	}
 
@@ -847,6 +839,7 @@ void ws_user_func(void *data, size_t size)
 		printf("[%s %d] JSON parse error\n", __func__, __LINE__);
 		return;
 	}
+
 	const char *cmd = ws_json_get_string(root, "cmd");
 	if (cmd) {
 		printf("cmd = %s\n", cmd);
@@ -870,6 +863,8 @@ void ws_user_func(void *data, size_t size)
 		} else if (strcmp(cmd, "conf") == 0) {
 			printf("Received conf command\n");
 			cmd = (char*)cfm->addr;
+		} else {
+			cmd = "Not supported";
 		}
 	} else {
 		printf("cmd missing or not a string\n");
@@ -885,7 +880,7 @@ int main(int argc, char **argv)
 	char **targv = argv;
 	Node *conf_root = NULL;
 
-	char *f = "conf/config.yaml";
+	char *f = DEFAULT_CONFIG_FILE;
 	if (2 == argc) {
 		f = argv[1];
 	}
@@ -1307,27 +1302,15 @@ int main(int argc, char **argv)
 	RTE_LOG(INFO, BLESS, "entering main loop %s: pid %d tid %d self %lu\n", name,
 			getpid(), rte_gettid(), (unsigned long)rte_thread_self().opaque_id);
 
-	cpu_set_t cpuset;
-	CPU_ZERO(&cpuset);
-
-	// 获取当前线程 CPU 亲和性
-	int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-	if (s != 0) {
-		perror("pthread_getaffinity_np");
-		pthread_exit(NULL);
+	sysstat.pid = getpid();
+	sysstat.ppid = getppid();
+	CPU_ZERO(&sysstat.cpuset);
+	if (sched_getaffinity(0, sizeof(cpu_set_t), &sysstat.cpuset)) {
+		rte_exit(EXIT_FAILURE, "sched_getaffinity()");
 	}
-
-	printf("Thread running on CPUs: ");
-	for (int i = 0; i < CPU_SETSIZE; i++) {
-		if (CPU_ISSET(i, &cpuset)) {
-			printf("%d ", i);
-		}
-	}
-	printf("\n");
 
 	bconf->qconf = lcore_queue_conf;
 	bconf->stats = rte_malloc(NULL, sizeof(bconf->stats) * RTE_MAX_ETHPORTS, 0);
-	// printf("port_statistics %p\n", port_statistics);
 	bconf->dst_ports = l2fwd_dst_ports;
 	bconf->state = &g_state;
 	bconf->timer_period = timer_period;

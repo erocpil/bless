@@ -50,7 +50,6 @@ static _Atomic int g_stats_active_idx = 0;
 /* ================================================================ */
 /* Helper                                                           */
 /* ================================================================ */
-
 int stats_get_active_index(void)
 {
 	return atomic_load_explicit(&g_stats_active_idx,

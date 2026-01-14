@@ -7,7 +7,7 @@
 # --erroneous=...
 
 dpdk:
-  main-lcore: 0
+  main-lcore: 16
   l: 0-16
   n: 4
   lcores: null
@@ -26,7 +26,7 @@ dpdk:
 
 injector:
   p: 0xf # port
-  q: 4 # queues on each port
+  q: 1 # queues on each port
   P:
   T: 1
   no-mac-updating:

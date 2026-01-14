@@ -15,6 +15,76 @@
 	len += (size_t)n;                                             \
 } while (0)
 
+void* (*cbfn)(void) = NULL;
+
+void metric_set_cbfn(void*(*metric_cbfn)())
+{
+	cbfn = metric_cbfn;
+}
+
+void metric_cpuset_to_str(const cpu_set_t *set, char *buf, size_t len)
+{
+    int first = 1;
+    int start = -1;
+    size_t off = 0;
+
+    for (int cpu = 0; cpu <= CPU_SETSIZE; cpu++) {
+        int is_set = (cpu < CPU_SETSIZE) && CPU_ISSET(cpu, set);
+
+        if (is_set) {
+            if (start < 0)
+                start = cpu;
+        } else if (start >= 0) {
+            int end = cpu - 1;
+            int n;
+
+            if (!first)
+                n = snprintf(buf + off, len - off, ",");
+            else
+                n = 0;
+
+            off += n;
+
+            if (start == end)
+                off += snprintf(buf + off, len - off, "%d", start);
+            else
+                off += snprintf(buf + off, len - off, "%d-%d", start, end);
+
+            first = 0;
+            start = -1;
+        }
+    }
+}
+
+int bless_handle_system(const char *cmd, const char *params __rte_unused, struct rte_tel_data *d)
+{
+	RTE_SET_USED(cmd);
+	RTE_SET_USED(params);
+
+	struct system_status *sysstat = cbfn();
+	rte_tel_data_start_dict(d);
+	rte_tel_data_add_dict_int(d, "ppid", sysstat->ppid);
+	rte_tel_data_add_dict_int(d, "pid", sysstat->pid);
+
+#if 0
+	char buf[256];
+	metric_cpuset_to_str(&sysstat->cpuset, buf, sizeof(buf));
+	rte_tel_data_add_dict_string(d, "cpu_affinity", buf);
+#endif
+
+	struct rte_tel_data *arr;
+    arr = rte_tel_data_alloc();
+    rte_tel_data_start_array(arr, RTE_TEL_UINT_VAL);
+    for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+        if (CPU_ISSET(cpu, &sysstat->cpuset)) {
+            rte_tel_data_add_array_uint(arr, cpu);
+		}
+    }
+    rte_tel_data_add_dict_container(d, "cpu_affinity", arr, 0);
+
+	return 0;
+}
+
 size_t encode_stats_to_text(uint32_t port_mask, char *msg, size_t max_len)
 {
 	size_t len = 0;
