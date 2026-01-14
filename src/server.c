@@ -11,7 +11,6 @@
 /* ================================================================ */
 /* Server options                                                    */
 /* ================================================================ */
-
 static const char *SERVER_OPTIONS[] = {
 	"listening_ports", "8000",
 	"num_threads", "4",
@@ -29,11 +28,9 @@ static const char subprotocol_json[] = "Company.ProtoName.json";
 static const char *subprotocols[] = {subprotocol_bin, subprotocol_json, NULL};
 static struct mg_websocket_subprotocols wsprot = {2, subprotocols};
 
-
 /* ================================================================ */
 /* WebSocket clients                                                 */
 /* ================================================================ */
-
 #define MGC_SIZE 16
 static const struct mg_connection *mgc[MGC_SIZE];
 static int n_mgc = 0;
@@ -46,23 +43,6 @@ struct tClientContext {
 /* ================================================================ */
 /* Stats snapshot (double buffer)                                   */
 /* ================================================================ */
-
-/*
-#define STATS_JSON_MAX   8192
-#define STATS_METRIC_MAX 8192
-
-struct stats_snapshot {
-uint64_t ts_ns;
-size_t   json_len;
-char     json[STATS_JSON_MAX];
-size_t   metric_len;
-char     metric[STATS_METRIC_MAX];
-};
-
-static struct stats_snapshot g_stats_buf[2];
-static _Atomic int g_stats_active_idx = 0;
-*/
-
 /* 全局双缓冲 */
 static struct stats_snapshot g_stats_buf[2];
 static _Atomic int g_stats_active_idx = 0;
@@ -85,8 +65,7 @@ struct stats_snapshot * stats_get(int idx)
 void stats_set(int idx)
 {
 	atomic_store_explicit(&g_stats_active_idx,
-			idx,
-			memory_order_release);
+			idx, memory_order_release);
 }
 
 const struct stats_snapshot * stats_get_active(void)
@@ -99,7 +78,6 @@ const struct stats_snapshot * stats_get_active(void)
 /* ================================================================ */
 /* WebSocket handlers                                                */
 /* ================================================================ */
-
 static int ws_connect_handler(const struct mg_connection *conn, void *ud)
 {
 	(void)ud;
@@ -166,12 +144,14 @@ static void ws_close_handler(const struct mg_connection *conn, void *ud)
 		}
 	}
 	pthread_mutex_unlock(&mgc_lock);
+	struct tClientContext *ctx = mg_get_user_connection_data(conn);
+	printf("conn %d closed", ctx->conn_id);
+	free(ctx);
 }
 
 /* ================================================================ */
 /* HTTP handlers                                                     */
 /* ================================================================ */
-
 static int http_control_handler(struct mg_connection *conn, void *ud)
 {
 	(void)ud;
@@ -299,38 +279,6 @@ int ws_server_stop(struct mg_context *ctx)
 	return 0;
 }
 
-#if 0
-/* ========= itoa / bool ========= */
-static void u32toa(char *buf, size_t sz, uint32_t v)
-{
-	char tmp[16];
-	int i = 0;
-
-	if (v == 0) {
-		buf[0] = '0';
-		buf[1] = 0;
-		return;
-	}
-
-	while (v && i < (int)sizeof(tmp)) {
-		tmp[i++] = '0' + (v % 10);
-		v /= 10;
-	}
-
-	if (i >= (int)sz) i = sz - 1;
-
-	for (int j = 0; j < i; j++)
-		buf[j] = tmp[i - j - 1];
-
-	buf[i] = 0;
-}
-
-static const char *bool_to_str(int v)
-{
-	return v ? "yes" : "no";
-}
-#endif
-
 void server_options_set_defaults(struct server_options_cfg *cfg)
 {
 #define X(name, type, key, def) \
@@ -357,25 +305,3 @@ size_t build_civet_options(const struct server_options_cfg *cfg, struct civet_kv
 
 	return i;
 }
-
-#if 0
-int server_options_from_yaml(struct server_options_cfg *cfg, void *node)
-{
-	const char *k;
-	const char *v;
-
-	while (yaml_next_kv(node, &k, &v)) {
-
-#define X(name, type, civet_key, def)        \
-		if (strcmp(k, civet_key) == 0) { \
-			SERVER_PARSE_##type(cfg->name, v); \
-			continue; \
-		}
-
-#include "server_options.def"
-#undef X
-	}
-
-	return 0;
-}
-#endif
