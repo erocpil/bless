@@ -5,6 +5,13 @@
 #include "define.h"
 #include <ctype.h>    // isprint()
 
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+
 static struct offload_table_item offload_table[] = {
 	{ "ipv4", OF_IPV4 },
 	{ "ipv6", OF_IPV6 },
@@ -297,39 +304,103 @@ Node *find_by_path(Node *root, const char *path)
 	return cur;
 }
 
-#define BUFFER_SIZE 4096
-int config_check_file(char *filename)
+void config_file_unmap_close(struct config_file_map *fm)
+{
+	if (!fm) {
+		return;
+	}
+
+	if (fm->addr && fm->addr != MAP_FAILED) {
+		munmap(fm->addr, fm->len);
+	}
+
+	if (fm->fd >= 0) {
+		close(fm->fd);
+	}
+
+	fm->addr = NULL;
+	fm->len = 0;
+	fm->fd = -1;
+}
+
+struct config_file_map *config_file_map_open(const char *path)
+{
+	struct stat st;
+	struct config_file_map *cfm = NULL;
+
+	if (!path) {
+		return NULL;
+	}
+
+	cfm = malloc(sizeof(struct config_file_map));
+	if (!cfm) {
+		return NULL;
+	}
+	memset(cfm, 0, sizeof(*cfm));
+	cfm->fd = -1;
+
+	cfm->fd = open(path, O_RDONLY);
+	if (cfm->fd < 0) {
+		return NULL;
+	}
+
+	if (fstat(cfm->fd, &st) < 0) {
+		goto err;
+	}
+
+	if (!S_ISREG(st.st_mode)) {
+		goto err;
+	}
+
+	if (st.st_size == 0) {
+		cfm->addr = NULL;
+		cfm->len = 0;
+		return cfm;
+	}
+
+	cfm->len = st.st_size;
+	cfm->addr = mmap(NULL, cfm->len + 1, PROT_READ | PROT_WRITE, MAP_PRIVATE, cfm->fd, 0);
+	if (cfm->addr == MAP_FAILED) {
+		goto err;
+	}
+	((char*)cfm->addr)[cfm->len] = '\0';
+
+	return cfm;
+
+err:
+	config_file_unmap_close(cfm);
+
+	return NULL;
+}
+
+struct config_file_map *config_check_file(char *filename)
 {
 	// 检查文件是否存在
 	if (access(filename, F_OK) != 0) {
 		printf("文件 \"%s\" 不存在。\n", filename);
-		return EXIT_FAILURE;
+		return NULL;
 	}
 	printf("文件 \"%s\" 存在。\n", filename);
 
-	int res = 1;
-	FILE *fp = fopen(filename, "rb");
-	if (!fp) {
-		perror("fopen");
-		res = -1;
-		goto DONE;
-	}
 	printf("打开文件 \"%s\"。\n", filename);
 
-	unsigned char buffer[BUFFER_SIZE];
-	size_t nread = fread(buffer, 1, BUFFER_SIZE, fp);
-	fclose(fp);
-	printf("读取并关闭文件 \"%s\"。\n", filename);
-
-	if (nread == 0) {
-		// 空文件可以认为是文本文件
-		res = -1;
+	struct config_file_map *cfm = config_file_map_open(filename);
+	if (!cfm) {
+		printf("文件 \"%s\" 错误。\n", filename);
+		return NULL;
 	}
-	printf("文件 \"%s\" 内容不为空。\n", filename);
+
+	printf("读取文件 \"%s\"。\n", filename);
+
+	if (!cfm->len) {
+		printf("文件 \"%s\" 内容空。\n", filename);
+		goto err;
+	}
+	printf("文件 \"%s\" 内容不空。\n", filename);
 
 	size_t binary_count = 0;
-	for (size_t i = 0; i < nread; i++) {
-		unsigned char c = buffer[i];
+	for (size_t i = 0; i < cfm->len; i++) {
+		unsigned char c = ((char*)cfm->addr)[i];
 		// 允许常见控制符：换行(10)、回车(13)、制表符(9)
 		if (!(isprint(c) || c == '\n' || c == '\r' || c == '\t')) {
 			binary_count++;
@@ -338,22 +409,23 @@ int config_check_file(char *filename)
 	printf("检测文件 \"%s\" 中的控制字符。\n", filename);
 
 	// 如果二进制字符占比超过 10%，认为是二进制文件
-	if ((double)binary_count / nread > 0.1) {
+	if ((double)binary_count / cfm->len > 0.1) {
 		printf("文件 \"%s\" 中的控制字符超过 10%% 。\n", filename);
-		res = 0;
-	}
-
-DONE:
-	if (res == -1) {
-		printf("无法打开文件 \"%s\"。\n", filename);
-		return -EXIT_FAILURE;
-	} else if (res == 1) {
-		printf("文件 \"%s\" 是文本文件。\n", filename);
-	} else {
 		printf("文件 \"%s\" 不是文本文件。\n", filename);
+		goto err;
 	}
+	printf("文件 \"%s\" 是文本文件。\n", filename);
+	printf("关闭文件 \"%s\" 。\n", filename);
+	close(cfm->fd);
 
-	return res;
+	printf("addr %p len %lu fd %d\n", cfm->addr, cfm->len, cfm->fd);
+
+	return cfm;
+
+err:
+	config_file_unmap_close(cfm);
+	free(cfm);
+	return NULL;
 }
 
 Node *config_init(char *f)

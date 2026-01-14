@@ -5,6 +5,7 @@
 #include "system.h"
 
 struct bless_conf *bconf = NULL;
+struct config_file_map *cfm = NULL;
 
 /* mask of enabled ports */
 static uint32_t enabled_port_mask = 0;
@@ -866,6 +867,9 @@ void ws_user_func(void *data, size_t size)
 			printf("Received EXIT command\n");
 			atomic_store(&g_state, STATE_EXIT);
 			cmd = "exited";
+		} else if (strcmp(cmd, "conf") == 0) {
+			printf("Received conf command\n");
+			cmd = (char*)cfm->addr;
 		}
 	} else {
 		printf("cmd missing or not a string\n");
@@ -885,7 +889,8 @@ int main(int argc, char **argv)
 	if (2 == argc) {
 		f = argv[1];
 	}
-	if (-1 == config_check_file(f)) {
+	cfm = config_check_file(f);
+	if (!cfm) {
 		rte_exit(EXIT_FAILURE, "Cannot check %s\n", f);
 	}
 
@@ -904,6 +909,7 @@ int main(int argc, char **argv)
 	if (!bconf) {
 		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
 	}
+	// bless_set_config_file(bconf, cfm);
 
 	struct system_cfg syscfg;
 	if (config_parse_system(conf_root, &syscfg) < 0) {

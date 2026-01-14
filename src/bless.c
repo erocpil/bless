@@ -859,6 +859,11 @@ ERROR:
 	rte_exit(EXIT_FAILURE, "Invalid bless arguments a `%s'\n", optarg);
 }
 
+// void bless_set_config_file(struct bless_conf* bconf, struct config_file_map *cfm)
+// {
+// 	bconf->cfm = cfm;
+// }
+
 void bless_print_mac(const struct rte_ether_addr *mac)
 {
 	char buf[RTE_ETHER_ADDR_FMT_SIZE];

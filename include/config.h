@@ -1,10 +1,21 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
+#include <stddef.h>
+
 #include <yaml.h>
 #include "define.h"
 #include "server.h"
 #include "system.h"
+
+struct config_file_map {
+	void   *addr;
+	size_t  len;
+	int     fd;
+};
+
+struct config_file_map *config_file_map_open(const char *path);
+void config_file_unmap_close(struct config_file_map *fm);
 
 typedef enum {
 	NODE_SCALAR,
@@ -204,7 +215,7 @@ typedef struct Cnode {
 	} erroneous;
 } __attribute__((__aligned__(sizeof(char)))) Cnode;
 
-int config_check_file(char *file);
+struct config_file_map *config_check_file(char *file);
 Node *config_init(char *f);
 int config_exit(Node *root);
 int config_parse_system(Node *root, struct system_cfg *cfg);

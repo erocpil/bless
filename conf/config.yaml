@@ -8,7 +8,7 @@
 
 dpdk:
   main-lcore: 0
-  l: 0-8
+  l: 0-16
   n: 4
   lcores: null
   socket-mem: null
@@ -25,8 +25,8 @@ dpdk:
   file-prefix: null # bless
 
 injector:
-  p: 0x3 # port
-  q: 1 # queues on each port
+  p: 0xf # port
+  q: 4 # queues on each port
   P:
   T: 1
   no-mac-updating:
@@ -44,7 +44,7 @@ injector:
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 1000 # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    mtu: 1500 # [46, 1500] size of ether payload, may result in error if vxlan enabled
     copy-payload: true # copy payload to mbuf, default false
     dst: 10:70:fd:af:21:10
     src:
