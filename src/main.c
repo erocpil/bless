@@ -918,6 +918,9 @@ int main(int argc, char **argv)
 		.func = ws_user_func,
 	};
 	struct mg_context *ctx = ws_server_start(&wsud);
+	if (!ctx) {
+		rte_exit(EXIT_FAILURE, "ws_server_start failed\n");
+	}
 
 	int ret = rte_eal_init(targc, targv);
 	if (ret < 0) {

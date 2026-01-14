@@ -264,6 +264,9 @@ struct mg_context * ws_server_start(void *data)
 	};
 
 	struct mg_context *ctx = mg_start2(&init, NULL);
+	if (!ctx) {
+		return NULL;
+	}
 
 	mg_set_websocket_handler_with_subprotocols(ctx,
 			cfg->uri ? cfg->uri : WS_URL,
