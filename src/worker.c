@@ -2,6 +2,16 @@
 #include "define.h"
 #include "worker.h"
 
+static inline void swap_mac(struct rte_ether_hdr *eth_hdr)
+{
+	struct rte_ether_addr addr;
+
+	/* Swap dest and src mac addresses. */
+	rte_ether_addr_copy(&eth_hdr->dst_addr, &addr);
+	rte_ether_addr_copy(&eth_hdr->src_addr, &eth_hdr->dst_addr);
+	rte_ether_addr_copy(&addr, &eth_hdr->src_addr);
+}
+
 void worker_loop_txonly(void *data)
 {
 	struct rte_mbuf **mbufs = NULL;
@@ -103,25 +113,20 @@ void worker_loop_txonly(void *data)
 			qconf->txl_id, qconf->txp_id, qconf->txq_id);
 
 	// 获取当前线程 CPU 亲和性
-	{
-		cpu_set_t cpuset;
-		CPU_ZERO(&cpuset);
-		int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-		if (s != 0) {
-			perror("pthread_getaffinity_np");
-			pthread_exit(NULL);
-		}
-		printf("cpu set: ");
-		for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
-			if (CPU_ISSET(cpu, &cpuset)) {
-				printf("%d ", cpu);
-			}
-		}
-		printf("\n");
+	cpu_set_t cpuset;
+	CPU_ZERO(&cpuset);
+	int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	if (s != 0) {
+		perror("pthread_getaffinity_np");
+		pthread_exit(NULL);
 	}
-
-	sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool",
-			qconf->txl_id, qconf->txp_id, qconf->txq_id);
+	printf("cpu set: ");
+	for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+		if (CPU_ISSET(cpu, &cpuset)) {
+			printf("%d ", cpu);
+		}
+	}
+	printf("\n");
 
 	uint8_t mode = conf->mode;
 	uint64_t num = conf->num;
@@ -195,6 +200,7 @@ void worker_loop_txonly(void *data)
 		rte_exit(EXIT_FAILURE, "mbufs alloc failed");
 	}
 
+	sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool", qconf->txl_id, qconf->txp_id, qconf->txq_id);
 	struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
 
 	if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
@@ -256,8 +262,6 @@ void worker_loop_txonly(void *data)
 			break;
 		}
 
-		// int type = -1;
-
 		/* fwd */
 		if (mode == BLESS_MODE_FWD) {
 			const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
@@ -266,9 +270,7 @@ void worker_loop_txonly(void *data)
 				rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[0], struct rte_ether_hdr*));
 				for (int i = 1, j = 0; i < n; i++, j++) {
 					rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[i], struct rte_ether_hdr*));
-					struct rte_ether_hdr *ehd = rte_pktmbuf_mtod(rx_mbufs[j],
-							struct rte_ether_hdr*);
-					swap_mac(ehd);
+					swap_mac(rte_pktmbuf_mtod(rx_mbufs[j], struct rte_ether_hdr*));
 				}
 				swap_mac(rte_pktmbuf_mtod(rx_mbufs[n], struct rte_ether_hdr*));
 				uint16_t nb_tx = rte_eth_tx_burst(portid, qid, rx_mbufs, nb_rx);
