@@ -66,16 +66,20 @@ void worker_loop_txonly(void *data)
 	atomic_int *state = conf->state;
 	// uint32_t *l2fwd_dst_ports = conf->dst_ports;
 
+#if 0
 	/* FIXME */
 	/* only txq 0 malloc stats */
 	if (!qconf->txq_id) {
 		uint16_t pid = conf->qconf->txp_id;
 		conf->stats[pid] = rte_malloc(NULL, sizeof(struct port_statistics) * TYPE_MAX, 0);
 		if (!conf->stats[pid]) {
-			rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(port_statistics)\n", __func__, __LINE__);
+			rte_exit(EXIT_FAILURE,
+					"[%s %d] Cannot rte_malloc(port_statistics)\n",
+					__func__, __LINE__);
 		}
 		printf("%d %p\n", lcore_id, conf->stats[pid]);
 	}
+#endif
 	/*
 	   for (int i = 0; i < qconf->n_rx_port; i++) {
 	   portid = l2fwd_dst_ports[qconf->rx_port_list[i]];
@@ -143,18 +147,46 @@ void worker_loop_txonly(void *data)
 		}
 	}
 
+	/* rx-only */
 	if (BLESS_MODE_RX_ONLY == mode) {
-		printf("rx only\n");
 		pthread_barrier_wait(bconf->barrier);
+		printf("rx only\n");
+		uint64_t i = 0;
 		uint64_t val = atomic_load_explicit(state, memory_order_acquire);
 		while (val != STATE_EXIT) {
-			const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
-			if (nb_rx) {
-				rte_pktmbuf_free_bulk(rx_mbufs, nb_rx);
+			if (unlikely(val != STATE_RUNNING)) {
+				i = 0;
+				while (unlikely(val == STATE_STOPPED)) {
+					if (!i++) {
+						printf("Detect STOPPED %d\n", qconf->txl_id);
+					}
+					rte_delay_ms(1000);
+					val = atomic_load_explicit(state, memory_order_acquire);
+				}
+				while (unlikely(val == STATE_INIT)) {
+					if (!i++) {
+						printf("Detect INIT %d\n", qconf->txl_id);
+					}
+					rte_delay_ms(1000);
+					val = atomic_load_explicit(state, memory_order_acquire);
+				}
+				if (val == STATE_EXIT) {
+					printf("Detect EXIT %d\n", qconf->txl_id);
+					goto EXIT;
+				}
+				if (val == STATE_RUNNING) {
+					printf("Detect START %d %d %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
+				}
 			}
-			val = atomic_load_explicit(state, memory_order_acquire);
+			while (val != STATE_EXIT) {
+				const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
+				if (nb_rx) {
+					rte_pktmbuf_free_bulk(rx_mbufs, nb_rx);
+				}
+				val = atomic_load_explicit(state, memory_order_acquire);
+			}
 		}
-		printf("exit\n");
+		printf("worker exit\n");
 		return;
 	}
 
@@ -173,17 +205,16 @@ void worker_loop_txonly(void *data)
 			qconf->txp_id, qconf->txq_id, qconf->txl_id, pthread_self());
 	assert(qconf->txl_id == rte_lcore_id());
 
-
 	/* check if src mac address is provided */
 	if (!cnode->ether.n_src) {
 		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->ether.src);
-		printf("injector will use local port mac address:\n");
+		printf("injector will use local port mac address:\n  ");
 		bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
 	}
 	/* check if vxlan src mac address is provided */
 	if (cnode->vxlan.enable && !cnode->ether.n_src) {
 		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->vxlan.ether.src);
-		printf("injector vxlan will use local port mac address:\n");
+		printf("injector vxlan will use local port mac address:\n  ");
 		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
 	}
 
@@ -231,6 +262,15 @@ void worker_loop_txonly(void *data)
 		if (mode == BLESS_MODE_FWD) {
 			const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
 			if (nb_rx) {
+				int n = nb_rx - 1;
+				rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[0], struct rte_ether_hdr*));
+				for (int i = 1, j = 0; i < n; i++, j++) {
+					rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[i], struct rte_ether_hdr*));
+					struct rte_ether_hdr *ehd = rte_pktmbuf_mtod(rx_mbufs[j],
+							struct rte_ether_hdr*);
+					swap_mac(ehd);
+				}
+				swap_mac(rte_pktmbuf_mtod(rx_mbufs[n], struct rte_ether_hdr*));
 				uint16_t nb_tx = rte_eth_tx_burst(portid, qid, rx_mbufs, nb_rx);
 				if (nb_tx != nb_rx) {
 					rte_pktmbuf_free_bulk(&mbufs[nb_tx], nb_rx - nb_tx);
@@ -238,8 +278,6 @@ void worker_loop_txonly(void *data)
 			} else {
 				if (unlikely(batch_delay_us)) {
 					rte_delay_us(batch_delay_us);
-				} else {
-					rte_delay_us(1000);
 				}
 			}
 			val = atomic_load_explicit(state, memory_order_acquire);

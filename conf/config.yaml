@@ -34,7 +34,7 @@ injector:
   portmap: null # (0, 1)
   batch: 32
   batch-delay-us: 0
-  mode: tx-only # rx-only, rx-only, fwd
+  mode: fwd # rx-only, rx-only, fwd
   num: -1
   arp: 0
   icmp: 1
