@@ -44,10 +44,10 @@ static uint16_t nb_rxd = RX_DESC_DEFAULT;
 static uint16_t nb_txd = TX_DESC_DEFAULT;
 
 /* ethernet addresses of ports */
-static struct rte_ether_addr l2fwd_ports_eth_addr[RTE_MAX_ETHPORTS];
+static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
 
 /* list of enabled ports */
-static uint32_t l2fwd_dst_ports[RTE_MAX_ETHPORTS];
+static uint32_t dst_ports[RTE_MAX_ETHPORTS];
 
 struct port_pair_params {
 #define NUM_PORTS	2
@@ -202,7 +202,7 @@ static int bless_launch_one_lcore(void *conf)
 }
 
 /* display usage */
-static void l2fwd_usage(const char *prgname)
+static void usage(const char *prgname)
 {
 	printf("%s [EAL options] -- -p PORTMASK [-P] [-q NQ]\n"
 			"  -p PORTMASK: hexadecimal bitmask of ports to configure\n"
@@ -218,7 +218,7 @@ static void l2fwd_usage(const char *prgname)
 			prgname);
 }
 
-static int l2fwd_parse_portmask(const char *portmask)
+static int parse_portmask(const char *portmask)
 {
 	char *end = NULL;
 	unsigned long pm;
@@ -231,7 +231,7 @@ static int l2fwd_parse_portmask(const char *portmask)
 	return pm;
 }
 
-static int l2fwd_parse_port_pair_config(const char *q_arg)
+static int parse_port_pair_config(const char *q_arg)
 {
 	enum fieldnames {
 		FLD_PORT1 = 0,
@@ -251,24 +251,26 @@ static int l2fwd_parse_port_pair_config(const char *q_arg)
 	while ((p = strchr(p0, '(')) != NULL) {
 		++p;
 		p0 = strchr(p, ')');
-		if (p0 == NULL)
+		if (p0 == NULL) {
 			return -1;
+		}
 
 		size = p0 - p;
-		if (size >= sizeof(s))
+		if (size >= sizeof(s)) {
 			return -1;
+		}
 
 		memcpy(s, p, size);
 		s[size] = '\0';
-		if (rte_strsplit(s, sizeof(s), str_fld,
-					_NUM_FLD, ',') != _NUM_FLD)
+		if (rte_strsplit(s, sizeof(s), str_fld, _NUM_FLD, ',') != _NUM_FLD) {
 			return -1;
+		}
 		for (i = 0; i < _NUM_FLD; i++) {
 			errno = 0;
 			int_fld[i] = strtoul(str_fld[i], &end, 0);
-			if (errno != 0 || end == str_fld[i] ||
-					int_fld[i] >= RTE_MAX_ETHPORTS)
+			if (errno != 0 || end == str_fld[i] || int_fld[i] >= RTE_MAX_ETHPORTS) {
 				return -1;
+			}
 		}
 		if (nb_port_pair_params >= RTE_MAX_ETHPORTS/2) {
 			printf("exceeded max number of port pair params: %hu\n",
@@ -285,26 +287,27 @@ static int l2fwd_parse_port_pair_config(const char *q_arg)
 	return 0;
 }
 
-static unsigned int l2fwd_parse_nqueue(const char *q_arg)
+static unsigned int parse_nqueue(const char *q_arg)
 {
 	char *end = NULL;
 	unsigned long n;
 
 	/* parse hexadecimal string */
 	n = strtoul(q_arg, &end, 10);
-	if ((q_arg[0] == '\0') || (end == NULL) || (*end != '\0'))
+	if ((q_arg[0] == '\0') || (end == NULL) || (*end != '\0')) {
 		return 0;
-	if (n == 0)
+	}
+	if (n == 0) {
 		return 0;
-	/*
-	   if (n >= MAX_RX_QUEUE_PER_LCORE)
-	   return 0;
-	   */
+	}
+	if (n >= MAX_RX_QUEUE_PER_LCORE) {
+		return 0;
+	}
 
 	return n;
 }
 
-static int l2fwd_parse_timer_period(const char *q_arg)
+static int parse_timer_period(const char *q_arg)
 {
 	char *end = NULL;
 	int n;
@@ -418,11 +421,11 @@ static int parse_args(int argc, char **argv)
 		switch (opt) {
 			/* portmask */
 			case 'p':
-				enabled_port_mask = l2fwd_parse_portmask(optarg);
+				enabled_port_mask = parse_portmask(optarg);
 				printf("enabled_port_mask %s => %d\n", optarg, enabled_port_mask);
 				if (enabled_port_mask == 0) {
 					printf("invalid portmask\n");
-					l2fwd_usage(prgname);
+					usage(prgname);
 					return -1;
 				}
 				break;
@@ -432,10 +435,10 @@ static int parse_args(int argc, char **argv)
 
 				/* nqueue */
 			case 'q':
-				rxtxq_per_port = l2fwd_parse_nqueue(optarg);
+				rxtxq_per_port = parse_nqueue(optarg);
 				if (rxtxq_per_port == 0) {
 					printf("invalid queue number\n");
-					l2fwd_usage(prgname);
+					usage(prgname);
 					return -1;
 				}
 				break;
@@ -445,10 +448,10 @@ static int parse_args(int argc, char **argv)
 				break;
 
 			case 'T': /* timer period */
-				timer_secs = l2fwd_parse_timer_period(optarg);
+				timer_secs = parse_timer_period(optarg);
 				if (timer_secs < 0) {
 					printf("invalid timer period\n");
-					l2fwd_usage(prgname);
+					usage(prgname);
 					return -1;
 				}
 				timer_period = timer_secs;
@@ -485,10 +488,10 @@ static int parse_args(int argc, char **argv)
 				printf("TYPE_UDP %d\n", ratio.weight[TYPE_UDP]);
 				break;
 			case CMD_LINE_OPT_PORTMAP_NUM:
-				ret = l2fwd_parse_port_pair_config(optarg);
+				ret = parse_port_pair_config(optarg);
 				if (ret) {
 					fprintf(stderr, "Invalid config\n");
-					l2fwd_usage(prgname);
+					usage(prgname);
 					return -1;
 				}
 				break;
@@ -637,7 +640,7 @@ static int parse_args(int argc, char **argv)
 				}
 				break;
 			default:
-				l2fwd_usage(prgname);
+				usage(prgname);
 				return -1;
 		}
 	}
@@ -983,10 +986,10 @@ int main(int argc, char **argv)
 
 	/* Initialization of the driver. 8< */
 
-	/* reset l2fwd_dst_ports */
+	/* reset dst_ports */
 	uint16_t portid, last_port;
 	for (portid = 0; portid < RTE_MAX_ETHPORTS; portid++) {
-		l2fwd_dst_ports[portid] = 0;
+		dst_ports[portid] = 0;
 	}
 	last_port = 0;
 
@@ -1059,7 +1062,7 @@ int main(int argc, char **argv)
 		for (idx = 0; idx < (nb_port_pair_params << 1); idx++) {
 			p = idx & 1;
 			portid = port_pair_params[idx >> 1].port[p];
-			l2fwd_dst_ports[portid] =
+			dst_ports[portid] =
 				port_pair_params[idx >> 1].port[p ^ 1];
 		}
 	} else {
@@ -1071,8 +1074,8 @@ int main(int argc, char **argv)
 			}
 
 			if (nb_ports_in_mask % 2) {
-				l2fwd_dst_ports[portid] = last_port;
-				l2fwd_dst_ports[last_port] = portid;
+				dst_ports[portid] = last_port;
+				dst_ports[last_port] = portid;
 			} else {
 				last_port = portid;
 			}
@@ -1081,7 +1084,7 @@ int main(int argc, char **argv)
 		}
 		if (nb_ports_in_mask % 2) {
 			printf("Notice: odd number of ports in portmask.\n");
-			l2fwd_dst_ports[last_port] = last_port;
+			dst_ports[last_port] = last_port;
 		}
 	}
 	/* >8 End of initialization of the driver. */
@@ -1117,7 +1120,7 @@ int main(int argc, char **argv)
 		qconf->rx_port_list[qconf->n_rx_port] = portid;
 		qconf->n_rx_port++;
 		printf("Lcore %u: RX port %u TX port %u\n", rx_lcore_id,
-				portid, l2fwd_dst_ports[portid]);
+				portid, dst_ports[portid]);
 	}
 
 	uint16_t ap = __builtin_popcount(enabled_port_mask);
@@ -1188,7 +1191,7 @@ int main(int argc, char **argv)
 		}
 		printf("TODO nb_txd %d\n", nb_txd);
 
-		ret = rte_eth_macaddr_get(portid, &l2fwd_ports_eth_addr[portid]);
+		ret = rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE,
 					"Cannot get MAC address: err=%d, port=%u\n",
@@ -1273,7 +1276,7 @@ int main(int argc, char **argv)
 						__func__, __LINE__, portid);
 			}
 			printf("Port %u, MAC address: " RTE_ETHER_ADDR_PRT_FMT "\n",
-					portid, RTE_ETHER_ADDR_BYTES(&l2fwd_ports_eth_addr[portid]));
+					portid, RTE_ETHER_ADDR_BYTES(&ports_eth_addr[portid]));
 			printf("driver name %s\n", dev_info->driver_name);
 			printf("if index %u\n", dev_info->if_index);
 			printf("mtu [%d, %d]\n", dev_info->min_mtu, dev_info->max_mtu);
@@ -1308,7 +1311,7 @@ int main(int argc, char **argv)
 
 	bconf->qconf = lcore_queue_conf;
 	bconf->stats = rte_malloc(NULL, sizeof(bconf->stats) * RTE_MAX_ETHPORTS, 0);
-	bconf->dst_ports = l2fwd_dst_ports;
+	bconf->dst_ports = dst_ports;
 	bconf->state = &g_state;
 	bconf->timer_period = timer_period;
 	bconf->enabled_port_mask = enabled_port_mask;
