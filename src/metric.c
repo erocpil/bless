@@ -24,36 +24,39 @@ void metric_set_cbfn(void*(*metric_cbfn)())
 
 void metric_cpuset_to_str(const cpu_set_t *set, char *buf, size_t len)
 {
-    int first = 1;
-    int start = -1;
-    size_t off = 0;
+	int first = 1;
+	int start = -1;
+	size_t off = 0;
 
-    for (int cpu = 0; cpu <= CPU_SETSIZE; cpu++) {
-        int is_set = (cpu < CPU_SETSIZE) && CPU_ISSET(cpu, set);
+	for (int cpu = 0; cpu <= CPU_SETSIZE; cpu++) {
+		int is_set = (cpu < CPU_SETSIZE) && CPU_ISSET(cpu, set);
 
-        if (is_set) {
-            if (start < 0)
-                start = cpu;
-        } else if (start >= 0) {
-            int end = cpu - 1;
-            int n;
+		if (is_set) {
+			if (start < 0) {
+				start = cpu;
+			}
+		} else if (start >= 0) {
+			int end = cpu - 1;
+			int n;
 
-            if (!first)
-                n = snprintf(buf + off, len - off, ",");
-            else
-                n = 0;
+			if (!first) {
+				n = snprintf(buf + off, len - off, ",");
+			} else {
+				n = 0;
+			}
 
-            off += n;
+			off += n;
 
-            if (start == end)
-                off += snprintf(buf + off, len - off, "%d", start);
-            else
-                off += snprintf(buf + off, len - off, "%d-%d", start, end);
+			if (start == end) {
+				off += snprintf(buf + off, len - off, "%d", start);
+			} else {
+				off += snprintf(buf + off, len - off, "%d-%d", start, end);
+			}
 
-            first = 0;
-            start = -1;
-        }
-    }
+			first = 0;
+			start = -1;
+		}
+	}
 }
 
 int bless_handle_system(const char *cmd, const char *params __rte_unused, struct rte_tel_data *d)
@@ -73,14 +76,14 @@ int bless_handle_system(const char *cmd, const char *params __rte_unused, struct
 #endif
 
 	struct rte_tel_data *arr;
-    arr = rte_tel_data_alloc();
-    rte_tel_data_start_array(arr, RTE_TEL_UINT_VAL);
-    for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
-        if (CPU_ISSET(cpu, &sysstat->cpuset)) {
-            rte_tel_data_add_array_uint(arr, cpu);
+	arr = rte_tel_data_alloc();
+	rte_tel_data_start_array(arr, RTE_TEL_UINT_VAL);
+	for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+		if (CPU_ISSET(cpu, &sysstat->cpuset)) {
+			rte_tel_data_add_array_uint(arr, cpu);
 		}
-    }
-    rte_tel_data_add_dict_container(d, "cpu_affinity", arr, 0);
+	}
+	rte_tel_data_add_dict_container(d, "cpu_affinity", arr, 0);
 
 	return 0;
 }
@@ -138,57 +141,41 @@ static cJSON * encode_eth_stats(const struct rte_eth_stats *s)
 static cJSON * encode_xstats(uint16_t portid)
 {
 	int n = rte_eth_xstats_get_names(portid, NULL, 0);
-	if (n <= 0)
+	if (n <= 0) {
 		return NULL;
+	}
 
-	struct rte_eth_xstat_name *names =
-		rte_malloc(NULL, sizeof(*names) * n, 0);
-	struct rte_eth_xstat *values =
-		rte_malloc(NULL, sizeof(*values) * n, 0);
+	struct rte_eth_xstat_name *names = rte_malloc(NULL, sizeof(*names) * n, 0);
+	struct rte_eth_xstat *values = rte_malloc(NULL, sizeof(*values) * n, 0);
 
-	if (!names || !values)
+	if (!names || !values) {
 		goto fail;
+	}
 
-	if (rte_eth_xstats_get_names(portid, names, n) != n)
+	if (rte_eth_xstats_get_names(portid, names, n) != n) {
 		goto fail;
+	}
 
-	if (rte_eth_xstats_get(portid, values, n) != n)
+	if (rte_eth_xstats_get(portid, values, n) != n) {
 		goto fail;
+	}
 
 	/* root xstats object */
 	cJSON *root = cJSON_CreateObject();
 
-#if 0
-	/* fixed groups */
-	cJSON *groups[5];
-	const char *group_names[] = {
-		"rx", "tx", "queue", "drop", "other"
-	};
-
-	for (int i = 0; i < 5; i++) {
-		groups[i] = cJSON_CreateObject();
-		cJSON_AddItemToObject(root, group_names[i], groups[i]);
-	}
-#endif
-
 	for (int i = 0; i < n; i++) {
-		/*
-		   const char *g = xstat_group(names[i].name);
-		   if (!strncmp(g, "queue", 5)) {
-		   printf("value %lu\n", values[i].value);
-		   }
-		   cJSON *grp = cJSON_GetObjectItem(root, g);
-		   */
 		cJSON_AddNumberToObject(root, names[i].name, values[i].value);
 	}
 
 	rte_free(names);
 	rte_free(values);
+
 	return root;
 
 fail:
 	rte_free(names);
 	rte_free(values);
+
 	return NULL;
 }
 

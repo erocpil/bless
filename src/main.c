@@ -84,6 +84,16 @@ static struct rte_eth_conf port_conf = {
 			.rss_hf = RTE_ETH_RSS_IP | RTE_ETH_RSS_TCP | RTE_ETH_RSS_UDP,
 		},
 	},
+	.rxmode = {
+		.mq_mode = RTE_ETH_MQ_RX_RSS,
+		.offloads =
+			RTE_ETH_RX_OFFLOAD_IPV4_CKSUM |
+			RTE_ETH_RX_OFFLOAD_UDP_CKSUM |
+			RTE_ETH_RX_OFFLOAD_TCP_CKSUM |
+			RTE_ETH_RX_OFFLOAD_TCP_LRO |
+			RTE_ETH_RX_OFFLOAD_OUTER_IPV4_CKSUM |
+			RTE_ETH_RX_OFFLOAD_SCATTER,
+	},
 };
 
 struct rte_mempool * rx_pktmbuf_pool = NULL;
@@ -95,7 +105,6 @@ void dpdk_generate_cmdReply(const char *str)
 	}
 	char *reply = encode_cmdReply_to_json(str);
 	printf("cmdReply %s\n", reply);
-	/* 同步推送 WS */
 	ws_broadcast_log(reply, strlen(reply));
 	free(reply);
 }
@@ -107,14 +116,12 @@ void dpdk_generate_log(const char *str)
 	}
 	char *msg = encode_log_to_json(str);
 	printf("msg %s\n", msg);
-	/* 同步推送 WS */
 	ws_broadcast_log(msg, strlen(msg));
 	free(msg);
 }
 
 void dpdk_generate_stats(void)
 {
-	// int active = atomic_load_explicit(&g_stats_active_idx, memory_order_relaxed);
 	int active = stats_get_active_index();
 	int inactive = active ^ 1;
 
@@ -129,13 +136,9 @@ void dpdk_generate_stats(void)
 
 	/* Prometheus */
 	s->metric_len = encode_stats_to_text(enabled_port_mask, s->metric, STATS_METRIC_MAX);
-
 	s->ts_ns = rte_get_tsc_cycles();
 
-	/* 发布快照 */
 	stats_set(inactive);
-
-	/* 同步推送 WS */
 	ws_broadcast_stats();
 }
 
@@ -186,18 +189,12 @@ static int bless_launch_one_lcore(void *conf)
 	unsigned int lcore_id = rte_lcore_id();
 
 	if (lcore_id == rte_get_main_lcore()) {
-		printf("main lcore %d\n", lcore_id);
 		main_loop((void*)conf);
 	} else {
 		if (!lcore_queue_conf[lcore_id].enabled) {
 			printf("skip unused lcore %d\n", lcore_id);
 			return 0;
 		}
-		printf("lcore %d enable %d lid %d pid %d qid %d\n", lcore_id,
-				lcore_queue_conf[lcore_id].enabled,
-				lcore_queue_conf[lcore_id].txl_id,
-				lcore_queue_conf[lcore_id].txp_id,
-				lcore_queue_conf[lcore_id].txq_id);
 		worker_loop_txonly(conf);
 	}
 

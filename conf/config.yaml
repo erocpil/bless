@@ -26,7 +26,7 @@ dpdk:
 
 injector:
   p: 0xf # port
-  q: 1 # queues on each port
+  q: 2 # queues on each port
   P:
   T: 1
   no-mac-updating:

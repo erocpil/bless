@@ -4,6 +4,7 @@
 void system_set_defaults(struct system_cfg *cfg)
 {
 	if (!cfg) {
+		printf("Null system config.\n");
 		return;
 	}
 	memset(cfg, 0, sizeof(struct system_cfg));
