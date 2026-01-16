@@ -42,58 +42,16 @@ MAKE_SRC := $(MAKE) -C $(SRCDIR) \
 .DEFAULT_GOAL := all
 
 # ============================================================
-# third_party.mk 生成规则
+# Clean 目标优先处理
 # ============================================================
+# 修复：使用 ifneq 检查是否包含 clean/distclean/help
+ifneq ($(filter clean distclean help,$(MAKECMDGOALS)),)
 
-# 明确：third_party.mk 是一个“生成文件”
-# 不存在时，通过 Makefile.up 生成
-$(TP_MK): update-third-party
-	$(MAKE) -f Makefile.up
-
-update-third-party:
-	$(MAKE) -f Makefile.up update-third-party
-
-# ============================================================
-# include third_party 输出（关键点）
-# ============================================================
-
-# 只有在非 clean 目标时，才 include
-# 这里使用 *强 include*
-# 因为我们已经告诉 make 如何生成它
-ifneq ($(filter clean distclean help,$(MAKECMDGOALS)),clean distclean help)
-include $(TP_MK)
-endif
-
-# ============================================================
-# 导出第三方变量给子目录（src）
-# ============================================================
-
-export CFLAGS  := $(CFLAGS)  $(THIRD_PARTY_CFLAGS)
-export LDFLAGS := $(LDFLAGS) $(THIRD_PARTY_LDFLAGS)
-export LDLIBS  := $(LDLIBS)  $(THIRD_PARTY_LDLIBS)
-
-# ============================================================
-# 目标定义
-# ============================================================
-
-.PHONY: all upstream install uninstall clean distclean help
-
-# 默认目标
-all: $(TP_MK)
-	$(Q)$(MAKE_SRC)
-
-# 仅准备 third_party（CI / 调试时很有用）
-upstream: $(TP_MK)
-
-install: $(TP_MK)
-	$(Q)$(MAKE_SRC) install
-
-uninstall:
-	$(Q)$(MAKE_SRC) uninstall
+.PHONY: clean distclean help
 
 clean:
 	@echo "  CLEANING build directory..."
-	$(Q)rm -rf build/
+	rm -rf build/
 
 distclean: clean
 	$(MAKE) -f Makefile.up clean
@@ -114,3 +72,57 @@ help:
 	@echo "  STATIC=1|0     Build static or shared (default: 1)"
 	@echo "  BUILD=release|debug"
 	@echo "  PREFIX=/path  Install prefix"
+
+else
+	# ============================================================
+	# 正常构建流程
+	# ============================================================
+
+# ============================================================
+# third_party.mk 生成规则
+# ============================================================
+
+# 当 third_party.mk 不存在时才生成（不依赖 update-third-party）
+$(TP_MK):
+	@echo "  GENERATING $@..."
+	$(MAKE) -f Makefile.up
+
+# 手动更新第三方库（独立目标）
+.PHONY: update-third-party
+update-third-party:
+	$(MAKE) -f Makefile.up update-third-party
+	$(MAKE) -f Makefile.up
+
+# ============================================================
+# include third_party 输出
+# ============================================================
+include $(TP_MK)
+
+# ============================================================
+# 导出第三方变量给子目录（src）
+# ============================================================
+
+export CFLAGS  := $(CFLAGS)  $(THIRD_PARTY_CFLAGS)
+export LDFLAGS := $(LDFLAGS) $(THIRD_PARTY_LDFLAGS)
+export LDLIBS  := $(LDLIBS)  $(THIRD_PARTY_LDLIBS)
+
+# ============================================================
+# 目标定义
+# ============================================================
+
+.PHONY: all upstream install uninstall
+
+# 默认目标
+all: $(TP_MK)
+	$(MAKE_SRC)
+
+# 仅准备 third_party（CI / 调试时很有用）
+upstream: $(TP_MK)
+
+install: $(TP_MK)
+	$(MAKE_SRC) install
+
+uninstall:
+	$(MAKE_SRC) uninstall
+
+endif

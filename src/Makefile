@@ -24,7 +24,6 @@ MAKEFLAGS += -rR
 
 OBJDIR := $(O)/obj
 BINDIR := $(O)/bin
-LIBDIR := $(O)/lib
 TARGET := $(BINDIR)/$(APP)
 
 # 配置追踪器文件：记录当前的编译模式
@@ -108,11 +107,11 @@ $(OBJDIR)/%.o: %.c
 # ============================================================
 install: all
 	$(ECHO) "  INSTALL to $(DESTDIR)$(PREFIX)"
-	$(Q)install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/lib $(DESTDIR)$(PREFIX)/include/$(APP)
+	$(Q)install -d $(DESTDIR)$(PREFIX)/bin \
+		$(DESTDIR)$(PREFIX)/lib \
+		$(DESTDIR)$(PREFIX)/conf \
+		$(DESTDIR)$(PREFIX)/include/$(APP)
 	$(Q)install -m 0755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/
-ifeq ($(STATIC),1)
-	$(Q)install -m 0644 $(LIBDIR)/*.a $(DESTDIR)$(PREFIX)/lib/
-endif
 
 uninstall:
 	$(Q)rm -f $(DESTDIR)$(PREFIX)/bin/$(APP)
