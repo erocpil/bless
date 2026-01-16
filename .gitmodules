@@ -4,3 +4,6 @@
 [submodule "third_party/cjson/upstream"]
 	path = third_party/cjson/upstream
 	url = https://github.com/DaveGamble/cJSON.git
+[submodule "third_party/civetweb/upstream"]
+	path = third_party/civetweb/upstream
+	url = https://github.com/civetweb/civetweb.git
