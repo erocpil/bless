@@ -41,58 +41,58 @@ typedef struct Node {
 #define PORT_MAX BLESS_CONFIG_MAX
 
 #define RANDOM_VXLAN_IP_SRC(p) \
-	rte_bswap32(random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.src, \
+	random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.src, \
 				p->vxlan.ether.type.ipv4.n_src, \
-				p->vxlan.ether.type.ipv4.src_range));
+				p->vxlan.ether.type.ipv4.src_range);
 
 #define RANDOM_VXLAN_IP_DST(p) \
-	rte_bswap32(random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.dst, \
+	random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.dst, \
 				p->vxlan.ether.type.ipv4.n_dst, \
-				p->vxlan.ether.type.ipv4.dst_range));
+				p->vxlan.ether.type.ipv4.dst_range);
 
 #define RANDOM_VXLAN_IP_VNI(p) \
-	rte_bswap32(random_array_elem_uint32_t_with_peer(p->vxlan.ether.type.ipv4.src, \
+	random_array_elem_uint32_t_with_peer(p->vxlan.ether.type.ipv4.src, \
 				p->vxlan.ether.type.ipv4.vni, \
 				p->vxlan.ether.type.ipv4.n_src, \
-				p->vxlan.ether.type.ipv4.src_range));
+				p->vxlan.ether.type.ipv4.src_range);
 
 #define RANDOM_VXLAN_UDP_SRC(p) \
-	rte_bswap16(random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.src, \
+	rte_cpu_to_be_16(random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.src, \
 				p->vxlan.ether.type.ipv4.udp.n_src, \
 				p->vxlan.ether.type.ipv4.udp.src_range));
 
 #define RANDOM_VXLAN_UDP_DST(p) \
-	rte_bswap16(random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.dst, \
+	rte_cpu_to_be_16(random_array_elem_uint16_t(p->vxlan.ether.type.ipv4.udp.dst, \
 				p->vxlan.ether.type.ipv4.udp.n_dst, \
 				p->vxlan.ether.type.ipv4.udp.dst_range));
 
 #define RANDOM_IP_SRC(p) \
-	rte_bswap32(random_array_elem_uint32_t(p->ether.type.ipv4.src, \
+	random_array_elem_uint32_t(p->ether.type.ipv4.src, \
 				p->ether.type.ipv4.n_src, \
-				p->ether.type.ipv4.src_range));
+				p->ether.type.ipv4.src_range);
 
 #define RANDOM_IP_DST(p) \
-	rte_bswap32(random_array_elem_uint32_t(p->ether.type.ipv4.dst, \
+	random_array_elem_uint32_t(p->ether.type.ipv4.dst, \
 				p->ether.type.ipv4.n_dst, \
-				p->ether.type.ipv4.dst_range));
+				p->ether.type.ipv4.dst_range);
 
 #define RANDOM_TCP_SRC(p) \
-	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.tcp.src, \
+	rte_cpu_to_be_16(random_array_elem_uint16_t(p->ether.type.ipv4.tcp.src, \
 				p->ether.type.ipv4.tcp.n_src, \
 				p->ether.type.ipv4.tcp.src_range));
 
 #define RANDOM_TCP_DST(p) \
-	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.tcp.dst, \
+	rte_cpu_to_be_16(random_array_elem_uint16_t(p->ether.type.ipv4.tcp.dst, \
 				p->ether.type.ipv4.tcp.n_dst, \
 				p->ether.type.ipv4.tcp.dst_range));
 
 #define RANDOM_UDP_SRC(p) \
-	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.udp.src, \
+	rte_cpu_to_be_16(random_array_elem_uint16_t(p->ether.type.ipv4.udp.src, \
 				p->ether.type.ipv4.udp.n_src, \
 				p->ether.type.ipv4.udp.src_range));
 
 #define RANDOM_UDP_DST(p) \
-	rte_bswap16(random_array_elem_uint16_t(p->ether.type.ipv4.udp.dst, \
+	rte_cpu_to_be_16(random_array_elem_uint16_t(p->ether.type.ipv4.udp.dst, \
 				p->ether.type.ipv4.udp.n_dst, \
 				p->ether.type.ipv4.udp.dst_range));
 

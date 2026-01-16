@@ -593,7 +593,7 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 		return 0;
 	}
 	if (cnode->vxlan.enable) {
-		rte_exit(EXIT_FAILURE, "[%s %d] vxlan %u\n", __func__, __LINE__, cnode->vxlan.enable);
+		// rte_exit(EXIT_FAILURE, "[%s %d] vxlan %u\n", __func__, __LINE__, cnode->vxlan.enable);
 		/* outer */
 		uint16_t ra = fast_rand_next() & 1023;
 		if (cnode->vxlan.ratio > 0 && (ra % 100) < cnode->vxlan.ratio) {
@@ -601,6 +601,7 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 			if (!tx_bytes) {
 				return 0;
 			}
+			printf("vxlan\n");
 		} else {
 			// printf("no vxlan\n");
 			// rte_exit(EXIT_FAILURE, "[%s %d] no vxlan\n", __func__, __LINE__, n);

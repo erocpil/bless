@@ -37,14 +37,14 @@ injector:
   mode: tx-only # rx-only, rx-only, fwd
   num: -1
   arp: 0
-  icmp: 1
-  tcp: 1
+  icmp: 0
+  tcp: 0
   udp: 1
 
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 1500 # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    mtu: 100 # [46, 1500] size of ether payload, may result in error if vxlan enabled
     copy-payload: true # copy payload to mbuf, default false
     dst: 10:70:fd:af:21:10
     src:
@@ -53,23 +53,23 @@ bless:
         src: [ 10.0.0.1 ]
         dst: [ 20.0.0.2, 30.0.0.3 ]
       ipv4:
-        src: 172.16.1.1
+        src: 172.16.1.1+2
         dst: [ 192.168.0.1, 192.168.1.1 ]
         icmp:
           ident: [ 0x1234, 0xface ]
           payload: "injector: icmp payload.xxxxxxxxxxxxxxxxxxxx" # not used, yet
         tcp:
           src: [ 80, 808, 8080, 8888 ]
-          dst: 9000+100
+          dst: 9000+10
           payload: "injector: tcp payload.xxxxxxxxxxxxxxxxxxxx"
         udp:
-          src: 8000+-100
+          src: 8000+-10
           dst: [ 10000, 10001, 10003 ]
           payload: "injector: udp payload.xxxxxxxxxxxxxxxxxxxx"
         proto: [ 0, 0x8C-0xFF ] # https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
   vxlan:
     enable: false
-    ratio: 3
+    ratio: 100
     ether:
       dst: 10:70:fd:af:21:10
       src:
@@ -77,7 +77,7 @@ bless:
         ipv4:
           src: [ 172.31.30.246:2619682 ]
           src-range: 0 # not supported
-          dst: [ 4.0.0.4, 5.0.0.5, 6.0.0.6 ]
+          dst: [ 4.0.0.1, 5.0.0.1, 6.0.0.1 ]
           dst-range: -5 # not supported
           udp:
             src: [ 4000, 4001, 4002 ]

@@ -1,3 +1,4 @@
+#include <rte_byteorder.h>
 #include "define.h"
 
 static __thread uint32_t rand_s;
@@ -27,8 +28,9 @@ uint16_t random_array_elem_uint16_t(uint16_t *array, uint16_t num, int32_t range
 
 	int32_t abs_range = (range >= 0) ? range : -range;
 	uint16_t off = r % abs_range;
+	uint16_t port = array[0];
 
-	return (range > 0) ?  (uint16_t)(array[0] + off) : (uint16_t)(array[0] - off);
+	return (range > 0) ?  (uint16_t)(port + off) : (uint16_t)(port - off);
 }
 
 uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range)
@@ -51,8 +53,9 @@ uint32_t random_array_elem_uint32_t(uint32_t *array, uint16_t num, int64_t range
 
 	int64_t abs_range = (range >= 0) ? range : -range;
 	uint32_t off = r % abs_range;
+	uint32_t ipv4 = rte_be_to_cpu_32(array[0]);
 
-	return (range > 0) ?  (uint32_t)(array[0] + off) : (uint32_t)(array[0] - off);
+	return rte_cpu_to_be_32((range > 0) ?  (uint32_t)(ipv4 + off) : (uint32_t)(ipv4 - off));
 }
 
 /** random_array_elem_uint32_t_with_peer - special case for ipv4:vni
@@ -68,10 +71,11 @@ uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, u
 
     /* 离散集合：array[i] <-> peer[i] 强绑定 */
     if (likely(num)) {
-        if ((num & (num - 1)) == 0)
+        if ((num & (num - 1)) == 0) {
             idx = r & (num - 1);
-        else
+		} else {
             idx = r % num;
+		}
 
         return ((uint64_t)peer[idx] << 32) | array[idx];
     }
@@ -83,11 +87,8 @@ uint64_t random_array_elem_uint32_t_with_peer(uint32_t *array, uint32_t *peer, u
 
     uint32_t abs_range = (range >= 0) ? range : -range;
     idx = r % abs_range;
-
-    uint32_t ip = (range >= 0) ?
-                  (array[0] + idx) :
-                  (array[0] - idx);
-
+	uint32_t ipv4 = array[0];
+    uint32_t ip = (range >= 0) ?  (ipv4 + idx) : (ipv4 - idx);
     uint32_t vni = peer[0] + idx;
 
     return ((uint64_t)vni << 32) | ip;

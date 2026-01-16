@@ -1019,6 +1019,7 @@ static int config_parse_ipv4_maybe_range_to_array(Node *node, uint32_t *addr, in
 				addr[0] = ipv4;
 				*range = ra;
 				n++;
+				// bless_print_ipv4(ipv4);
 			}
 			break;
 		case NODE_SEQUENCE:
@@ -1541,6 +1542,7 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 		printf("  vni: %u\n", cnode->vxlan.ether.type.ipv4.vni[i]);
 	}
 	printf("\n");
+	// getchar();
 
 	path = "bless.vxlan.ether.type.ipv4.dst";
 	node = find_by_path(root, path);
