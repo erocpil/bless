@@ -11,6 +11,7 @@
 # 看到 WARN
 # cd third_party/libyaml/upstream
 # git fetch --tags
+# git tag -l
 # git checkout 0.2.5
 # cd -
 # git add third_party/libyaml/upstream
