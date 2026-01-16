@@ -43,7 +43,7 @@ THIRD_PARTY_INCS += $$($(1)_INC)
 update-$(1):
 	git submodule update --init --recursive $$($(1)_UPSTREAM)
 
-$$($(1)_STAMP):
+$$($(1)_STAMP): update-$(1)
 	mkdir -p $$($(1)_BUILD)
 	cd $$($(1)_UPSTREAM) && ./bootstrap
 	cd $$($(1)_BUILD) && $$($(1)_UPSTREAM)/configure \
@@ -80,7 +80,7 @@ THIRD_PARTY_INCS += $$($(1)_INC)
 update-$(1):
 	git submodule update --init --recursive $$($(1)_UPSTREAM)
 
-$$($(1)_STAMP):
+$$($(1)_STAMP): update-$(1)
 	mkdir -p $$($(1)_BUILD)
 	cd $$($(1)_BUILD) && cmake \
 		-DBUILD_SHARED_LIBS=OFF \
@@ -120,7 +120,7 @@ THIRD_PARTY_INCS += $$($(1)_INC)
 update-$(1):
 	git submodule update --init --recursive $$($(1)_UPSTREAM)
 
-$$($(1)_STAMP):
+$$($(1)_STAMP): update-$(1)
 	mkdir -p $(1)/build
 	touch $$@
 

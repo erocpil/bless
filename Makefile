@@ -45,7 +45,7 @@ MAKE_SRC := $(MAKE) -C $(SRCDIR) \
 # Clean 目标优先处理
 # ============================================================
 # 修复：使用 ifneq 检查是否包含 clean/distclean/help
-ifneq ($(filter clean distclean help,$(MAKECMDGOALS)),)
+ifneq ($(filter clean distclean uninstall help,$(MAKECMDGOALS)),)
 
 .PHONY: clean distclean help
 
@@ -56,6 +56,9 @@ clean:
 distclean: clean
 	$(MAKE) -f Makefile.up clean
 	$(MAKE) -C src clean
+
+uninstall:
+	$(MAKE_SRC) uninstall
 
 help:
 	@echo "Usage:"
@@ -121,8 +124,5 @@ upstream: $(TP_MK)
 
 install: $(TP_MK)
 	$(MAKE_SRC) install
-
-uninstall:
-	$(MAKE_SRC) uninstall
 
 endif
