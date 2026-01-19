@@ -1,0 +1,50 @@
+# ignore hidden files
+.*
+
+# 忽略 Vim/编辑器的 swap 文件
+*.swp
+*.swo
+
+# 忽略备份文件（以 ~ 结尾）
+*~
+
+# 忽略隐藏的临时文件（以 . 开头）
+.*.swp
+.*.swo
+.*~
+
+*.bak
+
+core
+log
+THIRD_PARTY_VERSIONS.md
+
+# ignore generated documentation tables
+
+# ignore generated ctags/cscope files
+cscope.out.po
+cscope.out.in
+cscope.out
+cscope.files
+GTAGS
+GPATH
+GRTAGS
+tags
+TAGS
+test
+
+# ignore python bytecode files
+*.pyc
+
+# ignore BPF programs
+drivers/net/tap/bpf/tap_bpf_program.o
+
+# DTS results
+dts/output
+
+# ignore default build directory, and directories from test-meson-builds.sh
+build
+build-*
+# ignore other build directory patterns
+*-gcc*
+*-clang*
