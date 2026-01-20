@@ -894,7 +894,6 @@ int main(int argc, char **argv)
 	char **targv = argv;
 	Node *conf_root = NULL;
 
-
 	char *f = DEFAULT_CONFIG_FILE;
 	if (2 == argc) {
 #ifdef VERSION
@@ -1290,20 +1289,13 @@ int main(int argc, char **argv)
 			}
 		}
 
-		{
-			struct rte_eth_dev_info *dev_info = rte_zmalloc(NULL, sizeof(struct rte_eth_dev_info), 0);
-			if (rte_eth_dev_info_get(portid, dev_info)) {;
-				rte_exit(EXIT_FAILURE, "[%s %d] rte_eth_dev_info_get(%d)\n",
-						__func__, __LINE__, portid);
-			}
-			printf("Port %u, MAC address: " RTE_ETHER_ADDR_PRT_FMT "\n",
-					portid, RTE_ETHER_ADDR_BYTES(&ports_eth_addr[portid]));
-			printf("driver name %s\n", dev_info->driver_name);
-			printf("if index %u\n", dev_info->if_index);
-			printf("mtu [%d, %d]\n", dev_info->min_mtu, dev_info->max_mtu);
-			printf("nb rx queues %u\n", dev_info->nb_rx_queues);
-			printf("nb tx queues %u\n", dev_info->nb_tx_queues);
-		}
+		printf("Port %u, MAC address: " RTE_ETHER_ADDR_PRT_FMT "\n",
+				portid, RTE_ETHER_ADDR_BYTES(&ports_eth_addr[portid]));
+		printf("driver name %s\n", dev_info.driver_name);
+		printf("if index %u\n", dev_info.if_index);
+		printf("mtu [%d, %d]\n", dev_info.min_mtu, dev_info.max_mtu);
+		printf("nb rx queues %u\n", dev_info.nb_rx_queues);
+		printf("nb tx queues %u\n", dev_info.nb_tx_queues);
 
 		/* initialize port stats */
 		// memset(port_statistics, 0, sizeof(port_statistics));
@@ -1348,7 +1340,9 @@ int main(int argc, char **argv)
 	ret = 0;
 	uint32_t lcore_id = 0;
 	RTE_LCORE_FOREACH_WORKER(lcore_id) {
-		if (rte_eal_wait_lcore(lcore_id) < 0) {
+		int n = rte_eal_wait_lcore(lcore_id);
+		if (n < 0) {
+			printf("lcore %d returnd %d\n", lcore_id, n);
 			ret = -1;
 			break;
 		}
@@ -1360,9 +1354,9 @@ int main(int argc, char **argv)
 		}
 		printf("Closing port %d...", portid);
 		ret = rte_eth_dev_stop(portid);
-		if (ret != 0)
-			printf("rte_eth_dev_stop: err=%d, port=%d\n",
-					ret, portid);
+		if (ret != 0) {
+			printf("rte_eth_dev_stop: err=%d, port=%d\n", ret, portid);
+		}
 		rte_eth_dev_close(portid);
 		printf(" Done\n");
 	}

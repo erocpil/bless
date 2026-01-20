@@ -132,7 +132,7 @@ export LDLIBS  := $(LDLIBS) $(THIRD_PARTY_LDLIBS)
 .PHONY: all upstream install uninstall $(VERSION_H)
 
 # 默认目标
-all: $(TP_MK)
+all: $(TP_MK) $(VERSION_H)
 	$(MAKE_SRC)
 
 # 仅准备 third_party（CI / 调试时很有用）
