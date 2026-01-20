@@ -36,15 +36,15 @@ injector:
   batch-delay-us: 0
   mode: tx-only # rx-only, rx-only, fwd
   num: -1
-  arp: 0
-  icmp: 0
-  tcp: 0
+  arp: 1
+  icmp: 1
+  tcp: 1
   udp: 1
 
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 100 # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    mtu: 46 # [46, 1500] size of ether payload, may result in error if vxlan enabled
     copy-payload: true # copy payload to mbuf, default false
     dst: 10:70:fd:af:21:10
     src:
@@ -57,15 +57,15 @@ bless:
         dst: [ 192.168.0.1, 192.168.1.1 ]
         icmp:
           ident: [ 0x1234, 0xface ]
-          payload: "injector: icmp payload.xxxxxxxxxxxxxxxxxxxx" # not used, yet
+          payload: "injector: icmp payload." # not used, yet
         tcp:
           src: [ 80, 808, 8080, 8888 ]
           dst: 9000+10
-          payload: "injector: tcp payload.xxxxxxxxxxxxxxxxxxxx"
+          payload: "injector: tcp payload."
         udp:
           src: 8000+-10
           dst: [ 10000, 10001, 10003 ]
-          payload: "injector: udp payload.xxxxxxxxxxxxxxxxxxxx"
+          payload: "injector: udp payload."
         proto: [ 0, 0x8C-0xFF ] # https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
   vxlan:
     enable: false

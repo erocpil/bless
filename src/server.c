@@ -52,8 +52,7 @@ static _Atomic int g_stats_active_idx = 0;
 /* ================================================================ */
 int stats_get_active_index(void)
 {
-	return atomic_load_explicit(&g_stats_active_idx,
-			memory_order_acquire);
+	return atomic_load_explicit(&g_stats_active_idx, memory_order_acquire);
 }
 
 struct stats_snapshot * stats_get(int idx)
@@ -69,8 +68,7 @@ void stats_set(int idx)
 
 const struct stats_snapshot * stats_get_active(void)
 {
-	int idx = atomic_load_explicit(&g_stats_active_idx,
-			memory_order_acquire);
+	int idx = atomic_load_explicit(&g_stats_active_idx, memory_order_acquire);
 	return &g_stats_buf[idx];
 }
 
@@ -136,15 +134,17 @@ static void ws_close_handler(const struct mg_connection *conn, void *ud)
 	pthread_mutex_lock(&mgc_lock);
 	for (int i = 0; i < n_mgc; i++) {
 		if (mgc[i] == conn) {
-			for (int j = i; j < n_mgc - 1; j++)
+			for (int j = i; j < n_mgc - 1; j++) {
 				mgc[j] = mgc[j + 1];
+			}
 			n_mgc--;
 			break;
 		}
 	}
 	pthread_mutex_unlock(&mgc_lock);
+
 	struct tClientContext *ctx = mg_get_user_connection_data(conn);
-	printf("conn %d closed", ctx->conn_id);
+	printf("conn %d closed\n", ctx->conn_id);
 	free(ctx);
 }
 

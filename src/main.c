@@ -4,6 +4,19 @@
 #include "server.h"
 #include "system.h"
 #include "cJSON.h"
+#ifdef VERSION
+#include "version.h"
+void print_version(void) {
+	printf("Version Info:\n");
+	printf("  Git Commit: %s\n", GIT_COMMIT);
+	printf("  Git Branch: %s\n", GIT_BRANCH);
+	printf("  Build Time: %s\n", BUILD_TIME);
+}
+#else
+void print_version(void) {
+	printf("No Version Info:\n");
+}
+#endif
 
 #define DEFAULT_CONFIG_FILE "conf/config.yaml"
 struct bless_conf *bconf = NULL;
@@ -225,8 +238,9 @@ static int parse_portmask(const char *portmask)
 
 	/* parse hexadecimal string */
 	pm = strtoul(portmask, &end, 16);
-	if ((portmask[0] == '\0') || (end == NULL) || (*end != '\0'))
+	if ((portmask[0] == '\0') || (end == NULL) || (*end != '\0')) {
 		return 0;
+	}
 
 	return pm;
 }
@@ -284,6 +298,7 @@ static int parse_port_pair_config(const char *q_arg)
 		++nb_port_pair_params;
 	}
 	port_pair_params = port_pair_params_array;
+
 	return 0;
 }
 
@@ -314,10 +329,12 @@ static int parse_timer_period(const char *q_arg)
 
 	/* parse number string */
 	n = strtol(q_arg, &end, 10);
-	if ((q_arg[0] == '\0') || (end == NULL) || (*end != '\0'))
+	if ((q_arg[0] == '\0') || (end == NULL) || (*end != '\0')) {
 		return -1;
-	if (n >= MAX_TIMER_PERIOD)
+	}
+	if (n >= MAX_TIMER_PERIOD) {
 		return -1;
+	}
 
 	return n;
 }
@@ -351,7 +368,6 @@ static const char short_options[] =
 
 enum {
 	/* long options mapped to a short option */
-
 	/* first long only option value must be >= 256, so that we won't
 	 * conflict with short options */
 	CMD_LINE_OPT_NO_MAC_UPDATING_NUM = 256,
@@ -417,7 +433,6 @@ static int parse_args(int argc, char **argv)
 
 	while ((opt = getopt_long(argc, argvopt, short_options,
 					lgopts, &option_index)) != EOF) {
-
 		switch (opt) {
 			/* portmask */
 			case 'p':
@@ -456,7 +471,6 @@ static int parse_args(int argc, char **argv)
 				}
 				timer_period = timer_secs;
 				break;
-
 				/* long options */
 			case CMD_LINE_OPT_NUM_NUM:
 				bconf->num = optarg ? atoi(optarg) : 0;
@@ -880,8 +894,15 @@ int main(int argc, char **argv)
 	char **targv = argv;
 	Node *conf_root = NULL;
 
+
 	char *f = DEFAULT_CONFIG_FILE;
 	if (2 == argc) {
+#ifdef VERSION
+		if (0 == strcmp(argv[1], "version")) {
+			print_version();
+			exit(0);
+		}
+#endif
 		f = argv[1];
 	}
 	cfm = config_check_file(f);

@@ -10,6 +10,7 @@ STATIC   ?= 1
 V        ?= 0
 PREFIX   ?= /opt/bless-1.0
 DESTDIR  ?=
+VERSION  ?= 1
 
 # ----------------------------
 # 构建模式
@@ -37,9 +38,13 @@ MAKE_SRC := $(MAKE) -C $(SRCDIR) \
 			STATIC="$(STATIC)" \
 			V="$(V)" \
 			PREFIX="$(PREFIX)" \
-			DESTDIR="$(DESTDIR)"
+			DESTDIR="$(DESTDIR)" \
+			VERSION="$(VERSION)"
 
 .DEFAULT_GOAL := all
+
+# 版本信息头文件
+VERSION_H = include/version.h
 
 # ============================================================
 # Clean 目标优先处理
@@ -48,7 +53,6 @@ MAKE_SRC := $(MAKE) -C $(SRCDIR) \
 ifneq ($(filter clean distclean uninstall help,$(MAKECMDGOALS)),)
 
 .PHONY: clean distclean help
-
 clean:
 	@echo "  CLEANING build directory..."
 	rm -rf build/
@@ -101,19 +105,31 @@ update-third-party:
 # ============================================================
 include $(TP_MK)
 
+# 每次 make 都重新生成版本文件
+$(VERSION_H):
+	@echo "Generating $@..."
+	@echo "#ifndef VERSION_H" > $@
+	@echo "#define VERSION_H" >> $@
+	@echo "" >> $@
+	@echo "#define GIT_COMMIT \"$$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\"" >> $@
+	@echo "#define GIT_BRANCH \"$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)\"" >> $@
+	@echo "#define BUILD_TIME \"$$(date '+%Y-%m-%d %H:%M:%S')\"" >> $@
+	@echo "" >> $@
+	@echo "#endif /* VERSION_H */" >> $@
+
 # ============================================================
 # 导出第三方变量给子目录（src）
 # ============================================================
 
-export CFLAGS  := $(CFLAGS)  $(THIRD_PARTY_CFLAGS)
+export CFLAGS  := $(CFLAGS) $(THIRD_PARTY_CFLAGS)
 export LDFLAGS := $(LDFLAGS) $(THIRD_PARTY_LDFLAGS)
-export LDLIBS  := $(LDLIBS)  $(THIRD_PARTY_LDLIBS)
+export LDLIBS  := $(LDLIBS) $(THIRD_PARTY_LDLIBS)
 
 # ============================================================
 # 目标定义
 # ============================================================
 
-.PHONY: all upstream install uninstall
+.PHONY: all upstream install uninstall $(VERSION_H)
 
 # 默认目标
 all: $(TP_MK)

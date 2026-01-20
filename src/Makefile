@@ -6,6 +6,7 @@ STATIC   ?= 1
 V        ?= 0
 PREFIX   ?= $(shell pwd)
 PKGCONF  ?= pkg-config
+VERSION  ?= 0
 
 # ============================================================
 # 编译器选择与标志
@@ -31,6 +32,7 @@ CONFIG_TRACKER := $(OBJDIR)/.build_config
 
 APP_SRC   := $(wildcard *.c)
 APP_OBJ   := $(APP_SRC:%.c=$(OBJDIR)/%.o)
+DEPS  := $(APP_SRC:%.c=$(OBJDIR)/%.d)
 # ============================================================
 # 编译链接逻辑
 # ============================================================
@@ -38,7 +40,7 @@ DPDK_CFLAGS  := $(shell $(PKGCONF) --cflags libdpdk 2>/dev/null) -DALLOW_EXPERIM
 DPDK_LDFLAGS := $(shell $(PKGCONF) $(if $(filter 1,$(STATIC)),--static) --libs libdpdk 2>/dev/null)
 CRYPTO_LIBS  := $(shell $(PKGCONF) --libs libcrypto 2>/dev/null || echo "-lcrypto")
 
-CFLAGS += -std=c11 -I../include -Wall $(DPDK_CFLAGS)
+CFLAGS += -std=c11 -I../include -Wall $(DPDK_CFLAGS) $(if $(filter 1,$(VERSION)),-DVERSION)
 
 ifeq ($(BUILD),debug)
 	CFLAGS += -O0 -g -DDEBUG
@@ -73,9 +75,6 @@ all: $(TARGET)
 # 【核心改进】TARGET 依赖 CONFIG_TRACKER
 # 如果 STATIC 改变，CONFIG_TRACKER 会更新，导致 TARGET 重新链接
 $(TARGET): $(APP_OBJ) $(CONFIG_TRACKER)
-	$(ECHO) $(CFLAGS)
-	$(ECHO) $(LDFLAGS)
-	$(ECHO) $(LDLIBS)
 	@mkdir -p $(@D)
 	$(ECHO) "  LD [$(if $(filter 1,$(STATIC)),STATIC,SHARED)] $@"
 	$(Q)$(CC) $(APP_OBJ) -o $@ \
@@ -95,9 +94,6 @@ $(CONFIG_TRACKER): FORCE
 .PHONY: FORCE
 
 $(OBJDIR)/%.o: %.c
-	$(ECHO) $(CFLAGS)
-	$(ECHO) $(LDFLAGS)
-	$(ECHO) $(LDLIBS)
 	@mkdir -p $(@D)
 	$(ECHO) "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) $(APP_CFLAGS) -MMD -MP -c $< -o $@
@@ -117,10 +113,13 @@ uninstall:
 	$(Q)rm -f $(DESTDIR)$(PREFIX)/bin/$(APP)
 	$(Q)rm -rf $(DESTDIR)$(PREFIX)/include/$(APP)
 
+# 包含自动生成的依赖文件
+-include $(DEPS)
+
 # 冗余控制
 ifeq ($(V),1)
 Q :=
-ECHO := echo
+ECHO := @echo
 else
 Q := @
 ECHO := @echo
