@@ -13,11 +13,11 @@ VERSION  ?= 0
 # ============================================================
 ifeq ($(origin CC), default)
 CLANG := $(shell command -v clang 2>/dev/null)
-	ifeq ($(shell echo 'int main(){}' | clang -x c - -o /dev/null 2>/dev/null && echo yes),yes)
+ifeq ($(shell echo 'int main(){}' | clang -x c - -o /dev/null 2>/dev/null && echo yes),yes)
 CC := clang
-	else
+else
 CC := gcc
-	endif
+endif
 endif
 
 MAKEFLAGS += -rR
@@ -43,21 +43,21 @@ CRYPTO_LIBS  := $(shell $(PKGCONF) --libs libcrypto 2>/dev/null || echo "-lcrypt
 CFLAGS += -std=c11 -I../include -Wall $(DPDK_CFLAGS) $(if $(filter 1,$(VERSION)),-DVERSION)
 
 ifeq ($(BUILD),debug)
-	CFLAGS += -O0 -g -DDEBUG
+CFLAGS += -O0 -g -DDEBUG
 else
-	CFLAGS += -O2 -DNDEBUG
+CFLAGS += -O2 -DNDEBUG
 endif
 
 ifeq ($(CC),clang)
-	XAPP_CFLAGS += -Weverything -Wno-padded -Wno-declaration-after-statement
+XAPP_CFLAGS += -Weverything -Wno-padded -Wno-declaration-after-statement
 else
-	CFLAGS += -Wextra -Wpedantic -Wstrict-prototypes
+CFLAGS += -Wextra -Wpedantic -Wstrict-prototypes
 endif
 
 # RPATH 仅对动态链接有意义，但保留在变量中
 RPATH_FLAGS := -Wl,-rpath,'$$ORIGIN/../lib:$(PREFIX)/lib'
 
-# 【关键点】根据 STATIC 决定链接方式
+# 根据 STATIC 决定链接方式
 ifeq ($(STATIC),1)
 BUILD_SHARED  := 0
 else
@@ -72,7 +72,7 @@ endif
 
 all: $(TARGET)
 
-# 【核心改进】TARGET 依赖 CONFIG_TRACKER
+# TARGET 依赖 CONFIG_TRACKER
 # 如果 STATIC 改变，CONFIG_TRACKER 会更新，导致 TARGET 重新链接
 $(TARGET): $(APP_OBJ) $(CONFIG_TRACKER)
 	@mkdir -p $(@D)
