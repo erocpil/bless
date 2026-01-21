@@ -56,6 +56,7 @@ endif
 
 # RPATH 仅对动态链接有意义，但保留在变量中
 RPATH_FLAGS := -Wl,-rpath,'$$ORIGIN/../lib:$(PREFIX)/lib'
+# $(if $(filter 0,$(STATIC)),$(RPATH_FLAGS)) \
 
 # 根据 STATIC 决定链接方式
 ifeq ($(STATIC),1)
@@ -78,7 +79,7 @@ $(TARGET): $(APP_OBJ) $(CONFIG_TRACKER)
 	@mkdir -p $(@D)
 	$(ECHO) "  LD [$(if $(filter 1,$(STATIC)),STATIC,SHARED)] $@"
 	$(Q)$(CC) $(APP_OBJ) -o $@ \
-		$(if $(filter 0,$(STATIC)),$(RPATH_FLAGS)) \
+		$(RPATH_FLAGS) \
 		$(LDFLAGS) $(APP_LDFLAGS) $(DPDK_LDFLAGS) $(CRYPTO_LIBS) $(LDLIBS)
 
 # 配置追踪器：检测 STATIC 变量是否发生变化

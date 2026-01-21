@@ -910,6 +910,9 @@ int main(int argc, char **argv)
 	}
 
 	conf_root = config_init(f);
+	if (!conf_root) {
+		rte_exit(EXIT_FAILURE, "Config file error %s\n", f);
+	}
 
 	config_parse_dpdk(conf_root, &targc, &targv);
 	if (!conf_root) {
@@ -1178,7 +1181,6 @@ int main(int argc, char **argv)
 		/* init port */
 		printf("Initializing port %u... ", portid);
 		fflush(stdout);
-		// getchar();
 
 		ret = rte_eth_dev_info_get(portid, &dev_info);
 		if (ret != 0) {
@@ -1220,7 +1222,6 @@ int main(int argc, char **argv)
 		fflush(stdout);
 
 		/* Init queue on each port. 8< */
-		fflush(stdout);
 		struct rte_eth_rxconf rxq_conf;
 		rxq_conf = dev_info.default_rxconf;
 		rxq_conf.offloads = local_port_conf.rxmode.offloads;
@@ -1228,7 +1229,6 @@ int main(int argc, char **argv)
 		txq_conf = dev_info.default_txconf;
 		txq_conf.offloads = local_port_conf.txmode.offloads;
 		for (uint16_t i = 0; i < rxtxq_per_port; i++) {
-#if 1
 			/* RX queue setup. 8< */
 			ret = rte_eth_rx_queue_setup(portid, i, nb_rxd,
 					rte_eth_dev_socket_id(portid),
@@ -1238,7 +1238,6 @@ int main(int argc, char **argv)
 						ret, portid);
 			}
 			/* >8 End of RX queue setup. */
-#endif
 			/* init one TX queue */
 			ret = rte_eth_tx_queue_setup(portid, i, nb_txd,
 					rte_eth_dev_socket_id(portid), &txq_conf);
@@ -1324,6 +1323,9 @@ int main(int argc, char **argv)
 
 	bconf->qconf = lcore_queue_conf;
 	bconf->stats = rte_malloc(NULL, sizeof(bconf->stats) * RTE_MAX_ETHPORTS, 0);
+	if (!bconf->stats) {
+		rte_exit(EXIT_FAILURE, "rte_malloc(bconf->stats)");
+	}
 	bconf->dst_ports = dst_ports;
 	bconf->state = &g_state;
 	bconf->timer_period = timer_period;
