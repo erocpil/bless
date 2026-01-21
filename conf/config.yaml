@@ -12,7 +12,7 @@ dpdk:
   n: 4
   lcores: null
   socket-mem: null
-  allow: [ 0000:00:05.0, 0000:00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0 ] # ls -l /sys/class/net/*/device
+  allow: 00:05.0 # [ 0000:00:05.0, 0000:00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0 ] # ls -l /sys/class/net/*/device
   block: null # [ 00:03.0, 00:04.0 ]
   vdev: null # net_tap0,iface=tap0
   proc-type: primary
@@ -25,8 +25,8 @@ dpdk:
   file-prefix: null # bless
 
 injector:
-  p: 0xf # port
-  q: 2 # queues on each port
+  p: 0x1 # port
+  q: 1 # queues on each port
   P:
   T: 1
   no-mac-updating:
@@ -36,7 +36,7 @@ injector:
   batch-delay-us: 0
   mode: tx-only # rx-only, rx-only, fwd
   num: -1
-  arp: 1
+  arp: 0
   icmp: 1
   tcp: 1
   udp: 1
@@ -112,5 +112,5 @@ system:
       enable_keep_alive: yes
       request_timeout_ms: 2000
       document_root: /root/src/bless/www
-      access_log_file: /root/src/bless/log/access.log
-      error_log_file: /root/src/bless/log/error.log
+      access_log_file: /root/src/bless/www/log/access.log
+      error_log_file: /root/src/bless/www/log/error.log

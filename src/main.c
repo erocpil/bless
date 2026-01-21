@@ -208,7 +208,7 @@ static int bless_launch_one_lcore(void *conf)
 			printf("skip unused lcore %d\n", lcore_id);
 			return 0;
 		}
-		worker_loop_txonly(conf);
+		worker_loop(conf);
 	}
 
 	return 0;

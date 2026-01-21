@@ -244,6 +244,7 @@ struct mg_context * ws_server_start(void *data)
 
 	struct mg_context *ctx = mg_start2(&init, NULL);
 	if (!ctx) {
+		printf("mg_start2()\n");
 		return NULL;
 	}
 

@@ -16,6 +16,6 @@ struct lcore_queue_conf {
 } __rte_cache_aligned;
 /* >8 End of list of queues to be polled for a given lcore. */
 
-void worker_loop_txonly(void *conf);
+void worker_loop(void *conf);
 
 #endif

@@ -81,6 +81,7 @@ $(TARGET): $(APP_OBJ) $(CONFIG_TRACKER)
 	$(Q)$(CC) $(APP_OBJ) -o $@ \
 		$(RPATH_FLAGS) \
 		$(LDFLAGS) $(APP_LDFLAGS) $(DPDK_LDFLAGS) $(CRYPTO_LIBS) $(LDLIBS)
+	echo $(RPATH_FLAGS)
 
 # 配置追踪器：检测 STATIC 变量是否发生变化
 $(CONFIG_TRACKER): FORCE
@@ -107,8 +108,11 @@ install: all
 	$(Q)install -d $(DESTDIR)$(PREFIX)/bin \
 		$(DESTDIR)$(PREFIX)/lib \
 		$(DESTDIR)$(PREFIX)/conf \
+		$(DESTDIR)$(PREFIX)/www \
+		$(DESTDIR)$(PREFIX)/www/log \
 		$(DESTDIR)$(PREFIX)/include/$(APP)
 	$(Q)install -m 0755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/
+	$(Q)install -m 0644 ../www/index.html $(DESTDIR)$(PREFIX)/www/
 
 uninstall:
 	$(Q)rm -f $(DESTDIR)$(PREFIX)/bin/$(APP)

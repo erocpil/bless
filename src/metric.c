@@ -182,8 +182,9 @@ fail:
 static cJSON * encode_port(uint16_t portid)
 {
 	struct rte_eth_stats stats;
-	if (rte_eth_stats_get(portid, &stats) != 0)
+	if (rte_eth_stats_get(portid, &stats) != 0) {
 		return NULL;
+	}
 
 	cJSON *port = cJSON_CreateObject();
 
@@ -192,8 +193,9 @@ static cJSON * encode_port(uint16_t portid)
 			encode_eth_stats(&stats));
 
 	cJSON *xstats = encode_xstats(portid);
-	if (xstats)
+	if (xstats) {
 		cJSON_AddItemToObject(port, "xstats", xstats);
+	}
 
 	return port;
 }
@@ -263,5 +265,6 @@ char * encode_stats_to_json(uint32_t port_mask, char *log_text)
 
 	char *out = cJSON_PrintUnformatted(root);
 	cJSON_Delete(root);
+
 	return out;   /* caller free() */
 }

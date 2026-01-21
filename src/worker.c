@@ -12,7 +12,7 @@ static inline void swap_mac(struct rte_ether_hdr *eth_hdr)
 	rte_ether_addr_copy(&addr, &eth_hdr->src_addr);
 }
 
-void worker_loop_txonly(void *data)
+void worker_loop(void *data)
 {
 	struct rte_mbuf **mbufs = NULL;
 	struct rte_mbuf **rx_mbufs = NULL;

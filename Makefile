@@ -49,7 +49,7 @@ VERSION_H = include/version.h
 # ============================================================
 # Clean 目标优先处理
 # ============================================================
-# 修复：使用 ifneq 检查是否包含 clean/distclean/help
+# 使用 ifneq 检查是否包含 clean/distclean/uninstall/help
 ifneq ($(filter clean distclean uninstall help,$(MAKECMDGOALS)),)
 
 .PHONY: clean distclean help
@@ -81,17 +81,16 @@ help:
 	@echo "  PREFIX=/path  Install prefix"
 
 else
-	# ============================================================
-	# 正常构建流程
-	# ============================================================
+
+# ============================================================
+# 正常构建流程
+# ============================================================
 
 # ============================================================
 # third_party.mk 生成规则
 # ============================================================
 
 # 当 third_party.mk 不存在时才生成（不依赖 update-third-party）
-third_party: $(TP_MK)
-
 $(TP_MK):
 	@echo "  GENERATING $@..."
 	$(MAKE) -f Makefile.up
@@ -134,7 +133,7 @@ export LDLIBS  := $(LDLIBS) $(THIRD_PARTY_LDLIBS)
 .PHONY: all upstream install uninstall $(VERSION_H)
 
 # 默认目标
-all: third_party $(VERSION_H)
+all: upstream $(VERSION_H)
 	$(MAKE_SRC)
 
 # 仅准备 third_party（CI / 调试时很有用）
