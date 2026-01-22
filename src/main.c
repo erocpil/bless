@@ -4,6 +4,7 @@
 #include "server.h"
 #include "system.h"
 #include "cJSON.h"
+
 #ifdef VERSION
 #include "version.h"
 void print_version(void) {
@@ -11,6 +12,7 @@ void print_version(void) {
 	printf("  Git Commit: %s\n", GIT_COMMIT);
 	printf("  Git Branch: %s\n", GIT_BRANCH);
 	printf("  Build Time: %s\n", BUILD_TIME);
+	printf("  Build Host: %s\n", BUILD_HOST);
 }
 #else
 void print_version(void) {
@@ -19,6 +21,7 @@ void print_version(void) {
 #endif
 
 #define DEFAULT_CONFIG_FILE "conf/config.yaml"
+
 struct bless_conf *bconf = NULL;
 struct config_file_map *cfm = NULL;
 struct system_status sysstat;

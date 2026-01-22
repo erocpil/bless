@@ -77,7 +77,7 @@ help:
 	@echo ""
 	@echo "Variables:"
 	@echo "  STATIC=1|0     Build static or shared (default: 1)"
-	@echo "  BUILD=release|debug"
+	@echo "  BUILD=release|debug (default: release)"
 	@echo "  PREFIX=/path  Install prefix"
 
 else
@@ -115,6 +115,7 @@ $(VERSION_H):
 	@echo "#define GIT_COMMIT \"$$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\"" >> $@
 	@echo "#define GIT_BRANCH \"$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)\"" >> $@
 	@echo "#define BUILD_TIME \"$$(date '+%Y-%m-%d %H:%M:%S')\"" >> $@
+	@echo "#define BUILD_HOST \"$$(hostname)\"" >> $@
 	@echo "" >> $@
 	@echo "#endif /* VERSION_H */" >> $@
 
