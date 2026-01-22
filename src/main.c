@@ -1,24 +1,31 @@
 #include "bless.h"
+#include "color.h"
 #include "worker.h"
 #include "metric.h"
 #include "server.h"
 #include "system.h"
 #include "cJSON.h"
+#include "log.h"
 
-#ifdef VERSION
-#include "version.h"
-void print_version(void) {
-	printf("Version Info:\n");
-	printf("  Git Commit: %s\n", GIT_COMMIT);
-	printf("  Git Branch: %s\n", GIT_BRANCH);
-	printf("  Build Time: %s\n", BUILD_TIME);
-	printf("  Build Host: %s\n", BUILD_HOST);
-}
+#ifndef USE_VERSION_H
+#define BL_VERSION "1.0"
+#define GIT_COMMIT "N/A"
+#define GIT_BRANCH "N/A"
+#define BUILD_TIME ""
+#define BUILD_HOST ""
 #else
-void print_version(void) {
-	printf("No Version Info:\n");
-}
+#include "version.h"
 #endif
+
+void print_version(void)
+{
+	_L(ANSI_BOLD FG_BRIGHT_BLUE "Version Info:" ANSI_RESET);
+	_L(C_ERR "  Version    : " ANSI_RESET "%s", BL_VERSION);
+	_L(C_INFO "  Git Branch : " ANSI_RESET "%s", GIT_BRANCH);
+	_L(C_WARN "  Git Commit : " ANSI_RESET "%s", GIT_COMMIT);
+	_L(C_DEBUG "  Build Host : " ANSI_RESET "%s", BUILD_HOST);
+	_L(C_TRACE "  Build Time : " ANSI_RESET "%s\n", BUILD_TIME);
+}
 
 #define DEFAULT_CONFIG_FILE "conf/config.yaml"
 
@@ -899,12 +906,10 @@ int main(int argc, char **argv)
 
 	char *f = DEFAULT_CONFIG_FILE;
 	if (2 == argc) {
-#ifdef VERSION
 		if (0 == strcmp(argv[1], "version")) {
 			print_version();
 			exit(0);
 		}
-#endif
 		f = argv[1];
 	}
 	cfm = config_check_file(f);

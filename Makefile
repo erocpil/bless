@@ -10,7 +10,8 @@ STATIC   ?= 1
 V        ?= 0
 PREFIX   ?= /opt/bless-1.0
 DESTDIR  ?=
-VERSION  ?= 1
+USE_VERSION_H  ?= 1
+BL_VERSION ?= 1.0
 
 # ----------------------------
 # 构建模式
@@ -39,7 +40,7 @@ MAKE_SRC := $(MAKE) -C $(SRCDIR) \
 			V="$(V)" \
 			PREFIX="$(PREFIX)" \
 			DESTDIR="$(DESTDIR)" \
-			VERSION="$(VERSION)"
+			USE_VERSION_H="$(USE_VERSION_H)"
 
 .DEFAULT_GOAL := all
 
@@ -112,6 +113,7 @@ $(VERSION_H):
 	@echo "#ifndef VERSION_H" > $@
 	@echo "#define VERSION_H" >> $@
 	@echo "" >> $@
+	@echo '#define BL_VERSION "$(BL_VERSION)"' >> $@
 	@echo "#define GIT_COMMIT \"$$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\"" >> $@
 	@echo "#define GIT_BRANCH \"$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)\"" >> $@
 	@echo "#define BUILD_TIME \"$$(date '+%Y-%m-%d %H:%M:%S')\"" >> $@
@@ -144,3 +146,10 @@ install: $(TP_MK)
 	$(MAKE_SRC) install
 
 endif
+
+check:
+	readelf -d build/release-static/bin/bless | grep PATH
+	readelf -x .note.buildinfo build/release-static/bin/bless
+	@echo "more checks:"
+	@echo "  objdump -s -j .note.buildinfo build/release-static/bin/bless"
+	@echo "  llvm-readobj --notes build/release-static/bin/bless"
