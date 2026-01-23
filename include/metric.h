@@ -1,7 +1,6 @@
 #ifndef __METRICS_H__
 #define __METRICS_H__
 
-#define _GNU_SOURCE
 #include <pthread.h>
 #include <unistd.h>
 

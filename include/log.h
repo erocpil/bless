@@ -129,6 +129,13 @@ static inline int log_cpu_id(void)
 		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));                         \
 	} while (0)
 
+#define _E(fmt, ...)                                                    \
+	do {                                                                \
+		fprintf(stdout, "%s", COLOR(FG_RED));                               \
+		fprintf(stdout, fmt, ##__VA_ARGS__);                                \
+		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));                         \
+	} while (0)
+
 #define LOG_HINT(fmt, ...)                                              \
 	LOG_BASE(stdout, "HINT", C_HINT, fmt, ##__VA_ARGS__)
 

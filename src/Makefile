@@ -35,6 +35,7 @@ APP_SRC  := $(wildcard *.c)
 APP_OBJ  := $(APP_SRC:%.c=$(OBJDIR)/%.o)
 APP_OBJ  += $(OBJDIR)/buildinfo.o
 APP_DEPS := $(APP_SRC:%.c=$(OBJDIR)/%.d)
+
 # ============================================================
 # 编译链接逻辑
 # ============================================================
@@ -42,7 +43,7 @@ DPDK_CFLAGS  := $(shell $(PKGCONF) --cflags libdpdk 2>/dev/null) -DALLOW_EXPERIM
 DPDK_LDFLAGS := $(shell $(PKGCONF) $(if $(filter 1,$(STATIC)),--static) --libs libdpdk 2>/dev/null)
 CRYPTO_LIBS  := $(shell $(PKGCONF) --libs libcrypto 2>/dev/null || echo "-lcrypto")
 
-CFLAGS += -std=c11 -I../include -Wall $(DPDK_CFLAGS) $(if $(filter 1,$(USE_VERSION_H)),-DUSE_VERSION_H)
+CFLAGS += -std=c11 -I../include -Wall -D_GNU_SOURCE $(DPDK_CFLAGS) $(if $(filter 1,$(USE_VERSION_H)),-DUSE_VERSION_H)
 
 ifeq ($(BUILD),debug)
 CFLAGS += -O0 -g -DDEBUG
@@ -77,18 +78,17 @@ BUILD_GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unkno
 BUILD_HOST       := $(shell hostname)
 BUILD_TIME       := $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
 BUILD_CC_VERSION := $(shell $(CC) --version | head -n 1)
-BUILD_CFLAGS     := $(CFLAGS) $(APP_CFLAGS)
-BUILD_LDFLAGS    := $(RPATH_FLAGS) $(LDFLAGS) $(APP_LDFLAGS) $(DPDK_LDFLAGS) $(CRYPTO_LIBS) $(LDLIBS)
-
-BUILDINFO_DESC := git_branch=$(BUILD_GIT_BRANCH)\n\
+BUILD_CFLAGS     := $(strip $(CFLAGS) $(APP_CFLAGS))
+BUILD_LDFLAGS    := $(strip $(RPATH_FLAGS) $(LDFLAGS) $(APP_LDFLAGS) $(DPDK_LDFLAGS) $(CRYPTO_LIBS) $(LDLIBS))
+BUILDINFO_DESC   := git_branch=$(BUILD_GIT_BRANCH)\n\
 	git_commit=$(BUILD_GIT_COMMIT)\n\
 	build_host=$(BUILD_HOST)\n\
 	build_time=$(BUILD_TIME)\n\
 	cc_version=$(BUILD_CC_VERSION)\n\
 	CFLAGS='$(BUILD_CFLAGS)'\n\
 	LDFLAGS='$(BUILD_LDFLAGS)'\n
-BUILDINFO_SIZE := $(shell printf '%b' "$(BUILDINFO_DESC)" | wc -c)
-BUILDINFO_PAD := $(shell \
+BUILDINFO_SIZE   := $(shell printf '%b' "$(BUILDINFO_DESC)" | wc -c)
+BUILDINFO_PAD    := $(shell \
 	s=$(BUILDINFO_SIZE); \
 	echo $$(( (4 - ($$s % 4)) % 4 )) \
 )
@@ -96,7 +96,7 @@ BUILDINFO_PAD := $(shell \
 # ============================================================
 # 构建规则
 # ============================================================
-.PHONY: all clean install uninstall libcivetweb libcjson
+.PHONY: all clean install uninstall libcivetweb libcjson Test
 
 all: $(TARGET)
 
@@ -171,6 +171,14 @@ install: all
 uninstall:
 	$(Q)rm -f $(DESTDIR)$(PREFIX)/bin/$(APP)
 	$(Q)rm -rf $(DESTDIR)$(PREFIX)/include/$(APP)
+
+Test:
+	$(info >>>CFLAGS<<<)
+	$(info $(CFLAGS))
+	$(info >>>END<<<)
+	$(info >>>BUILD_CFLAGS<<<)
+	$(info $(BUILD_CFLAGS))
+	$(info >>>END<<<)
 
 # 包含自动生成的依赖文件
 -include $(APP_DEPS)

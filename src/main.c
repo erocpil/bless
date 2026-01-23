@@ -4,6 +4,7 @@
 #include "metric.h"
 #include "server.h"
 #include "system.h"
+#include "device.h"
 #include "cJSON.h"
 #include "log.h"
 
@@ -84,6 +85,9 @@ static uint16_t nb_port_pair_params;
 static unsigned int rxtxq_per_port = 1;
 
 // static struct rte_eth_dev_tx_buffer *tx_buffer[RTE_MAX_ETHPORTS];
+
+static struct rte_eth_conf port_conf_default = {
+};
 
 static struct rte_eth_conf port_conf = {
 	.txmode = {
@@ -1172,22 +1176,33 @@ int main(int argc, char **argv)
 	}
 	/* >8 End of create the mbuf pool. */
 
+	uint16_t nb_physical_ports_available = 0;
 	uint16_t nb_ports_available = 0;
 
 	/* Initialise each port */
+	printf("Initializing port ...\n");
 	RTE_ETH_FOREACH_DEV(portid) {
 		struct rte_eth_conf local_port_conf = port_conf;
 		struct rte_eth_dev_info dev_info;
+		enum ethdev_type etype = device_get_ethdev_type(portid);
 
-		/* skip ports that are not enabled */
-		if ((enabled_port_mask & (1u << portid)) == 0) {
-			printf("Skipping disabled port %u\n", portid);
-			continue;
+		if (ETHDEV_OTHER == etype || ETHDEV_NOT_SUPPORTED == etype) {
+			rte_exit(EXIT_FAILURE,
+					"Not supported ether device (port %u) info: %s\n",
+					portid, strerror(-ret));
+		}
+		/* skip physical ports that are not enabled */
+		if (etype == ETHDEV_PHYSICAL) {
+			if ((enabled_port_mask & (1u << portid)) == 0) {
+				printf("Skipping disabled physical port %u\n", portid);
+				continue;
+			}
+			nb_physical_ports_available++;
+			printf("physical\n");
 		}
 		nb_ports_available++;
 
 		/* init port */
-		printf("Initializing port %u... ", portid);
 		fflush(stdout);
 
 		ret = rte_eth_dev_info_get(portid, &dev_info);
@@ -1196,6 +1211,7 @@ int main(int argc, char **argv)
 					"Error during getting device (port %u) info: %s\n",
 					portid, strerror(-ret));
 		}
+		printf("TX port %u type %d driver=%s\n", portid, etype, dev_info.driver_name);
 
 		local_port_conf.txmode.offloads &= dev_info.tx_offload_capa;
 #if 0
@@ -1206,10 +1222,17 @@ int main(int argc, char **argv)
 		}
 #endif
 		/* Configure the number of queues for a port. */
-		ret = rte_eth_dev_configure(portid, rxtxq_per_port, rxtxq_per_port, &local_port_conf);
+		if (ETHDEV_PHYSICAL == etype) {
+			ret = rte_eth_dev_configure(portid, rxtxq_per_port, rxtxq_per_port, &local_port_conf);
+		} else if (ETHDEV_PCAP == etype) {
+			ret = rte_eth_dev_configure(portid, 0, 1, &port_conf_default);
+		} else {
+			/* TODO other types */
+			ret = -1;
+		}
 		if (ret < 0) {
-			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d, port=%u\n",
-					ret, portid);
+			rte_exit(EXIT_FAILURE, "Cannot configure device: type %d err=%d, port=%u\n",
+					etype, ret, portid);
 		}
 		/* >8 End of configuration of the number of queues for a port. */
 
@@ -1238,22 +1261,43 @@ int main(int argc, char **argv)
 		txq_conf.offloads = local_port_conf.txmode.offloads;
 		for (uint16_t i = 0; i < rxtxq_per_port; i++) {
 			/* RX queue setup. 8< */
-			ret = rte_eth_rx_queue_setup(portid, i, nb_rxd,
-					rte_eth_dev_socket_id(portid),
-					&rxq_conf, rx_pktmbuf_pool);
+			if (ETHDEV_PHYSICAL == etype) {
+				ret = rte_eth_rx_queue_setup(portid, i, nb_rxd,
+						rte_eth_dev_socket_id(portid),
+						&rxq_conf, rx_pktmbuf_pool);
+			} else {
+				/* TODO others types except ETHDEV_PCAP */
+				ret = 1;
+				/*
+				   ret = rte_eth_rx_queue_setup(portid, i, nb_rxd,
+				   rte_eth_dev_socket_id(portid),
+				   &dev_info.default_rxconf, rx_pktmbuf_pool);
+				   */
+			}
 			if (ret < 0) {
 				rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup:err=%d, port=%u\n",
 						ret, portid);
 			}
 			/* >8 End of RX queue setup. */
 			/* init one TX queue */
-			ret = rte_eth_tx_queue_setup(portid, i, nb_txd,
-					rte_eth_dev_socket_id(portid), &txq_conf);
+			if (ETHDEV_PHYSICAL == etype) {
+				ret = rte_eth_tx_queue_setup(portid, i, nb_txd,
+						rte_eth_dev_socket_id(portid), &txq_conf);
+			} else if(ETHDEV_PCAP == etype) {
+				_E("setup one txq");
+				ret = rte_eth_tx_queue_setup(portid, 0, nb_txd,
+						rte_eth_dev_socket_id(portid), &dev_info.default_txconf);
+				/* only 1 tx queue */
+				break;
+			} else {
+				/* TODO other type */
+				ret = -1;
+			}
 			if (ret < 0) {
 				rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup:err=%d, port=%u\n", ret, portid);
 			}
 		}
-		/* >8 End of RX queue setup. */
+		/* >8 End of RX/TX queue setup. */
 
 		/* Initialize TX buffers */
 		/*
@@ -1287,6 +1331,7 @@ int main(int argc, char **argv)
 		}
 
 		printf("done: \n");
+
 		if (promiscuous_on) {
 			ret = rte_eth_promiscuous_enable(portid);
 			if (ret != 0) {
@@ -1301,19 +1346,31 @@ int main(int argc, char **argv)
 		printf("driver name %s\n", dev_info.driver_name);
 		printf("if index %u\n", dev_info.if_index);
 		printf("mtu [%d, %d]\n", dev_info.min_mtu, dev_info.max_mtu);
+		printf("max rx queues %u\n", dev_info.max_rx_queues);
+		printf("max tx queues %u\n", dev_info.max_tx_queues);
 		printf("nb rx queues %u\n", dev_info.nb_rx_queues);
 		printf("nb tx queues %u\n", dev_info.nb_tx_queues);
+
+		device_print(portid);
 
 		/* initialize port stats */
 		// memset(port_statistics, 0, sizeof(port_statistics));
 	}
 
-	if (!nb_ports_available) {
+	printf("nb_ports_available %u\n", nb_ports_available);
+	printf("nb_physical_ports_available %u %u\n",
+			nb_physical_ports_available, __builtin_popcount(enabled_port_mask));
+
+	if (nb_ports_available != nb_physical_ports_available &&
+			nb_physical_ports_available) {
+		rte_exit(EXIT_FAILURE,
+				"Mix physical and other ports are not supported.\n");
+	}
+
+	if (!nb_ports_available && !nb_physical_ports_available) {
 		rte_exit(EXIT_FAILURE,
 				"All available ports are disabled. Please set portmask.\n");
 	}
-	printf("nb_ports_available %u %u\n",
-			nb_ports_available, __builtin_popcount(enabled_port_mask));
 
 	check_all_ports_link_status(enabled_port_mask);
 

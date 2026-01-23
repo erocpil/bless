@@ -22,13 +22,13 @@ O          ?= build/$(BUILD)-$(BUILD_MODE)
 # ----------------------------
 # 路径定义
 # ----------------------------
-TOPDIR  := $(CURDIR)
-ROOT    := $(abspath .)
-ABS_O   := $(abspath $(O))
-SRCDIR  := src
+TOPDIR   := $(CURDIR)
+ROOT     := $(abspath .)
+ABS_O    := $(abspath $(O))
+SRCDIR   := src
 
 # third_party 导出的 mk（由 Makefile.up / third_party/Makefile 生成）
-TP_MK   := $(ROOT)/third_party/third_party.mk
+TP_MK    := $(ROOT)/third_party/third_party.mk
 
 # ----------------------------
 # 子 make 调用（src）
@@ -133,11 +133,14 @@ export LDLIBS  := $(LDLIBS) $(THIRD_PARTY_LDLIBS)
 # 目标定义
 # ============================================================
 
-.PHONY: all upstream install uninstall $(VERSION_H)
+.PHONY: all upstream install uninstall $(VERSION_H) Test
 
 # 默认目标
 all: upstream $(VERSION_H)
 	$(MAKE_SRC)
+
+Test:
+	$(MAKE_SRC) Test
 
 # 仅准备 third_party（CI / 调试时很有用）
 upstream: $(TP_MK)

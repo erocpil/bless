@@ -12,9 +12,9 @@ dpdk:
   n: 4
   lcores: null
   socket-mem: null
-  allow: 00:05.0 # [ 0000:00:05.0, 0000:00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0 ] # ls -l /sys/class/net/*/device
-  block: null # [ 00:03.0, 00:04.0 ]
-  vdev: null # net_tap0,iface=tap0
+  allow: [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ] # ls -l /sys/class/net/*/device
+  block: null # [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ] # null
+  vdev: null # net_pcap0,tx_pcap=tx.pcap # NOTE: set p and q to 1
   proc-type: primary
   log-level: info # --log-level=pmd.net.af_xdp:debug
   trace: regex-match
@@ -35,8 +35,8 @@ injector:
   batch: 32
   batch-delay-us: 0
   mode: tx-only # rx-only, rx-only, fwd
-  num: -1
-  arp: 0
+  num: -1 # per-lcore
+  arp: 1
   icmp: 1
   tcp: 1
   udp: 1
@@ -44,7 +44,7 @@ injector:
 bless:
   hw-offload: [ ipv4, udp, tcp ]
   ether:
-    mtu: 46 # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    mtu: 0 # [46, 1500] size of ether payload, may result in error if vxlan enabled
     copy-payload: true # copy payload to mbuf, default false
     dst: 10:70:fd:af:21:10
     src:
@@ -98,7 +98,7 @@ bless:
       other: [ toa ] # 25
 
 system:
-  daemonize: true
+  daemonize: false
   server:
     service:
       websocket: /wsURL

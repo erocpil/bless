@@ -129,7 +129,9 @@ void worker_loop(void *data)
 	printf("\n");
 
 	uint8_t mode = conf->mode;
-	uint64_t num = conf->num;
+	int64_t num = conf->num < 0 ? INT64_MAX : conf->num;
+	printf("conf.num %ld num %ld\n", conf->num, num);
+
 	uint16_t batch = conf->batch;
 	uint64_t batch_delay_us = bconf->batch_delay_us;
 	if (batch > 2048) {
@@ -142,7 +144,7 @@ void worker_loop(void *data)
 	portid = qconf->txp_id;
 	uint16_t qid = qconf->txq_id;
 	uint16_t nb_tx = batch;
-	printf("num %lu batch %u\n", num, batch);
+	printf("num %ld batch %u nb_tx %u\n", num, batch, nb_tx);
 
 	/* XXX */
 	if (mode == BLESS_MODE_RX_ONLY || mode == BLESS_MODE_FWD) {
@@ -257,9 +259,11 @@ void worker_loop(void *data)
 		}
 
 		if (unlikely(num <= 0)) {
+			sleep(1);
+			atomic_store(state, STATE_EXIT);
 			printf("Finished: lcore_id %d lid %d pid %d qid %d\n", rte_lcore_id(),
 					qconf->txl_id, qconf->txp_id, qconf->txq_id);
-			break;
+			goto EXIT;
 		}
 
 		/* fwd */
@@ -319,17 +323,17 @@ void worker_loop(void *data)
 		uint16_t sent = rte_eth_tx_burst(portid, qid, mbufs, nb_tx);
 		if (sent) {
 			num -= sent;
-			// printf("lcore %u port %u sent %d remain %lu\n", lcore_id, portid, sent, size);
+			// printf("lcore %u port %u sent %d remain %ld\n", lcore_id, portid, sent, num);
 		}
 		if (sent != nb_tx) {
+			// printf("lcore %u port %u unsent %d remain %lu\n", lcore_id, portid, nb_tx - sent, num);
 			/*
 			   uint64_t dropped_bytes = 0;
 			   for (int i = sent; i < nb_tx; i++) {
 			   dropped_bytes += mbufs[i]->pkt_len;
 			   }
-			// printf("lcore %u port %u unsent %d remain %lu\n", lcore_id, portid, nb_tx - sent, size);
-			rte_atomic64_sub(&(conf->stats[portid] + type)->dropped_pkts, nb_tx - sent);
-			rte_atomic64_add(&(conf->stats[portid] + type)->dropped_bytes, dropped_bytes);
+			   rte_atomic64_sub(&(conf->stats[portid] + type)->dropped_pkts, nb_tx - sent);
+			   rte_atomic64_add(&(conf->stats[portid] + type)->dropped_bytes, dropped_bytes);
 			// (conf->stats[portid] + type)->dropped_pkts += nb_tx - sent;
 			// (conf->stats[portid] + type)->dropped_bytes += dropped_bytes;
 			*/

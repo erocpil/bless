@@ -1,7 +1,6 @@
 #ifndef __BLESS_H__
 #define __BLESS_H__
 
-#define _GNU_SOURCE
 #include <pthread.h>
 // #include <stdio.h>
 // #include <stdlib.h>
