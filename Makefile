@@ -118,6 +118,8 @@ $(VERSION_H):
 	@echo "#define GIT_BRANCH \"$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)\"" >> $@
 	@echo "#define BUILD_TIME \"$$(date '+%Y-%m-%d %H:%M:%S')\"" >> $@
 	@echo "#define BUILD_HOST \"$$(hostname)\"" >> $@
+	@echo "#define BUILD_TYPE \"$(BUILD)\"" >> $@
+	@echo "#define STATIC \"$(STATIC)\"" >> $@
 	@echo "" >> $@
 	@echo "#endif /* VERSION_H */" >> $@
 
@@ -152,7 +154,11 @@ endif
 
 check:
 	readelf -d build/release-static/bin/bless | grep PATH
-	readelf -x .note.buildinfo build/release-static/bin/bless
+	llvm-readobj --notes build/release-static/bin/bless
 	@echo "more checks:"
 	@echo "  objdump -s -j .note.buildinfo build/release-static/bin/bless"
-	@echo "  llvm-readobj --notes build/release-static/bin/bless"
+	@echo "  readelf -x .note.buildinfo build/release-static/bin/bless"
+	@echo "  readelf -n build/release-static/bin/bless | \
+		sed -n '/Displaying notes found in: .note.buildinfo/,/Displaying notes found in:/p' | \
+		sed -n '/description data:/,/)/p' | \
+		sed -n '/description data:/,/)/p'"

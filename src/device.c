@@ -1,11 +1,7 @@
-#include <sys/types.h>   /* for ssize_t */
-#include <unistd.h>     /* for ssize_t, POSIX */
-#include <string.h>     /* for strnlen */
-
 /* POSIX / C runtime */
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
+// #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -16,7 +12,6 @@
 #include <rte_ethdev.h>
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
-
 
 #include "device.h"
 

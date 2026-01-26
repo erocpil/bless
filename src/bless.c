@@ -33,10 +33,10 @@ int bless_parse_port_range(char *data, uint16_t *port, int32_t *range)
 	} else {
 		*range = 0;
 	}
-
 	*port = atoi(port_range);
 
 	free(port_range);
+
 	return 0;
 }
 
@@ -72,6 +72,7 @@ int bless_parse_ip_range(char *data, uint32_t *ip, int64_t *range)
 	}
 
 	free(ip_range);
+
 	return 0;
 }
 
@@ -120,12 +121,10 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	const uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
 	const uint16_t l4_len = sizeof(struct rte_udp_hdr);
 	uint16_t payload_len_fixed = payload_len;
-	// printf("mtu %u payload_len %u\n", cnode->ether.mtu, payload_len);
 	if (cnode->ether.mtu) {
 		payload_len_fixed = cnode->ether.mtu - l3_len - l4_len;
 		payload_len = min(payload_len, payload_len_fixed);
 	}
-	// printf("payload_len %u payload_len_fixed %u\n", payload_len, payload_len_fixed);
 	const uint16_t total_pkt_size = l2_len + l3_len + l4_len + payload_len_fixed;
 
 	for (int i = 0; i < (int)n; i++) {
@@ -181,6 +180,7 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		m->l3_len = l3_len;
 		m->l4_len = l4_len;
 	}
+
 	return tx_bytes;
 }
 
