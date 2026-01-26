@@ -119,7 +119,7 @@ $(VERSION_H):
 	@echo "#define BUILD_TIME \"$$(date '+%Y-%m-%d %H:%M:%S')\"" >> $@
 	@echo "#define BUILD_HOST \"$$(hostname)\"" >> $@
 	@echo "#define BUILD_TYPE \"$(BUILD)\"" >> $@
-	@echo "#define STATIC \"$(STATIC)\"" >> $@
+	@echo "#define STATIC $(STATIC)" >> $@
 	@echo "" >> $@
 	@echo "#endif /* VERSION_H */" >> $@
 

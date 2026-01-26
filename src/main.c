@@ -12,8 +12,9 @@
 #define BL_VERSION "1.0"
 #define GIT_COMMIT "N/A"
 #define GIT_BRANCH "N/A"
-#define BUILD_TIME ""
-#define BUILD_HOST ""
+#define BUILD_TIME "N/A"
+#define BUILD_HOST "N/A"
+#define BUILD_TYPE "N/A"
 #else
 #include "version.h"
 #endif
@@ -1240,10 +1241,10 @@ int main(int argc, char **argv)
 		ret = rte_eth_dev_adjust_nb_rx_tx_desc(portid, &nb_rxd, &nb_txd);
 		if (ret < 0) {
 			rte_exit(EXIT_FAILURE,
-					"Cannot adjust number of descriptors: err=%d, port=%u\n",
-					ret, portid);
+					"Cannot adjust number of descriptors: err=%d port=%u"
+					"nb_rxd %u nb_txd %u", ret, portid, nb_rxd, nb_txd);
 		}
-		printf("TODO nb_txd %d\n", nb_txd);
+		// printf("TODO nb_txd %d\n", nb_txd);
 
 		ret = rte_eth_macaddr_get(portid, &ports_eth_addr[portid]);
 		if (ret < 0) {
