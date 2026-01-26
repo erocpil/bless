@@ -25,7 +25,6 @@ void print_version(void)
 	_L(C_ERR "  Version    : " ANSI_RESET "%s", BL_VERSION);
 	_L(C_INFO "  Git Branch : " ANSI_RESET "%s", GIT_BRANCH);
 	_L(C_WARN "  Git Commit : " ANSI_RESET "%s %s", GIT_COMMIT, GIT_STATE);
-	_L(C_WARN "  Git State  : " ANSI_RESET "%s", GIT_STATE);
 	_L(C_SKIP "  Build Type : " ANSI_RESET "%s %s", BUILD_TYPE, STATIC ? "static" : "shared");
 	_L(C_DEBUG "  Build Host : " ANSI_RESET "%s", BUILD_HOST);
 	_L(C_TRACE "  Build Time : " ANSI_RESET "%s\n", BUILD_TIME);
