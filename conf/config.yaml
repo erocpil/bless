@@ -116,7 +116,7 @@ bless:
       other: [ toa ] # 25
 
 system:
-  daemonize: false
+  daemonize: true
   server:
     # civetweb service: websocket and http
     service:
