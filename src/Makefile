@@ -74,7 +74,17 @@ endif
 # 这里用 :=，避免递归展开
 # ============================================================
 BUILD_GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-BUILD_GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_GIT_COMMIT := $(shell \
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+	desc=$$(git rev-parse --short HEAD); \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "$$desc-dirty"; \
+	else \
+		echo "$$desc"; \
+	fi; \
+else \
+	echo unknown; \
+fi)
 BUILD_HOST       := $(shell hostname)
 BUILD_TIME       := $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
 BUILD_CC_VERSION := $(shell $(CC) --version | head -n 1)

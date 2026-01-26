@@ -107,6 +107,17 @@ update-third-party:
 # ============================================================
 include $(TP_MK)
 
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+GIT_STATE  := $(shell \
+	if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		if [ -n "$$(git status --porcelain 2>/dev/null)" ]; then \
+			echo dirty; \
+		else \
+			echo clean; \
+		fi; \
+	else \
+		echo nogit; \
+	fi)
 # 每次 make 都重新生成版本文件
 $(VERSION_H):
 	@echo "Generating $@..."
@@ -114,7 +125,8 @@ $(VERSION_H):
 	@echo "#define VERSION_H" >> $@
 	@echo "" >> $@
 	@echo '#define BL_VERSION "$(BL_VERSION)"' >> $@
-	@echo "#define GIT_COMMIT \"$$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\"" >> $@
+	@echo "#define GIT_COMMIT \"$(GIT_COMMIT)\"" >> $@
+	@echo "#define GIT_STATE \"$(GIT_STATE)\"" >> $@
 	@echo "#define GIT_BRANCH \"$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)\"" >> $@
 	@echo "#define BUILD_TIME \"$$(date '+%Y-%m-%d %H:%M:%S')\"" >> $@
 	@echo "#define BUILD_HOST \"$$(hostname)\"" >> $@
