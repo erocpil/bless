@@ -16,7 +16,6 @@
 *.bak
 
 core
-log
 compile_commands.json
 THIRD_PARTY_VERSIONS.md
 include/version.h
