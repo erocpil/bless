@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
 /* =========================
  * 颜色检测
  * ========================= */
-
 static inline int log_color_enabled(void)
 {
     if (getenv("NO_COLOR")) {
@@ -20,7 +20,6 @@ static inline int log_color_enabled(void)
 /* =========================
  * ANSI & Truecolor
  * ========================= */
-
 /* ANSI 基础 */
 #define ANSI_RESET        "\x1b[0m"
 #define ANSI_BOLD         "\x1b[1m"

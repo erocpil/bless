@@ -28,6 +28,7 @@ mutation_func find_mutation_func(const char *clas, const char *type)
 			}
 		}
 	}
+
 	return NULL;
 }
 

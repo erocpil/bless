@@ -3,7 +3,6 @@
 
 #include "color.h"
 #include <time.h>
-#include <stdlib.h>
 
 #if defined(__linux__)
 #include <sys/syscall.h>

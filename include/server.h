@@ -27,7 +27,6 @@ struct stats_snapshot {
 
 struct mg_context *ws_server_start(void*);
 int ws_server_stop(struct mg_context *ctx);
-// int ws_broadcast(const char *msg);
 void ws_broadcast_stats();
 void ws_broadcast_log(char *log, size_t len);
 const struct stats_snapshot * stats_get_active(void);
@@ -75,8 +74,8 @@ struct server_options_cfg {
 	snprintf(dst, sz, "%s", (val) ? "yes" : "no")
 
 /* API */
-void   server_options_set_defaults(struct server_options_cfg *cfg);
-int    server_options_from_yaml(struct server_options_cfg *cfg, void *yaml_node);
+void server_options_set_defaults(struct server_options_cfg *cfg);
+int server_options_from_yaml(struct server_options_cfg *cfg, void *yaml_node);
 size_t build_civet_options(const struct server_options_cfg *cfg, struct civet_kv *out, size_t max);
 
 #endif
