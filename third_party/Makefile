@@ -215,7 +215,7 @@ civetweb/upstream/.git:
 build: build-libyaml build-cjson build-civetweb $(UP_MK)
 
 clean:
-	rm -f $(LIB_DIR)/lib*.a $(UP_MK)
+	rm -f $(LIB_DIR)/lib*.a $(UP_MK) $(VERSIONS_MD)
 
 .PHONY: update-third-party
 
