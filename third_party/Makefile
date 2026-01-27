@@ -2,7 +2,9 @@
 # git submodule add https://github.com/xxx/yyy.git third_party/xxx/upstream
 # git commit -m "add xxx submodule"
 ## CI / new environment
-# git clone ...
+# git clone xxx && git submodule update --init --recursive
+# or
+# git clone --recurse-submodules <repo-url>
 # make update-third-party
 # make
 #
@@ -195,6 +197,20 @@ $(UP_MK): \
 all: build $(UP_MK)
 
 update: update-libyaml update-cjson update-civetweb
+
+fetch: \
+	libyaml/upstream/.git \
+	cjson/upstream/.git \
+	civetweb/upstream/.git
+
+libyaml/upstream/.git:
+	git submodule update --init --recursive libyaml/upstream
+
+cjson/upstream/.git:
+	git submodule update --init --recursive cjson/upstream
+
+civetweb/upstream/.git:
+	git submodule update --init --recursive civetweb/upstream
 
 build: build-libyaml build-cjson build-civetweb $(UP_MK)
 

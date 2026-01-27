@@ -1,19 +1,29 @@
 ## BLESS - An Entropy Injector for High Performance Network System
 
-##
+
+## top level view
 ```
 top/
 ├── Makefile              # orchestration
 ├── third_party/
 │   ├── third_party.mk    # third party libraries management
-│   └── xxx/upstream
+│   └── xxx/upstream      # third party library
 └── src/
     └── Makefile          # how to build bless
 ```
 
 
-## dependency
+Requirements:
+- git
+- make
+- gcc or clang
+- pkg-config
+- autoconf automake libtool (for libyaml)
+
+
+## install dependency
 ```
+# install dpdk
 pkg-config --cflags libdpdk
 pkg-config --libs --static libdpdk
 # or
@@ -25,25 +35,27 @@ sudo dnf install clang pkgconf-pkg-config openssl-devel
 ```
 
 
-## source code
+## clone source code
 ```
-git clone https://github.com/xxx/bless.git
-cd bless
 ```
 
 
-## third party
+## third party only
 ```
 make third_party
 ```
 
 
-## build src
-```
-make
+## Build
+
+```bash
+git clone https://github.com/erocpil/bless.git
+cd bless
+make -j
 # or
 make BUILD=release STATIC=1 -j
 ```
+
 
 ## Installation
 ```

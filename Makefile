@@ -154,7 +154,7 @@ export LDLIBS  := $(LDLIBS) $(THIRD_PARTY_LDLIBS)
 .PHONY: all upstream install uninstall $(VERSION_H) Test
 
 # default
-all: upstream $(VERSION_H)
+all: $(UP_MK) $(VERSION_H)
 	$(MAKE_SRC)
 
 upstream: $(UP_MK)

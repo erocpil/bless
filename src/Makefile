@@ -169,13 +169,22 @@ FORCE:
 # ============================================================
 install: all
 	$(ECHO) "  INSTALL to $(DESTDIR)$(PREFIX)"
-	$(Q)install -d $(DESTDIR)$(PREFIX)/bin \
+	$(Q)install -d \
+		$(DESTDIR)$(PREFIX)/bin \
 		$(DESTDIR)$(PREFIX)/lib \
 		$(DESTDIR)$(PREFIX)/conf \
 		$(DESTDIR)$(PREFIX)/www \
 		$(DESTDIR)$(PREFIX)/www/log \
 		$(DESTDIR)$(PREFIX)/include/$(APP)
+
 	$(Q)install -m 0755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/
+
+	@if ls ../lib/* >/dev/null 2>&1; then \
+		echo "  INSTALL libs"; \
+		install -m 0755 ../lib/*.so* $(DESTDIR)$(PREFIX)/lib/ 2>/dev/null; \
+		install -m 0644 ../lib/*.a   $(DESTDIR)$(PREFIX)/lib/ 2>/dev/null; \
+	fi
+
 	$(Q)install -m 0644 ../www/index.html $(DESTDIR)$(PREFIX)/www/
 
 uninstall:
