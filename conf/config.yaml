@@ -13,6 +13,7 @@ dpdk:
   lcores: null
   socket-mem: null
   # ls -l /sys/class/net/*/device
+  # !!! the order here is not identical to dpdk's RTE_ETH_FOREACH_DEV()
   allow: [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
   block: null # [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
   # NOTE: block all ports and set p and q to 1
@@ -61,7 +62,7 @@ bless:
     # copy payload to mbuf, default false
     copy-payload: true
     dst: 10:70:fd:af:21:10
-    src:
+    src: # 10:70:fd:af:21:02
     type:
       arp:
         src: [ 10.0.0.1 ]

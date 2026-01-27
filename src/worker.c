@@ -215,9 +215,11 @@ void worker_loop(void *data)
 
 	/* check if src mac address is provided */
 	if (!cnode->ether.n_src) {
+		/* FIXME race condition */
 		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->ether.src);
 		printf("injector will use local port mac address:\n  ");
 		bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
+		cnode->ether.n_src = 1;
 	}
 	/* check if vxlan src mac address is provided */
 	if (cnode->vxlan.enable && !cnode->ether.n_src) {

@@ -1183,10 +1183,13 @@ int main(int argc, char **argv)
 
 	/* Initialise each port */
 	printf("Initializing port ...\n");
+	int id = 0;
 	RTE_ETH_FOREACH_DEV(portid) {
 		struct rte_eth_conf local_port_conf = port_conf;
 		struct rte_eth_dev_info dev_info;
 		enum ethdev_type etype = device_get_ethdev_type(portid);
+		printf("No. %d: ", id++);
+		device_print(portid);
 
 		if (ETHDEV_OTHER == etype || ETHDEV_NOT_SUPPORTED == etype) {
 			rte_exit(EXIT_FAILURE,
