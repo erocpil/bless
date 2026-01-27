@@ -1,26 +1,35 @@
+## add new submodule
+# git submodule add https://github.com/xxx/yyy.git third_party/xxx/upstream
+# git commit -m "add xxx submodule"
+## CI / new environment
+# git clone ...
+# make update-third-party
+# make
 #
-# cd third_party/civetweb/upstream
+## update third party library
+# make update-third-party
+## WARN
+# cd third_party/libyaml/upstream
 # git fetch --tags
+# git tag -l
 # git checkout <tag-or-commit>
-# cd ../../..
-# git add third_party/civetweb
-# git commit -m "pin civetweb to <tag-or-commit>"
-
-# project/third_party/Makefile
+# cd -
+# git add third_party/libyaml/upstream
+# git commit -m "pin libyaml to <tag-or-commit>"
 
 ROOT := $(abspath ..)
 LIB_DIR := $(ROOT)/lib
 UP_MK := third_party.mk
 
 # ============================================================
-# 公共变量
+# public variables
 # ============================================================
 
 THIRD_PARTY_LIBS :=
 THIRD_PARTY_INCS :=
 
 # ============================================================
-# 宏模板定义
+# macro template
 # ============================================================
 
 # -------- autotools library --------
@@ -111,7 +120,7 @@ $(1)_STAMP    := $(1)/build/.configured
 $(1)_LIB      := $(LIB_DIR)/$(4)
 $(1)_INC      := $$($(1)_UPSTREAM)/$(3)
 
-# 可选：库私有 CFLAGS
+# optional: private cflags
 $(1)_CFLAGS ?=
 
 THIRD_PARTY_LIBS += $(4)
@@ -156,7 +165,7 @@ $(eval $(call CHECK_TAG,cjson))
 $(eval $(call CHECK_TAG,civetweb))
 
 # ============================================================
-# 使用宏：声明第三方库
+# use macro: declare third party libraries
 # ============================================================
 
 $(eval $(call AUTOTOOLS_LIB,libyaml,libyaml/upstream,include,libyaml.a))
@@ -165,7 +174,7 @@ civetweb_CFLAGS := WITH_CFLAGS="-DNO_SSL -DNO_CGI -DNO_FILESYSTEM -DUSE_WEBSOCKE
 $(eval $(call MAKE_LIB,civetweb,civetweb/upstream,include,libcivetweb.a))
 
 # ============================================================
-# third_party.mk 自动生成
+# third_party.mk auto genaration
 # ============================================================
 
 $(UP_MK): \
@@ -177,9 +186,8 @@ $(UP_MK): \
 	@echo "THIRD_PARTY_LDFLAGS := -L$(LIB_DIR)" >> $@
 	@echo "THIRD_PARTY_LDLIBS := $(patsubst lib%.a,-l%,$(THIRD_PARTY_LIBS))" >> $@
 
-
 # ============================================================
-# 顶层目标
+# top level targets
 # ============================================================
 
 .PHONY: all update build clean
@@ -191,9 +199,7 @@ update: update-libyaml update-cjson update-civetweb
 build: build-libyaml build-cjson build-civetweb $(UP_MK)
 
 clean:
-	rm -rf */build
 	rm -f $(LIB_DIR)/lib*.a $(UP_MK)
-
 
 .PHONY: update-third-party
 

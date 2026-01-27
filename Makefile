@@ -3,7 +3,7 @@
 # ============================================================
 
 # ----------------------------
-# 全局参数（可被命令行覆盖）
+# global parameters, over written by command line
 # ----------------------------
 BUILD    ?= release
 STATIC   ?= 1
@@ -14,24 +14,24 @@ USE_VERSION_H  ?= 1
 BL_VERSION ?= 1.0
 
 # ----------------------------
-# 构建模式
+# build mode
 # ----------------------------
 BUILD_MODE := $(if $(filter 1,$(STATIC)),static,shared)
 O          ?= build/$(BUILD)-$(BUILD_MODE)
 
 # ----------------------------
-# 路径定义
+# path definition
 # ----------------------------
 TOPDIR   := $(CURDIR)
 ROOT     := $(abspath .)
 ABS_O    := $(abspath $(O))
 SRCDIR   := src
 
-# third_party 导出的 mk（由 Makefile.up / third_party/Makefile 生成）
-TP_MK    := $(ROOT)/third_party/third_party.mk
+# upstream .mk
+UP_MK    := $(ROOT)/third_party/third_party.mk
 
 # ----------------------------
-# 子 make 调用（src）
+# sub-make for src/
 # ----------------------------
 MAKE_SRC := $(MAKE) -C $(SRCDIR) \
 			O="$(ABS_O)" \
@@ -44,13 +44,13 @@ MAKE_SRC := $(MAKE) -C $(SRCDIR) \
 
 .DEFAULT_GOAL := all
 
-# 版本信息头文件
+# version header file
 VERSION_H = include/version.h
 
 # ============================================================
-# Clean 目标优先处理
+# clean targets
 # ============================================================
-# 使用 ifneq 检查是否包含 clean/distclean/uninstall/help
+# use ifneq check clean/distclean/uninstall/help
 ifneq ($(filter clean distclean uninstall help,$(MAKECMDGOALS)),)
 
 .PHONY: clean distclean help
@@ -59,7 +59,7 @@ clean:
 	rm -rf build/
 
 distclean: clean
-	$(MAKE) -f Makefile.up clean
+	$(MAKE) -C third_party clean
 	$(MAKE) -C src clean
 
 uninstall:
@@ -84,28 +84,31 @@ help:
 else
 
 # ============================================================
-# 正常构建流程
+# standard procedure
 # ============================================================
 
 # ============================================================
-# third_party.mk 生成规则
+# third_party.mk rules
 # ============================================================
 
-# 当 third_party.mk 不存在时才生成（不依赖 update-third-party）
-$(TP_MK):
+# no update-third-party dependency
+$(UP_MK):
 	@echo "  GENERATING $@..."
-	$(MAKE) -f Makefile.up
+	$(MAKE) -C third_party third_party.mk
 
-# 手动更新第三方库（独立目标）
+# manually update
 .PHONY: update-third-party
+
 update-third-party:
-	$(MAKE) -f Makefile.up update-third-party
-	$(MAKE) -f Makefile.up
+	$(MAKE) -C third_party update-third-party
+
+# only third_party (for CI / debug)
+third_party: $(UP_MK)
 
 # ============================================================
-# include third_party 输出
+# include third_party output
 # ============================================================
-include $(TP_MK)
+include $(UP_MK)
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 GIT_STATE  := $(shell \
@@ -118,7 +121,8 @@ GIT_STATE  := $(shell \
 	else \
 		echo nogit; \
 	fi)
-# 每次 make 都重新生成版本文件
+
+# generate new version.h for every make
 $(VERSION_H):
 	@echo "Generating $@..."
 	@echo "#ifndef VERSION_H" > $@
@@ -136,7 +140,7 @@ $(VERSION_H):
 	@echo "#endif /* VERSION_H */" >> $@
 
 # ============================================================
-# 导出第三方变量给子目录（src）
+# export third party varibles to src
 # ============================================================
 
 export CFLAGS  := $(CFLAGS) $(THIRD_PARTY_CFLAGS)
@@ -144,22 +148,21 @@ export LDFLAGS := $(LDFLAGS) $(THIRD_PARTY_LDFLAGS)
 export LDLIBS  := $(LDLIBS) $(THIRD_PARTY_LDLIBS)
 
 # ============================================================
-# 目标定义
+# targets
 # ============================================================
 
 .PHONY: all upstream install uninstall $(VERSION_H) Test
 
-# 默认目标
+# default
 all: upstream $(VERSION_H)
 	$(MAKE_SRC)
+
+upstream: $(UP_MK)
 
 Test:
 	$(MAKE_SRC) Test
 
-# 仅准备 third_party（CI / 调试时很有用）
-upstream: $(TP_MK)
-
-install: $(TP_MK)
+install: $(UP_MK)
 	$(MAKE_SRC) install
 
 endif
