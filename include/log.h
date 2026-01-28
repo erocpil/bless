@@ -124,7 +124,7 @@ static inline int log_cpu_id(void)
 #define _L(fmt, ...)                                                    \
 	do {                                                                \
 		fprintf(stdout, "%s", COLOR(C_META));                               \
-		fprintf(stdout, fmt, ##__VA_ARGS__);                                \
+		fprintf(stdout, "[%s %d] " fmt, __func__, __LINE__, ##__VA_ARGS__);                                \
 		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));                         \
 	} while (0)
 

@@ -11,8 +11,9 @@
 #define STATS_METRIC_MAX   8192
 
 struct ws_user_data {
+	void *conf;
 	void *data;
-	void (*func)(void *data, size_t size);
+	void (*func)(void *user, void *data, size_t size);
 };
 
 struct stats_snapshot {

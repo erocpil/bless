@@ -1,6 +1,14 @@
+#include "base.h"
 #include "bless.h"
 #include "define.h"
 #include "worker.h"
+#include "metric.h"
+// #include "device.h"
+#include "log.h"
+#include "server.h"
+#include "log.h"
+#include <stdatomic.h>
+#include <stdint.h>
 
 static inline void swap_mac(struct rte_ether_hdr *eth_hdr)
 {
@@ -28,7 +36,8 @@ void worker_loop(void *data)
 
 	struct bless_conf *bconf = (struct bless_conf*)data;
 	qconf = bconf->qconf + lcore_id;
-	printf("lid %d pid %d qid %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
+	LOG_DEBUG("lid %d pid %d qid %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
+	getchar();
 	assert(1 == qconf->enabled);
 
 	struct bless_conf *conf = rte_malloc(NULL, sizeof(struct bless_conf), 0);
@@ -351,4 +360,178 @@ void worker_loop(void *data)
 
 EXIT:
 	printf("core %d exit\n", qconf->txl_id);
+}
+
+void dpdk_generate_cmdReply(const char *str)
+{
+	if (!str || !strlen(str)) {
+		return;
+	}
+	char *reply = encode_cmdReply_to_json(str);
+	printf("cmdReply %s\n", reply);
+	ws_broadcast_log(reply, strlen(reply));
+	free(reply);
+}
+
+void dpdk_generate_log(const char *str)
+{
+	if (!str || !strlen(str)) {
+		return;
+	}
+	char *msg = encode_log_to_json(str);
+	printf("msg %s\n", msg);
+	ws_broadcast_log(msg, strlen(msg));
+	free(msg);
+}
+
+void dpdk_generate_stats(uint32_t enabled_port_mask)
+{
+	int active = stats_get_active_index();
+	int inactive = active ^ 1;
+
+	struct stats_snapshot *s = stats_get(inactive);
+
+	char tmp[128];
+	sprintf(tmp, "log: %lu", rte_rdtsc());
+	char *msg = encode_stats_to_json(enabled_port_mask, tmp);
+	/* JSON */
+	s->json_len = snprintf(s->json, STATS_JSON_MAX, "%s\n", msg);
+	free(msg);
+
+	/* Prometheus */
+	s->metric_len = encode_stats_to_text(enabled_port_mask, s->metric, STATS_METRIC_MAX);
+	s->ts_ns = rte_get_tsc_cycles();
+
+	stats_set(inactive);
+	ws_broadcast_stats();
+}
+
+void worker_main_loop(void *data)
+{
+	uint64_t prev_tsc = 0, diff_tsc = 0, cur_tsc = 0, timer_tsc = 0;
+	unsigned int lcore_id = rte_lcore_id();
+	struct bless_conf *conf = (struct bless_conf*)data;
+	atomic_int *state = conf->state;
+	LOG_TRACE("state %p %p", state, conf->state);
+
+	uint64_t timer_period = conf->timer_period;
+
+	printf("lcore=%u cpu=%d\n", rte_lcore_id(), sched_getcpu());
+
+	printf("[%s %d] pthread_barrier_wait(&conf->barrier);\n", __func__, __LINE__);
+	pthread_barrier_wait(conf->barrier);
+	printf("Bless pid %d is running ...\n", getpid());
+
+	static uint64_t i = 0;
+	uint64_t val = 0;
+	while ((val = atomic_load_explicit(state, memory_order_acquire)) != STATE_EXIT) {
+		rte_delay_ms(100);
+		cur_tsc = rte_rdtsc();
+		diff_tsc = cur_tsc - prev_tsc;
+		timer_tsc += diff_tsc;
+		prev_tsc = cur_tsc;
+		/* if timer has reached its timeout */
+		if (unlikely(timer_tsc >= timer_period * 1)) {
+			/* do this only on main core */
+			if (lcore_id == rte_get_main_lcore()) {
+				timer_tsc = 0;
+				if (val == STATE_STOPPED) {
+					if (i) {
+						dpdk_generate_stats(conf->enabled_port_mask);
+					}
+					i = 0;
+				} else {
+					dpdk_generate_stats(conf->enabled_port_mask);
+					i++;
+				}
+			}
+		}
+	}
+}
+
+const char *ws_json_get_string(cJSON *obj, const char *key)
+{
+	cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, key);
+	return cJSON_IsString(item) ? item->valuestring : NULL;
+}
+
+void ws_user_func(void *user, void *data, size_t size)
+{
+	if (!data || !size) {
+		return;
+	}
+
+	struct ws_user_data *wsud = (struct ws_user_data*)user;
+	struct base *base = (struct base*)wsud->data;
+	atomic_int *state = base->g_state;
+	struct config_file_map *cfm = base->cfm;
+	cJSON *root = cJSON_Parse(data);
+	if (!root) {
+		printf("[%s %d] JSON parse error\n", __func__, __LINE__);
+		return;
+	}
+
+	LOG_TRACE("state %p %p", state, base->g_state);
+
+	const char *cmd = ws_json_get_string(root, "cmd");
+	if (cmd) {
+		printf("cmd = %s\n", cmd);
+		if (strcmp(cmd, "start") == 0) {
+			printf("Received START command\n");
+			atomic_store(state, STATE_RUNNING);
+			cmd = "started";
+		} else if (strcmp(cmd, "stop") == 0) {
+			printf("Received STOP command\n");
+			atomic_store(state, STATE_STOPPED);
+			cmd = "stopped";
+		} else if (strcmp(cmd, "init") == 0) {
+			printf("Received INIT command\n");
+			// TODO reinit
+			// atomic_store(&g_state, STATE_INIT);
+			cmd = "already inited";
+		} else if (strcmp(cmd, "exit") == 0) {
+			printf("Received EXIT command\n");
+			atomic_store(state, STATE_EXIT);
+			cmd = "exited";
+		} else if (strcmp(cmd, "conf") == 0) {
+			printf("Received conf command\n");
+			cmd = (char*)cfm->addr;
+			printf("name %s\n", cfm->name);
+		} else {
+			cmd = "Not supported";
+		}
+	} else {
+		printf("cmd missing or not a string\n");
+		cmd = "cmd missing or not a string";
+	}
+	cJSON_Delete(root);
+	dpdk_generate_cmdReply(cmd);
+}
+
+void worker_dump_lcore_queue_conf_single(struct lcore_queue_conf* lqc)
+{
+	LOG_TRACE("  lqc %p", lqc);
+	LOG_HINT("    enabled: %d", lqc->enabled);
+	LOG_HINT("    numa: %d", lqc->numa);
+	LOG_HINT("    core: %d", lqc->txl_id);
+	LOG_HINT("    port: %d", lqc->txp_id);
+	LOG_HINT("    type: %d", lqc->type);
+	LOG_HINT("    queue: %d", lqc->txq_id);
+	LOG_HINT("    n_rx_port: %d", lqc->n_rx_port);
+}
+
+void worker_dump_lcore_queue_conf(struct lcore_queue_conf* lqc, int n)
+{
+	if (n <= 0) {
+		return;
+	}
+
+	LOG_HINT("worker lqc %p %d", lqc, n);
+	for (int i = 0; i < RTE_MAX_LCORE; i++) {
+		struct lcore_queue_conf *q = lqc + i;
+		if (!q->enabled) {
+			continue;
+		}
+		worker_dump_lcore_queue_conf_single(q);
+	}
 }

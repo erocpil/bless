@@ -7,7 +7,7 @@
 # --erroneous=...
 
 dpdk:
-  main-lcore: 16
+  main-lcore: 0
   l: 0-16
   n: 4
   lcores: null
@@ -17,7 +17,7 @@ dpdk:
   allow: [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
   block: null # [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
   # NOTE: block all ports and set p and q to 1
-  vdev: null # net_pcap0,tx_pcap=tx.pcap
+  vdev: net_pcap0,tx_pcap=tx.pcap
   proc-type: primary
   # --log-level=pmd.net.af_xdp:debug
   log-level: info
@@ -31,7 +31,7 @@ dpdk:
 
 injector:
   # ports
-  p: 0x1
+  p: 0x6
   # queues on each port
   q: 1
   # Promiscuous
@@ -48,7 +48,7 @@ injector:
   # one of rx-only, rx-only, fwd
   mode: tx-only
   # per-lcore
-  num: -1
+  num: 100
   arp: 1
   icmp: 1
   tcp: 1
@@ -117,7 +117,7 @@ bless:
       other: [ toa ] # 25
 
 system:
-  daemonize: true
+  daemonize: false
   server:
     # civetweb service: websocket and http
     service:
@@ -131,7 +131,6 @@ system:
       num_threads: 4
       enable_keep_alive: yes
       request_timeout_ms: 2000
-    config:
       document_root: /root/src/bless/www
       access_log_file: /root/src/bless/www/log/access.log
       error_log_file: /root/src/bless/www/log/error.log

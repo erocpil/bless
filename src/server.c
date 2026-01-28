@@ -122,7 +122,7 @@ static int ws_data_handler(struct mg_connection *conn, int opcode,
 
 	if (datasize) {
 		struct ws_user_data *wsud = (struct ws_user_data*)ud;
-		wsud->func(data, datasize);
+		wsud->func(ud, data, datasize);
 	}
 
 	return 1;
@@ -233,7 +233,7 @@ struct mg_context * ws_server_start(void *data)
 	mg_init_library(0);
 
 	struct ws_user_data *wsud = (struct ws_user_data*)data;
-	struct server_options_cfg *cfg = wsud->data;
+	struct server_options_cfg *cfg = wsud->conf;
 
 	struct mg_callbacks cb = {0};
 	struct mg_init_data init = {

@@ -3,8 +3,9 @@
 #include "server.h"
 #include "config.h"
 #include "define.h"
-#include <ctype.h>    // isprint()
+#include "log.h"
 
+#include <ctype.h>    // isprint()
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -376,27 +377,27 @@ err:
 struct config_file_map *config_check_file(char *filename)
 {
 	// 检查文件是否存在
+	LOG_HINT("检测配置文件 \"%s\"。", filename);
 	if (access(filename, F_OK) != 0) {
-		printf("文件 \"%s\" 不存在。\n", filename);
+		LOG_ERR("文件 \"%s\" 不存在。", filename);
 		return NULL;
 	}
-	printf("文件 \"%s\" 存在。\n", filename);
+	LOG_INFO("文件 \"%s\" 存在。", filename);
 
-	printf("打开文件 \"%s\"。\n", filename);
-
+	LOG_HINT("打开文件 \"%s\"。", filename);
 	struct config_file_map *cfm = config_file_map_open(filename);
 	if (!cfm) {
-		printf("文件 \"%s\" 错误。\n", filename);
+		LOG_ERR("文件 \"%s\" 错误。", filename);
 		return NULL;
 	}
 
-	printf("读取文件 \"%s\"。\n", filename);
+	LOG_HINT("读取文件 \"%s\"。", filename);
 
 	if (!cfm->len) {
-		printf("文件 \"%s\" 内容空。\n", filename);
+		LOG_ERR("文件 \"%s\" 内容空。", filename);
 		goto err;
 	}
-	printf("文件 \"%s\" 内容不空。\n", filename);
+	LOG_INFO("文件 \"%s\" 内容不空。", filename);
 
 	size_t binary_count = 0;
 	for (size_t i = 0; i < cfm->len; i++) {
@@ -406,19 +407,25 @@ struct config_file_map *config_check_file(char *filename)
 			binary_count++;
 		}
 	}
-	printf("检测文件 \"%s\" 中的控制字符。\n", filename);
+	LOG_HINT("检测文件 \"%s\" 中的控制字符。", filename);
 
 	// 如果二进制字符占比超过 10%，认为是二进制文件
 	if ((double)binary_count / cfm->len > 0.1) {
-		printf("文件 \"%s\" 中的控制字符超过 10%% 。\n", filename);
-		printf("文件 \"%s\" 不是文本文件。\n", filename);
+		LOG_WARN("文件 \"%s\" 中的控制字符超过 10%% 。", filename);
+		LOG_ERR("文件 \"%s\" 不是文本文件。", filename);
 		goto err;
 	}
-	printf("文件 \"%s\" 是文本文件。\n", filename);
-	printf("关闭文件 \"%s\" 。\n", filename);
+	LOG_HINT("文件 \"%s\" 是文本文件。", filename);
+	LOG_HINT("关闭文件 \"%s\" 。", filename);
 	close(cfm->fd);
 
-	printf("addr %p len %lu fd %d\n", cfm->addr, cfm->len, cfm->fd);
+	cfm->name = strdup(filename);
+	if (!cfm->name) {
+		goto err;
+	}
+
+	LOG_INFO("cfm %p name %s addr %p len %lu fd %d",
+			cfm, cfm->name, cfm->addr, cfm->len, cfm->fd);
 
 	return cfm;
 
@@ -622,7 +629,6 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 	node = find_by_path(root, path);
 	if (node) {
 		if (NODE_MAPPING == node->type) {
-			printf("%s:\n", path);
 			for (Node *n = node->child; n; n = n->next) {
 				const char *k = n->key, *v = n->value;
 				if (strlen(n->key) > SERVER_KV_MAX || strlen(n->value) > SERVER_KV_MAX) {
@@ -646,6 +652,7 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 	} else {
 		printf("No server options found, use default\n");
 	}
+
 	/* 3. cfg -> kv[] */
 	// struct civet_kv kv[16];              /* 每个 option 一项 */
 	int n = build_civet_options(cfg, cfg->kv, 16);
@@ -1542,7 +1549,6 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 		printf("  vni: %u\n", cnode->vxlan.ether.type.ipv4.vni[i]);
 	}
 	printf("\n");
-	// getchar();
 
 	path = "bless.vxlan.ether.type.ipv4.dst";
 	node = find_by_path(root, path);

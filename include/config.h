@@ -9,9 +9,10 @@
 #include "system.h"
 
 struct config_file_map {
-	void   *addr;
-	size_t  len;
-	int     fd;
+	char *name;
+	void *addr;
+	size_t len;
+	int fd;
 };
 
 struct config_file_map *config_file_map_open(const char *path);
