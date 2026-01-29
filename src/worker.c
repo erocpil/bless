@@ -35,6 +35,12 @@ void worker_loop(void *data)
 	pthread_setname_np(pthread_self(), name);
 
 	struct bless_conf *bconf = (struct bless_conf*)data;
+
+	LOG_INFO("wait barrier");
+	pthread_barrier_wait(bconf->barrier);
+	LOG_ERR("return");
+	return;
+
 	qconf = bconf->qconf + lcore_id;
 	LOG_DEBUG("lid %d pid %d qid %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
 	getchar();
@@ -418,9 +424,14 @@ void worker_main_loop(void *data)
 
 	printf("lcore=%u cpu=%d\n", rte_lcore_id(), sched_getcpu());
 
+	LOG_INFO("wait barrier");
+
 	printf("[%s %d] pthread_barrier_wait(&conf->barrier);\n", __func__, __LINE__);
 	pthread_barrier_wait(conf->barrier);
-	printf("Bless pid %d is running ...\n", getpid());
+	LOG_INFO("Bless pid %d is running ...\n", getpid());
+
+	LOG_ERR("return");
+	return;
 
 	static uint64_t i = 0;
 	uint64_t val = 0;
@@ -464,7 +475,7 @@ void ws_user_func(void *user, void *data, size_t size)
 	struct ws_user_data *wsud = (struct ws_user_data*)user;
 	struct base *base = (struct base*)wsud->data;
 	atomic_int *state = base->g_state;
-	struct config_file_map *cfm = base->cfm;
+	struct config_file_map *cfm = &base->config->cfm;
 	cJSON *root = cJSON_Parse(data);
 	if (!root) {
 		printf("[%s %d] JSON parse error\n", __func__, __LINE__);

@@ -1,4 +1,5 @@
 #include "system.h"
+#include "log.h"
 #include <string.h>
 
 void system_set_defaults(struct system_cfg *cfg)
@@ -56,4 +57,14 @@ void system_dump_status(struct system_status *sysstat)
 	printf("  pid     %u\n", sysstat->pid);
 	printf("  cpuset  ");
 	system_print_cpuset(&sysstat->cpuset, CPU_SETSIZE);
+}
+
+void system_show_cfg(struct system_cfg *cfg)
+{
+	if (!cfg) {
+		return;
+	}
+	LOG_HINT("system cfg %p", cfg);
+	LOG_PATH("  daemonize %d", cfg->daemonize);
+	server_show_options_cfg_format(&cfg->srvcfg, "  ");
 }

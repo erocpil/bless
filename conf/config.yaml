@@ -33,7 +33,7 @@ injector:
   # ports
   p: 0x6
   # queues on each port
-  q: 1
+  q: 2
   # Promiscuous
   P:
   T: 1

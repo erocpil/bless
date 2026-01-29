@@ -10,12 +10,12 @@
 
 struct config_file_map {
 	char *name;
-	void *addr;
-	size_t len;
 	int fd;
+	size_t len;
+	void *addr;
 };
 
-struct config_file_map *config_file_map_open(const char *path);
+int config_file_map_open(struct config_file_map *cfm);
 void config_file_unmap_close(struct config_file_map *fm);
 
 typedef enum {
@@ -216,7 +216,13 @@ typedef struct Cnode {
 	} erroneous;
 } __attribute__((__aligned__(sizeof(char)))) Cnode;
 
-struct config_file_map *config_check_file(char *file);
+struct config {
+	struct config_file_map cfm;
+	Node *root;
+	Cnode *cnode;
+};
+
+int config_check_file_map(struct config_file_map *cfm);
 Node *config_init(char *f);
 int config_exit(Node *root);
 int config_parse_system(Node *root, struct system_cfg *cfg);
@@ -225,5 +231,6 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv);
 int config_parse_generic(Node *node, int *targc, char ***targv, int i, const char *prefix);
 Cnode *config_parse_bless(Node *root);
 Node *parse_node(yaml_parser_t *parser);
+void config_show(struct config *cfg);
 
 #endif

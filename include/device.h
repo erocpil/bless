@@ -13,6 +13,7 @@ enum ethdev_type {
 };
 
 enum ethdev_type device_get_ethdev_type(uint16_t portid);
-void device_print(uint16_t portid);
+void device_show_info(uint16_t portid);
+char *device_get_string(uint16_t type);
 
 #endif

@@ -14,6 +14,24 @@
 #include <rte_mempool.h>
 
 #include "device.h"
+#include "log.h"
+
+static char *ethdev_type_string[] = {
+	"physical",
+	"pcap",
+	"virtio",
+	"ring",
+	"not_supported",
+	"other",
+};
+
+char *device_get_string(uint16_t type)
+{
+	if (type >= ETHDEV_OTHER) {
+		return "other";
+	}
+	return ethdev_type_string[type];
+}
 
 enum ethdev_type device_get_ethdev_type(uint16_t portid)
 {
@@ -46,17 +64,22 @@ enum ethdev_type device_get_ethdev_type(uint16_t portid)
 	return ETHDEV_NOT_SUPPORTED;
 }
 
-void device_print(uint16_t portid)
+void device_show_info(uint16_t portid)
 {
 	struct rte_eth_dev_info dev_info;
 	int ret = rte_eth_dev_info_get(portid, &dev_info);
 	if (ret) {
 		return;
 	}
-	printf("port %u: driver=%s, max_txq=%u, offload=0x%lx\n",
-			portid,
-			dev_info.driver_name,
-			dev_info.max_tx_queues,
-			dev_info.tx_offload_capa);
 
+	LOG_INFO("dev info %p", &dev_info);
+	LOG_PATH("  port id     %u", portid);
+	LOG_PATH("  driver name %s", dev_info.driver_name);
+	LOG_PATH("  if index %u", dev_info.if_index);
+	LOG_PATH("  mtu [%d, %d]", dev_info.min_mtu, dev_info.max_mtu);
+	LOG_PATH("  max rx queues %u", dev_info.max_rx_queues);
+	LOG_PATH("  max tx queues %u", dev_info.max_tx_queues);
+	LOG_PATH("  nb rx queues %u", dev_info.nb_rx_queues);
+	LOG_PATH("  nb tx queues %u", dev_info.nb_tx_queues);
+	LOG_PATH("  tx offload capa %lx", dev_info.tx_offload_capa);
 }

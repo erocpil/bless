@@ -19,8 +19,14 @@ struct system_status {
 	cpu_set_t cpuset;
 };
 
-void system_dump_status(struct system_status *sysstat);
+struct system {
+	struct mg_context *ctx;
+	struct system_cfg cfg;
+	struct system_status status;
+};
 
+void system_dump_status(struct system_status *sysstat);
 void system_set_defaults(struct system_cfg *cfg);
+void system_show_cfg(struct system_cfg *cfg);
 
 #endif

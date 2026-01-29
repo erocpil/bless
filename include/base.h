@@ -3,6 +3,7 @@
 
 #include "bless.h"
 #include "system.h"
+#include <stdint.h>
 
 struct base_core_view {
 	int enabled;
@@ -23,11 +24,12 @@ struct base_topo {
 	uint16_t n_socket;
 	uint16_t n_numa;
 	uint16_t n_core; /* ROLE_RTE only */
+	uint16_t n_enabled_core;
 	uint16_t n_port;
 	uint16_t n_enabled_port;
-	uint32_t enabled_port_mask;
+	uint32_t port_mask;
 	uint32_t main_core;
-	struct base_core_view *bcv;
+	struct base_core_view *cv;
 };
 
 struct base {
@@ -39,20 +41,25 @@ struct base {
 	atomic_int *g_state;
 	int mac_updating;
 	int promiscuous_on;
-	uint32_t enabled_port_mask;
+	// uint32_t enabled_port_mask;
 	uint32_t enabled_lcores;
 	unsigned int rxtxq_per_port;
 	uint64_t timer_period; /* default period is 10 seconds */
-	struct bless_conf bconf;
 	struct system_status sysstat;
 	struct rte_mempool rx_pktmbuf_pool;
 	struct lcore_queue_conf *lcore_queue_conf;
-	struct config_file_map *cfm;
+
+	int argc;
+	char **argv;
+
+	struct system *system;
+	struct config *config;
+	struct bless_conf *bconf;
+
+	pthread_barrier_t barrier;
+
+	int return_value;
 };
 /* >8 End base topology. */
-
-void base_dump(struct base *b);
-int base_init_topo(struct base_topo *topo);
-void base_show_topo(struct base_topo *topo);
 
 #endif

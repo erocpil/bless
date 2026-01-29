@@ -94,7 +94,7 @@ static inline int log_cpu_id(void)
 #define LOG_BASE(fp, level, color, fmt, ...)                            \
 	do {                                                                \
 		fprintf(fp, "%s", COLOR(C_META));                               \
-		fprintf(fp, "[");                                               \
+		fprintf(fp, "[ ");                                              \
 		if (LOG_ENABLE_TIMESTAMP) {                                     \
 			log_print_timestamp(fp);                                    \
 			fprintf(fp, " ");                                           \
@@ -107,7 +107,7 @@ static inline int log_cpu_id(void)
 		}                                                               \
 		fprintf(fp, "]");                                               \
 		\
-		fprintf(fp, "%s[%s]%s ",                                        \
+		fprintf(fp, "%s[ %s ]%s ",                                      \
 				COLOR(ANSI_BOLD),                                       \
 				level,                                                  \
 				COLOR(ANSI_RESET));                                     \
@@ -137,6 +137,9 @@ static inline int log_cpu_id(void)
 
 #define LOG_HINT(fmt, ...)                                              \
 	LOG_BASE(stdout, "HINT", C_HINT, fmt, ##__VA_ARGS__)
+
+#define LOG_PATH(fmt, ...)                                              \
+	LOG_BASE(stdout, "PATH", C_PATH, fmt, ##__VA_ARGS__)
 
 #define LOG_INFO(fmt, ...)                                              \
 	LOG_BASE(stdout, "INFO", C_INFO, fmt, ##__VA_ARGS__)

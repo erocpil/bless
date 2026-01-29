@@ -324,25 +324,19 @@ void config_file_unmap_close(struct config_file_map *fm)
 	fm->fd = -1;
 }
 
-struct config_file_map *config_file_map_open(const char *path)
+int config_file_map_open(struct config_file_map *cfm)
 {
 	struct stat st;
-	struct config_file_map *cfm = NULL;
 
-	if (!path) {
-		return NULL;
+	if (!cfm || !cfm->name) {
+		return -1;
 	}
 
-	cfm = malloc(sizeof(struct config_file_map));
-	if (!cfm) {
-		return NULL;
-	}
-	memset(cfm, 0, sizeof(*cfm));
 	cfm->fd = -1;
 
-	cfm->fd = open(path, O_RDONLY);
+	cfm->fd = open(cfm->name, O_RDONLY);
 	if (cfm->fd < 0) {
-		return NULL;
+		return -1;
 	}
 
 	if (fstat(cfm->fd, &st) < 0) {
@@ -356,7 +350,7 @@ struct config_file_map *config_file_map_open(const char *path)
 	if (st.st_size == 0) {
 		cfm->addr = NULL;
 		cfm->len = 0;
-		return cfm;
+		return 0;
 	}
 
 	cfm->len = st.st_size;
@@ -366,38 +360,36 @@ struct config_file_map *config_file_map_open(const char *path)
 	}
 	((char*)cfm->addr)[cfm->len] = '\0';
 
-	return cfm;
+	return 0;
 
 err:
 	config_file_unmap_close(cfm);
 
-	return NULL;
+	return -1;
 }
 
-struct config_file_map *config_check_file(char *filename)
+int config_check_file_map(struct config_file_map *cfm)
 {
 	// 检查文件是否存在
-	LOG_HINT("检测配置文件 \"%s\"。", filename);
-	if (access(filename, F_OK) != 0) {
-		LOG_ERR("文件 \"%s\" 不存在。", filename);
-		return NULL;
+	LOG_HINT("检测配置文件 \"%s\"。", cfm->name);
+	if (access(cfm->name, F_OK) != 0) {
+		LOG_ERR("文件 \"%s\" 不存在。", cfm->name);
+		return -1;
 	}
-	LOG_INFO("文件 \"%s\" 存在。", filename);
+	LOG_INFO("文件 \"%s\" 存在。", cfm->name);
 
-	LOG_HINT("打开文件 \"%s\"。", filename);
-	struct config_file_map *cfm = config_file_map_open(filename);
-	if (!cfm) {
-		LOG_ERR("文件 \"%s\" 错误。", filename);
-		return NULL;
+	LOG_HINT("打开和映射文件 \"%s\"。", cfm->name);
+	if (config_file_map_open(cfm)) {
+		LOG_ERR("文件 \"%s\" 错误。", cfm->name);
+		return -1;
 	}
 
-	LOG_HINT("读取文件 \"%s\"。", filename);
-
+	LOG_HINT("读取文件 \"%s\"。", cfm->name);
 	if (!cfm->len) {
-		LOG_ERR("文件 \"%s\" 内容空。", filename);
+		LOG_ERR("文件 \"%s\" 内容空。", cfm->name);
 		goto err;
 	}
-	LOG_INFO("文件 \"%s\" 内容不空。", filename);
+	LOG_INFO("文件 \"%s\" 内容不空。", cfm->name);
 
 	size_t binary_count = 0;
 	for (size_t i = 0; i < cfm->len; i++) {
@@ -407,32 +399,24 @@ struct config_file_map *config_check_file(char *filename)
 			binary_count++;
 		}
 	}
-	LOG_HINT("检测文件 \"%s\" 中的控制字符。", filename);
 
+	LOG_HINT("检测文件 \"%s\" 中的控制字符。", cfm->name);
 	// 如果二进制字符占比超过 10%，认为是二进制文件
 	if ((double)binary_count / cfm->len > 0.1) {
-		LOG_WARN("文件 \"%s\" 中的控制字符超过 10%% 。", filename);
-		LOG_ERR("文件 \"%s\" 不是文本文件。", filename);
+		LOG_WARN("文件 \"%s\" 中的控制字符超过 10%% 。", cfm->name);
+		LOG_ERR("文件 \"%s\" 不是文本文件。", cfm->name);
 		goto err;
 	}
-	LOG_HINT("文件 \"%s\" 是文本文件。", filename);
-	LOG_HINT("关闭文件 \"%s\" 。", filename);
+	LOG_HINT("文件 \"%s\" 是文本文件。", cfm->name);
+	LOG_HINT("关闭文件 \"%s\" 。", cfm->name);
 	close(cfm->fd);
 
-	cfm->name = strdup(filename);
-	if (!cfm->name) {
-		goto err;
-	}
-
-	LOG_INFO("cfm %p name %s addr %p len %lu fd %d",
-			cfm, cfm->name, cfm->addr, cfm->len, cfm->fd);
-
-	return cfm;
+	return 0;
 
 err:
 	config_file_unmap_close(cfm);
 	free(cfm);
-	return NULL;
+	return -1;
 }
 
 Node *config_init(char *f)
@@ -577,6 +561,8 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 	return i;
 }
 
+/** config_parse_system - set system cfg from root
+ */
 int config_parse_system(Node *root, struct system_cfg *cfg)
 {
 	system_set_defaults(cfg);
@@ -665,9 +651,11 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 	}
 	cfg->civet_opts[i * 2] = NULL;
 
+#if 0
 	for (int i = 0; i < n; i++) {
 		printf("%s => %s\n", cfg->civet_opts[i * 2], cfg->civet_opts[i * 2 + 1]);
 	}
+#endif
 
 	path = "server.service";
 	node = find_by_path(root, path);
@@ -678,20 +666,22 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 			printf("%s %s\n", path, node->value);
 			int len = strlen(node->value);
 			if (len > 0) {
-				cfg->uri = (char*)malloc(len + 1);
-				strncpy(cfg->uri, node->value, len + 1);
+				cfg->websocket_uri = (char*)malloc(len + 1);
+				strncpy(cfg->websocket_uri, node->value, len + 1);
 			} else {
-				cfg->uri = NULL;
+				cfg->websocket_uri = NULL;
 			}
 		}
 		path = "server.service.http";
 		node = find_by_path(root, path);
 		if (node && NODE_SEQUENCE == node->type) {
+			// TODO
+#if 0
 			printf("%s:\n", path);
 			for (Node *n = node->child; n; n = n->next) {
-				// TODO
 				printf("  %s\n", n->value);
 			}
+#endif
 		}
 	} else {
 		printf("No server service found, use default\n");
@@ -1724,4 +1714,14 @@ Cnode *config_parse_bless(Node *root)
 	config_parse_bless_erroneous(root, cnode);
 
 	return cnode;
+}
+
+void config_show(struct config *cfg)
+{
+	LOG_HINT("config %p", cfg);
+	LOG_HINT("  file map %p", &cfg->cfm);
+	LOG_PATH("    name   %s", cfg->cfm.name);
+	LOG_PATH("    fd     %d", cfg->cfm.fd);
+	LOG_PATH("    len    %lu", cfg->cfm.len);
+	LOG_PATH("    addr   %p", cfg->cfm.addr);
 }

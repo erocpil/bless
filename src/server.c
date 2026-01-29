@@ -7,6 +7,7 @@
 
 #include "civetweb.h"
 #include "server.h"
+#include "log.h"
 
 /* ================================================================ */
 /* Server options                                                    */
@@ -249,7 +250,7 @@ struct mg_context * ws_server_start(void *data)
 	}
 
 	mg_set_websocket_handler_with_subprotocols(ctx,
-			cfg->uri ? cfg->uri : WS_URL,
+			cfg->websocket_uri ? cfg->websocket_uri : WS_URL,
 			&wsprot,
 			ws_connect_handler,
 			ws_ready_handler,
@@ -263,8 +264,6 @@ struct mg_context * ws_server_start(void *data)
 			http_stats_handler, NULL);
 	mg_set_request_handler(ctx, "/metrics",
 			http_metrics_handler, NULL);
-
-	printf("WS/HTTP server started\n");
 
 	return ctx;
 }
@@ -304,4 +303,19 @@ size_t build_civet_options(const struct server_options_cfg *cfg, struct civet_kv
 #undef X
 
 	return i;
+}
+
+void server_show_options_cfg(struct server_options_cfg *cfg)
+{
+	server_show_options_cfg_format(cfg, "");
+}
+
+void server_show_options_cfg_format(struct server_options_cfg *cfg, char *pref)
+{
+	LOG_HINT("%sserver options cfg %p", pref, cfg);
+	for (int i = 0; i < (SERVER_OPTS_MAX << 1) && cfg->civet_opts[i * 2]; i++) {
+		LOG_PATH("%s  %s: %s", pref, cfg->civet_opts[i * 2], cfg->civet_opts[i * 2 + 1]);
+	}
+	LOG_HINT("%sserver service cfg %p", pref, cfg);
+	LOG_PATH("%s  websocket uri: %s", pref, cfg->websocket_uri);
 }

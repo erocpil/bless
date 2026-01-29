@@ -1,12 +1,14 @@
+#include "civetweb.h"
 #include "color.h"
 #include "rte_build_config.h"
-#include "rte_memory.h"
+#include "rte_common.h"
 #include "worker.h"
 #include "metric.h"
 #include "server.h"
 #include "device.h"
 #include "base.h"
 #include "log.h"
+#include <time.h>
 
 #ifndef USE_VERSION_H
 #define BL_VERSION "1.0"
@@ -34,13 +36,10 @@ void print_version(void)
 
 struct base base;
 int mode = 0; /* base.mode */
-struct bless_conf *bconf = &base.bconf;
 struct config_file_map *cfm = NULL; /* DO NOT SET TO base.cfm; */
-struct system_status sysstat;
 
 /* mask of enabled ports */
 static uint32_t enabled_port_mask = 0;
-static uint32_t enabled_lcores = 0;
 
 #define MAX_TIMER_PERIOD 86400 /* 1 day max */
 /* A tsc-based timer responsible for triggering statistics printout */
@@ -52,10 +51,10 @@ static struct lcore_queue_conf lcore_queue_conf[RTE_MAX_LCORE];
 
 void *metric_cbfn()
 {
-	return (void*)&sysstat;
+	return (void*)&base.system->status;
 }
 
-void register_my_metrics(void)
+void init_metrics(void)
 {
 	metric_set_cbfn(metric_cbfn);
 	rte_telemetry_register_cmd("/bless/system", bless_handle_system,
@@ -129,28 +128,24 @@ static struct rte_eth_conf port_conf = {
 	},
 };
 
-void base_dump(struct base *b)
-{
-	_L("base %p\n", b);
-	_L("cfm %p\n", b->cfm);
-	_L("  %s %p %lu %d\n", b->cfm->name, b->cfm->addr, b->cfm->len, b->cfm->fd);
-}
-
-static int bless_launch_one_lcore(void *conf)
+void base_show_core_view(struct base_core_view *view);
+static int launch_one_core(void *conf)
 {
 	unsigned int lcore_id = rte_lcore_id();
 
 	if (lcore_id == rte_get_main_lcore()) {
-		worker_dump_lcore_queue_conf(lcore_queue_conf, RTE_MAX_LCORE);
-		// worker_main_loop((void*)conf);
-	} else {
-		return 0;
+		LOG_INFO("main core");
+		// base_show_core_view(base.topo.cv);
 
-		if (!lcore_queue_conf[lcore_id].enabled) {
+		worker_main_loop((void*)conf);
+	} else {
+		struct base_core_view *view = base.topo.cv + lcore_id;
+		if (!view->enabled) {
 			LOG_INFO("skip unused lcore %d", lcore_id);
 			return 1;
 		}
-		LOG_TRACE("Running core %u port %u", lcore_id, lcore_queue_conf[lcore_id].txp_id);
+		LOG_TRACE("Running core %u port %u queue %u %u",
+				lcore_id, view->port, view->rxq, view->txq);
 		worker_loop(conf);
 	}
 
@@ -358,6 +353,7 @@ static const struct option lgopts[] = {
 /* Parse the argument given in the command line of the application */
 static int parse_args(int argc, char **argv)
 {
+	struct bless_conf *bconf = base.bconf;
 	int opt, ret, timer_secs;
 	char **argvopt;
 	int option_index;
@@ -412,7 +408,7 @@ static int parse_args(int argc, char **argv)
 					usage(prgname);
 					return -1;
 				}
-				timer_period = timer_secs;
+				bconf->timer_period = timer_secs;
 				break;
 				/* long options */
 			case CMD_LINE_OPT_NUM_NUM:
@@ -602,8 +598,9 @@ static int parse_args(int argc, char **argv)
 		}
 	}
 
-	if (optind >= 0)
-		argv[optind-1] = prgname;
+	if (optind >= 0) {
+		argv[optind - 1] = prgname;
+	}
 
 	ret = optind - 1;
 	optind = 1; /* reset getopt lib */
@@ -619,6 +616,7 @@ static int parse_args(int argc, char **argv)
  * Check port pair config with enabled port mask,
  * and for valid port pair combinations.
  */
+#if 0
 static int check_port_pair_config(void)
 {
 	uint32_t port_pair_config_mask = 0;
@@ -655,6 +653,7 @@ static int check_port_pair_config(void)
 
 	return 0;
 }
+#endif
 
 /* Check the link status of all ports in up to 9s, and print them finally */
 static void check_all_ports_link_status(uint32_t port_mask)
@@ -662,31 +661,37 @@ static void check_all_ports_link_status(uint32_t port_mask)
 #define CHECK_INTERVAL 100 /* 100ms */
 #define MAX_CHECK_TIME 90 /* 9s (90 * 100ms) in total */
 	uint16_t portid;
-	uint8_t count, all_ports_up, print_flag = 0;
+	uint8_t count, all_ports_up, print_flag = 1;
 	struct rte_eth_link link;
 	int ret;
 	char link_status_text[RTE_ETH_LINK_MAX_STR_LEN];
 
-	printf("\nChecking link status ...\n");
+	LOG_INFO("Checking link status ...");
 	fflush(stdout);
 	for (count = 0; count <= MAX_CHECK_TIME; count++) {
 		if (atomic_load_explicit(&g_state, memory_order_acquire) == STATE_EXIT) {
+			LOG_INFO("exit");
 			return;
 		}
 		all_ports_up = 1;
 		RTE_ETH_FOREACH_DEV(portid) {
-			if (atomic_load_explicit(&g_state, memory_order_acquire) != STATE_EXIT) {
+			if (atomic_load_explicit(&g_state, memory_order_acquire) == STATE_EXIT) {
+				LOG_INFO("exit");
 				return;
 			}
-			if ((port_mask & (1u << portid)) == 0) {
-				continue;
+			enum ethdev_type etype = device_get_ethdev_type(portid);
+			if (etype == ETHDEV_PHYSICAL) {
+				if ((port_mask & (1u << portid)) == 0) {
+					LOG_HINT("skip port %u", portid);
+					continue;
+				}
 			}
 			memset(&link, 0, sizeof(link));
 			ret = rte_eth_link_get_nowait(portid, &link);
 			if (ret < 0) {
 				all_ports_up = 0;
 				if (print_flag == 1) {
-					printf("Port %u link get failed: %s\n",
+					LOG_WARN("Port %u link get failed: %s\n",
 							portid, rte_strerror(-ret));
 				}
 				continue;
@@ -695,12 +700,13 @@ static void check_all_ports_link_status(uint32_t port_mask)
 			if (print_flag == 1) {
 				rte_eth_link_to_str(link_status_text,
 						sizeof(link_status_text), &link);
-				printf("Port %d %s\n", portid, link_status_text);
+				LOG_WARN("Port %d %s", portid, link_status_text);
 				continue;
 			}
 			/* clear all_ports_up flag if any link down */
 			if (link.link_status == RTE_ETH_LINK_DOWN) {
 				all_ports_up = 0;
+				LOG_WARN("port %u link down", portid);
 				break;
 			}
 		}
@@ -718,7 +724,7 @@ static void check_all_ports_link_status(uint32_t port_mask)
 		/* set the print_flag if all ports up or timeout */
 		if (all_ports_up == 1 || count == (MAX_CHECK_TIME - 1)) {
 			print_flag = 1;
-			printf("done\n");
+			LOG_INFO("done\n");
 		}
 	}
 }
@@ -726,9 +732,9 @@ static void check_all_ports_link_status(uint32_t port_mask)
 static void signal_handler(int signum)
 {
 	if (signum == SIGINT) {
-		system_dump_status(&sysstat);
+		system_dump_status(&base.system->status);
 	} else if (signum == SIGTERM) {
-		printf("\n\nSignal %d received, preparing to exit...\n", signum);
+		LOG_WARN("\nSignal %d received, preparing to exit...\n", signum);
 		atomic_store(&g_state, STATE_EXIT);
 	}
 }
@@ -750,7 +756,7 @@ typedef union {
 	};
 } mbuf_userdata_field_proto_t;
 
-int mbuf_dynfield_init()
+int init_mbuf_dynfield()
 {
 	const struct rte_mbuf_dynfield mbuf_bless_fields[] = {
 		[ MBUF_DYN_TYPE ] = {
@@ -785,22 +791,22 @@ void base_show_core_view_format(struct base_core_view *view, char *pref)
 		return;
 	}
 
-	LOG_INFO("%sbcv    %p", pref, view);
+	LOG_INFO("%score view    %p", pref, view);
 	for (int i = 0; i < RTE_MAX_LCORE; i++) {
 		struct base_core_view *v = view + i;
 		if (!v->enabled) {
 			continue;
 		}
-		LOG_INFO("%s  [%d]        %p", pref, i, v);
-		LOG_TRACE("%s  enabled    %d", pref,v->enabled);
-		LOG_TRACE("%s  socket     %d", pref,v->socket);
-		LOG_TRACE("%s  numa       %d", pref,v->numa);
-		LOG_TRACE("%s  core       %d", pref,v->core);
-		LOG_TRACE("%s  role       %d", pref,v->role);
-		LOG_TRACE("%s  port       %d", pref,v->port);
-		LOG_TRACE("%s  type       %d", pref,v->type);
-		LOG_TRACE("%s  rxq        %d", pref,v->rxq);
-		LOG_TRACE("%s  txq        %d", pref,v->txq);
+		LOG_HINT("%s  [%d]        %p", pref, i, v);
+		LOG_PATH("%s  enabled    %d", pref,v->enabled);
+		LOG_PATH("%s  socket     %d", pref,v->socket);
+		LOG_PATH("%s  numa       %d", pref,v->numa);
+		LOG_PATH("%s  core       %d", pref,v->core);
+		LOG_PATH("%s  role       %d", pref,v->role);
+		LOG_PATH("%s  port       %d", pref,v->port);
+		LOG_PATH("%s  type       %d (%s)", pref,v->type, device_get_string(v->type));
+		LOG_PATH("%s  rxq        %d", pref,v->rxq);
+		LOG_PATH("%s  txq        %d", pref,v->txq);
 	}
 }
 
@@ -816,22 +822,22 @@ void base_show_topo(struct base_topo *topo)
 	}
 	// rte_lcore_dump(stdout);
 
-	LOG_INFO("base_topo           %p", topo);
-	LOG_TRACE("  n_socket          %u", topo->n_socket);
-	LOG_TRACE("  n_numa            %u", topo->n_numa);
-	LOG_TRACE("  n_core            %u", topo->n_core);
-	LOG_TRACE("  n_port            %u", topo->n_port);
+	LOG_HINT("base_topo           %p", topo);
+	LOG_PATH("  n_socket          %u", topo->n_socket);
+	LOG_PATH("  n_numa            %u", topo->n_numa);
+	LOG_PATH("  n_core            %u", topo->n_core);
+	LOG_PATH("  n_enabled_core    %u", topo->n_enabled_core);
+	LOG_PATH("  n_port            %u", topo->n_port);
+	LOG_PATH("  n_enabled_port    %u", topo->n_enabled_port);
+	LOG_PATH("  port_mask         %u", topo->port_mask);
+	LOG_PATH("  main_core         %u", topo->main_core);
 
-	LOG_TRACE("  n_enabled_port    %u", topo->n_enabled_port);
-	LOG_TRACE("  enabled_port_mask %u", topo->enabled_port_mask);
-	LOG_TRACE("  main_core         %u", topo->main_core);
-
-	base_show_core_view_format(topo->bcv, "  ");
+	base_show_core_view_format(topo->cv, "  ");
 }
 
-int base_init_topo(struct base_topo *topo)
+int base_init_topo()
 {
-	uint32_t core_id = 0;
+	struct base_topo *topo = &base.topo;
 	struct base_core_view *view = NULL;
 
 	if (!topo) {
@@ -840,25 +846,28 @@ int base_init_topo(struct base_topo *topo)
 	memset(topo, 0, sizeof(struct base_topo));
 
 	topo->main_core = rte_get_main_lcore();
-
 	topo->n_port = rte_eth_dev_count_avail();
+	if (!topo->n_port) {
+		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
+	}
 
-	topo->enabled_port_mask = enabled_port_mask;
-	topo->n_enabled_port = rte_popcount32(enabled_port_mask);
+	// maybe base.bconf->enabled_port_mask?
+	topo->port_mask = enabled_port_mask;
+	topo->n_enabled_port = rte_popcount32(topo->port_mask);
 
-	topo->bcv = malloc(sizeof(struct base_core_view) * RTE_MAX_LCORE);
-	if (!topo->bcv) {
+	topo->cv = malloc(sizeof(struct base_core_view) * RTE_MAX_LCORE);
+	if (!topo->cv) {
 		rte_exit(EXIT_FAILURE, "[%s %d] malloc(base_core_view)\n", __func__, __LINE__);
 	}
-	struct base_core_view *bcv = topo->bcv;
-	memset(bcv, 0, sizeof(struct base_core_view) * RTE_MAX_LCORE);
+	struct base_core_view *cv = topo->cv;
+	memset(cv, 0, sizeof(struct base_core_view) * RTE_MAX_LCORE);
 
-	core_id = 0;
-	uint32_t port_id = 0;
+	uint16_t core_id = 0;
+	uint16_t port_id = 0;
 	RTE_ETH_FOREACH_DEV(port_id) {
 		enum ethdev_type etype = device_get_ethdev_type(port_id);
 		if (etype == ETHDEV_PHYSICAL) {
-			if ((enabled_port_mask & (1u << port_id)) == 0) {
+			if ((topo->port_mask & (1u << port_id)) == 0) {
 				LOG_HINT("skip physical port %d", port_id);
 				continue;
 			}
@@ -874,184 +883,242 @@ int base_init_topo(struct base_topo *topo)
 				}
 			}
 			/* queue view */
-			view = bcv + core_id;
+			view = cv + core_id;
 			/* TODO socket/numa, etc... */
 			view->enabled = 1;
 			view->core = core_id;
 			view->port = port_id;
 			view->type = etype;
-			LOG_INFO("use port %u with core %d queue %u", port_id, core_id, qid);
-			/* FIXME vdev */
+			LOG_INFO("core %d uses port %u(%s) with queue %u",
+					core_id, port_id, device_get_string(etype), qid);
 			view->rxq = qid;
 			view->txq = qid;
 			core_id++;
+			topo->n_enabled_core++;
+			/* if vdev is pcap, just use one txq */
+			if (ETHDEV_PCAP == etype) {
+				LOG_WARN("core %u uses pcap port %u with 1 txq", view->core, view->port);
+				/* go for next port */
+				break;
+			}
 		}
-		enabled_lcores += rxtxq_per_port;
 	}
 
 	RTE_LCORE_FOREACH_WORKER(core_id) {
+		LOG_WARN("core %d role %d", core_id, rte_eal_lcore_role(core_id));
 		topo->n_core += ROLE_RTE == rte_eal_lcore_role(core_id);
-		view = bcv + core_id;
-		view->role = ROLE_RTE;
+		view = cv + core_id;
+		view->role = rte_eal_lcore_role(core_id);
 	}
+	// FIXME
+#if 1
+	/* 1 for main core */
+	if (topo->n_enabled_core > topo->n_core) {
+		rte_exit(EXIT_FAILURE, "Not enough cores");
+	} else {
+		LOG_HINT("%d lcore will not be used",
+				topo->n_core - topo->n_enabled_core);
+	}
+#else
 	/* 1 for main core */
 	if (topo->n_core - 1 < rxtxq_per_port * topo->n_enabled_port) {
 		rte_exit(EXIT_FAILURE, "Not enough cores %d < %d * %d\n",
 				topo->n_core, rxtxq_per_port, topo->n_enabled_port);
 	} else if (topo->n_core > rxtxq_per_port * topo->n_enabled_port) {
-		printf("%d lcore will not be used\n",
+		LOG_HINT("%d lcore will not be used",
 				topo->n_core - 1 - rxtxq_per_port * topo->n_enabled_port);
 	}
+#endif
 
-	LOG_INFO("use lcores %d\n", enabled_lcores);
+	LOG_INFO("%u cores will be used including main", topo->n_enabled_core);
+
+	/* check port mask to possible port mask */
+	// printf("nb_ports %u enabed 0x%x\n", nb_ports, enabled_port_mask);
+	if (enabled_port_mask & ~((1 << base.topo.n_port) - 1)) {
+		rte_exit(EXIT_FAILURE, "Invalid portmask; possible (0x%x)\n",
+				(1 << base.topo.n_port) - 1);
+	}
+
+	base_show_topo(topo);
 
 	return 0;
 }
 
-int main(int argc, char **argv)
+void init_system()
 {
-	int targc = argc;
-	char **targv = argv;
-	Node *conf_root = NULL;
-
-	char *f = DEFAULT_CONFIG_FILE;
-	if (2 == argc) {
-		if (0 == strcmp(argv[1], "version")) {
-			print_version();
-			exit(0);
-		}
-		f = argv[1];
+	struct system *system = (struct system*)malloc(sizeof(struct system));
+	if (!system) {
+		rte_exit(EXIT_FAILURE, "malloc(system)\n");
 	}
-	cfm = config_check_file(f);
-	if (!cfm) {
-		rte_exit(EXIT_FAILURE, "Cannot check %s\n", f);
-	}
-
-	conf_root = config_init(f);
-	if (!conf_root) {
-		rte_exit(EXIT_FAILURE, "Config file error %s\n", f);
-	}
-
-	config_parse_dpdk(conf_root, &targc, &targv);
-	if (!conf_root) {
-		rte_exit(EXIT_FAILURE, "Cannot parse %s\n", f);
-	}
-
-	for (int i = 0; i < targc; i++) {
-		printf("'%s' ", targv[i]);
-	}
-	printf("\n");
-	bconf = bless_init();
-	if (!bconf) {
-		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
-	}
-	// bless_set_config_file(bconf, cfm);
-
-	struct system_cfg syscfg;
-	if (config_parse_system(conf_root, &syscfg) < 0) {
+	struct system_cfg *cfg = &system->cfg;
+	if (config_parse_system(base.config->root, cfg) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
 	}
-	if (syscfg.daemonize) {
+	if (cfg->daemonize) {
 		daemon(1, 1);
+		LOG_INFO("Daemonized");
 	}
 
-	struct ws_user_data wsud = {
-		.conf = (void*)&syscfg.srvcfg,
-		.data = (void*)&base,
-		.func = ws_user_func,
-	};
-	struct mg_context *ctx = ws_server_start(&wsud);
+	struct server *server = (struct server*)malloc(sizeof(struct server));
+	if (!server) {
+		rte_exit(EXIT_FAILURE, "malloc(service)\n");
+	}
+	server->wsud.conf = (void*)cfg;
+	server->wsud.data = (void*)&base;
+	server->wsud.func = ws_user_func;
+
+	struct mg_context *ctx = ws_server_start(&server->wsud);
 	if (!ctx) {
 		rte_exit(EXIT_FAILURE, "ws_server_start failed\n");
 	}
+	system->ctx = ctx;
+	base.system = system;
+	LOG_INFO("Websocket Server Started");
+	system_show_cfg(&system->cfg);
+}
 
-	int ret = rte_eal_init(targc, targv);
+void init_config()
+{
+	struct config *cfg = (struct config*)malloc(sizeof(struct config));
+	if (!cfg) {
+		rte_exit(EXIT_FAILURE, "malloc(config)\n");
+	}
+	cfg->cfm.name = DEFAULT_CONFIG_FILE;
+	if (1 == base.argc) {
+		LOG_INFO("use default config %s", cfg->cfm.name);
+	} else if (2 == base.argc) {
+		if (0 == strcmp(base.argv[1], "version")) {
+			print_version();
+			exit(0);
+		}
+		cfg->cfm.name = base.argv[1];
+	} else {
+		rte_exit(EXIT_FAILURE, "unacceptable params");
+	}
+
+	if (config_check_file_map(&cfg->cfm)) {
+		rte_exit(EXIT_FAILURE, "Cannot check %s\n", cfg->cfm.name);
+	}
+
+	/* init config node from file, aka. parse yaml */
+	cfg->root = config_init(cfg->cfm.name);
+	if (!cfg->root) {
+		rte_exit(EXIT_FAILURE, "Cannot init config %s\n", cfg->cfm.name);
+	}
+
+	config_show(cfg);
+	base.config = cfg;
+}
+
+void init_base(int argc, char **argv)
+{
+	base.argc = argc;
+	base.argv = argv;
+}
+
+void init_eal()
+{
+	/* parse dpdk, injector, bless */
+	if (-1 == config_parse_dpdk(base.config->root, &base.argc, &base.argv)) {
+		rte_exit(EXIT_FAILURE, "Cannot parse %s\n", base.config->cfm.name);
+	}
+	/* now base.{argc, argv} have all dpdk and app params */
+
+	int ret = rte_eal_init(base.argc, base.argv);
 	if (ret < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid EAL arguments\n");
 	}
-	targc -= ret;
-	targv += ret;
-	argv += ret;
+
+	base.argc -= ret;
+	base.argv += ret;
+
+	/* TODO rte_eth_dev_callback_register */
 
 #ifdef RTE_LIB_PDUMP
-	ret = rte_pdump_init();
-	if (ret) {
+	if (rte_pdump_init()) {
 		rte_exit(EXIT_FAILURE, "rte_pdump_init()\n");
 	}
 	RTE_LOG(INFO, BLESS, "rte_pdump_init()\n");
 #else
 	RTE_LOG(INFO, BLESS, "rte_pdump not supported.\n");
 #endif
+}
 
-	/* TODO rte_eth_dev_callback_register */
+void init_args()
+{
+	struct bless_conf *bconf = bless_init();
+	if (!bconf) {
+		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(bless_conf)\n");
+	}
 
-	mbuf_dynfield_init();
+	base.bconf = bconf;
 
-	register_my_metrics();
-
-	/* parse application arguments (after the EAL ones) */
-	ret = parse_args(targc, targv);
-	if (ret < 0) {
+	/* parse application(bless) arguments from base.{argc, argv} */
+	if (parse_args(base.argc, base.argv) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid BLESS arguments\n");
 	}
-	/* >8 End of init EAL. */
-
-	atomic_store(&g_state, bconf->auto_start ? STATE_RUNNING : STATE_INIT);
-	signal(SIGINT, signal_handler);
-	signal(SIGTERM, signal_handler);
-
-	if (conf_root && !bconf->cnode) {
-		bconf->cnode = config_parse_bless(conf_root);
-	}
-
+	// FIXME
 	printf("MAC updating %s\n", mac_updating ? "enabled" : "disabled");
 
+	if (base.config->root && !bconf->cnode) {
+		bconf->cnode = config_parse_bless(base.config->root);
+		if (!bconf->cnode) {
+			rte_exit(EXIT_FAILURE, "Cannot parse bless\n");
+		}
+		base.config->cnode = bconf->cnode;
+	} else {
+	}
+
+	// FIXME
+	atomic_store(&g_state, bconf->auto_start ? STATE_RUNNING : STATE_INIT);
+
 	/* convert to number of cycles */
-	timer_period *= rte_get_timer_hz();
-
-	uint16_t nb_ports = rte_eth_dev_count_avail();
-	if (nb_ports == 0) {
-		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
+	bconf->timer_period *= rte_get_timer_hz();
+	bconf->stats = rte_malloc(NULL, sizeof(bconf->stats) * RTE_MAX_ETHPORTS, 0);
+	if (!bconf->stats) {
+		rte_exit(EXIT_FAILURE, "rte_malloc(bconf->stats)");
 	}
 
-	if (port_pair_params != NULL) {
-		if (check_port_pair_config() < 0)
-			rte_exit(EXIT_FAILURE, "Invalid port pair config\n");
+	/* bconf */
+	bconf->qconf = lcore_queue_conf;
+	bconf->stats = rte_malloc(NULL, sizeof(bconf->stats) * RTE_MAX_ETHPORTS, 0);
+	if (!bconf->stats) {
+		rte_exit(EXIT_FAILURE, "rte_malloc(bconf->stats)");
 	}
+	bconf->dst_ports = dst_ports;
+	bconf->state = &g_state;
+	bconf->timer_period = timer_period;
+	bconf->enabled_port_mask = enabled_port_mask;
 
-	/* check port mask to possible port mask */
-	// printf("nb_ports %u enabed 0x%x\n", nb_ports, enabled_port_mask);
-	if (enabled_port_mask & ~((1 << nb_ports) - 1)) {
-		rte_exit(EXIT_FAILURE, "Invalid portmask; possible (0x%x)\n",
-				(1 << nb_ports) - 1);
-	}
+	bconf->barrier = &base.barrier;
+	bconf->base = &base;
 
-	/* Initialization of the driver. 8< */
+	/* base */
+	base.mode = mode;
+	base.g_state = &g_state;
+	base.nb_rxd = nb_rxd;
+	base.nb_txd = nb_txd;
+	base.promiscuous_on = promiscuous_on;
+	// base.enabled_port_mask = enabled_port_mask;
+	base.enabled_lcores = base.enabled_lcores;
+	base.lcore_queue_conf = lcore_queue_conf;
+	base.timer_period = timer_period;
 
+	/* TODO */
+#if 0
 	/* reset dst_ports */
 	uint16_t portid;
 	for (portid = 0; portid < RTE_MAX_ETHPORTS; portid++) {
 		dst_ports[portid] = 0;
 	}
-
-	base_init_topo(&base.topo);
-	enabled_lcores = base.enabled_lcores;
-	base_show_topo(&base.topo);
-
-	exit(0);
-
-	/* lcore view */
-	for (int i = 0; i < RTE_MAX_LCORE; i++) {
-		if (!lcore_queue_conf[i].enabled) {
-			continue;
-		}
-		printf("lcore %d port %d txq %d\n", i, lcore_queue_conf[i].txp_id, lcore_queue_conf[i].txq_id);
-	}
-
-	/* populate destination port details */
-	/* TODO */
+#endif
 #if 0
+	/* populate destination port details */
 	uint16_t last_port = 0;
+	if (port_pair_params != NULL) {
+		if (check_port_pair_config() < 0)
+			rte_exit(EXIT_FAILURE, "Invalid port pair config\n");
+	}
 	if (port_pair_params != NULL) {
 		uint16_t idx, p;
 
@@ -1085,60 +1152,25 @@ int main(int argc, char **argv)
 	}
 	/* >8 End of initialization of the driver. */
 #endif
+}
 
-	struct lcore_queue_conf *qconf = NULL;
+void init_signal()
+{
+	/* TODO sighandler? */
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
+}
 
-	/* Initialize the port/queue configuration of each logical core */
-	uint32_t rx_lcore_id = 0;
-	uint32_t nb_lcores = 0;
-	int ids = 0;
-	RTE_ETH_FOREACH_DEV(portid) {
-		/* skip ports that are not enabled */
-		ids++;
-		enum ethdev_type etype = device_get_ethdev_type(portid);
-		device_print(portid);
-		if (etype == ETHDEV_PHYSICAL) {
-			if ((enabled_port_mask & (1u << portid)) == 0) {
-				LOG_TRACE("disabled port No. %d: ", ids);
-				device_print(portid);
-				continue;
-			}
-		}
-
-		/* get the lcore_id for this port */
-		while (rx_lcore_id == rte_get_main_lcore() ||
-				(rte_lcore_is_enabled(rx_lcore_id) == 0 ||
-				 lcore_queue_conf[rx_lcore_id].n_rx_port ==
-				 rxtxq_per_port)) {
-			rx_lcore_id++;
-			if (rx_lcore_id >= RTE_MAX_LCORE) {
-				rte_exit(EXIT_FAILURE, "Not enough cores\n");
-			}
-		}
-
-		if (qconf != &lcore_queue_conf[rx_lcore_id]) {
-			/* Assigned a new logical core in the loop above. */
-			qconf = &lcore_queue_conf[rx_lcore_id];
-			nb_lcores++;
-		}
-
-		/* FIXME */
-		qconf->rx_port_list[qconf->n_rx_port] = portid;
-		qconf->n_rx_port++;
-		// FIXME
-		printf("Lcore %u: RX port %u TX port %u\n", rx_lcore_id, portid, dst_ports[portid]);
-		// qconf->txq_id = portid;
-		// LOG_TRACE("Lcore %u: TX port %u\n", rx_lcore_id, qconf->txp_id);
-	}
-
+void init_port()
+{
 	uint16_t ap = __builtin_popcount(enabled_port_mask);
 	unsigned int nb_mbufs =
 		ap * rxtxq_per_port * nb_rxd      /* RX ring 硬需求 */
 		+ ap * MAX_PKT_BURST * rxtxq_per_port
-		+ nb_lcores * MEMPOOL_CACHE_SIZE * 2
+		+ base.topo.n_enabled_core * MEMPOOL_CACHE_SIZE * 2
 		+ 8192; /* 安全冗余 */
-	printf("ap %d rxtxq_per_port %d nb_rxd %d MAX_PKT_BURST %d nb_lcores %d MEMPOOL_CACHE_SIZE %d nb_mbufs %u\n",
-			ap, rxtxq_per_port, nb_rxd, MAX_PKT_BURST, nb_lcores, MEMPOOL_CACHE_SIZE, nb_mbufs);
+	printf("ap %d rxtxq_per_port %d nb_rxd %d MAX_PKT_BURST %d base.topo.n_enabled_core %d MEMPOOL_CACHE_SIZE %d nb_mbufs %u\n",
+			ap, rxtxq_per_port, nb_rxd, MAX_PKT_BURST, base.topo.n_enabled_core, MEMPOOL_CACHE_SIZE, nb_mbufs);
 
 	/* Create the mbuf pool. 8< */
 	rx_pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", nb_mbufs,
@@ -1154,13 +1186,12 @@ int main(int argc, char **argv)
 
 	/* Initialise each port */
 	printf("Initializing port ...\n");
-	int id = 0;
+	int ret = 0;
+	uint16_t portid;
 	RTE_ETH_FOREACH_DEV(portid) {
 		struct rte_eth_conf local_port_conf = port_conf;
 		struct rte_eth_dev_info dev_info;
 		enum ethdev_type etype = device_get_ethdev_type(portid);
-		printf("No. %d: ", id++);
-		device_print(portid);
 
 		mode |= 1 << etype;
 
@@ -1176,9 +1207,10 @@ int main(int argc, char **argv)
 				continue;
 			}
 			nb_physical_ports_available++;
-			printf("physical\n");
 		}
+		device_show_info(portid);
 		nb_ports_available++;
+		continue;
 
 		/* init port */
 		fflush(stdout);
@@ -1189,7 +1221,6 @@ int main(int argc, char **argv)
 					"Error during getting device (port %u) info: %s\n",
 					portid, strerror(-ret));
 		}
-		printf("TX port %u type %d driver=%s\n", portid, etype, dev_info.driver_name);
 
 		local_port_conf.txmode.offloads &= dev_info.tx_offload_capa;
 #if 0
@@ -1321,15 +1352,9 @@ int main(int argc, char **argv)
 
 		printf("Port %u, MAC address: " RTE_ETHER_ADDR_PRT_FMT "\n",
 				portid, RTE_ETHER_ADDR_BYTES(&ports_eth_addr[portid]));
-		printf("driver name %s\n", dev_info.driver_name);
-		printf("if index %u\n", dev_info.if_index);
-		printf("mtu [%d, %d]\n", dev_info.min_mtu, dev_info.max_mtu);
-		printf("max rx queues %u\n", dev_info.max_rx_queues);
-		printf("max tx queues %u\n", dev_info.max_tx_queues);
-		printf("nb rx queues %u\n", dev_info.nb_rx_queues);
-		printf("nb tx queues %u\n", dev_info.nb_tx_queues);
 
-		device_print(portid);
+		device_show_info(portid);
+		exit(0);
 
 		/* initialize port stats */
 		// memset(port_statistics, 0, sizeof(port_statistics));
@@ -1350,53 +1375,39 @@ int main(int argc, char **argv)
 	}
 
 	check_all_ports_link_status(enabled_port_mask);
+}
 
-	char name[16];
+void init_rumtime()
+{
+	char name[32];
 	pthread_getname_np(pthread_self(), name, sizeof(name));
 	RTE_LOG(INFO, BLESS, "entering main loop %s: pid %d tid %d self %lu\n", name,
 			getpid(), rte_gettid(), (unsigned long)rte_thread_self().opaque_id);
+	LOG_INFO("entering main loop %s: pid %d tid %d self %lu", name,
+			getpid(), rte_gettid(), (unsigned long)rte_thread_self().opaque_id);
 
-	sysstat.pid = getpid();
-	sysstat.ppid = getppid();
-	CPU_ZERO(&sysstat.cpuset);
-	if (sched_getaffinity(0, sizeof(cpu_set_t), &sysstat.cpuset)) {
+	base.system->status.pid = getpid();
+	base.system->status.ppid = getppid();
+	CPU_ZERO(&base.system->status.cpuset);
+	if (sched_getaffinity(0, sizeof(cpu_set_t), &base.system->status.cpuset)) {
 		rte_exit(EXIT_FAILURE, "sched_getaffinity()");
 	}
+}
 
-	/* bconf */
-	bconf->qconf = lcore_queue_conf;
-	bconf->stats = rte_malloc(NULL, sizeof(bconf->stats) * RTE_MAX_ETHPORTS, 0);
-	if (!bconf->stats) {
-		rte_exit(EXIT_FAILURE, "rte_malloc(bconf->stats)");
-	}
-	bconf->dst_ports = dst_ports;
-	bconf->state = &g_state;
-	bconf->timer_period = timer_period;
-	bconf->enabled_port_mask = enabled_port_mask;
-	pthread_barrier_t barrier;
-	pthread_barrier_init(&barrier, NULL, enabled_lcores + 1); /* + main lcore */
-	bconf->barrier = &barrier;
-	bconf->enabled_port_mask = enabled_port_mask;
-	bconf->base = &base;
-
-	/* base */
-	base.mode = mode;
-	base.g_state = &g_state;
-	base.nb_rxd = nb_rxd;
-	base.nb_txd = nb_txd;
-	base.promiscuous_on = promiscuous_on;
-	base.enabled_port_mask = enabled_port_mask;
-	base.enabled_lcores = enabled_lcores;
-	base.lcore_queue_conf = lcore_queue_conf;
-	base.timer_period = timer_period;
-	base.cfm = cfm;
-
-	printf("\n >> %d nb_lcores %d\n\n", rte_lcore_id(), nb_lcores + 1);
+void run()
+{
+	LOG_INFO("main core %u init %d barriers",
+			base.topo.main_core, base.topo.n_enabled_core + 1);
+	/* including main lcore */
+	pthread_barrier_init(&base.barrier, NULL, base.topo.n_enabled_core + 1);
 
 	/* launch per-lcore init on every lcore */
-	rte_eal_mp_remote_launch(bless_launch_one_lcore, (void*)bconf, CALL_MAIN);
+	rte_eal_mp_remote_launch(launch_one_core, (void*)base.bconf, CALL_MAIN);
+}
 
-	ret = 0;
+void stop()
+{
+	int ret = 0;
 	uint32_t lcore_id = 0;
 	RTE_LCORE_FOREACH_WORKER(lcore_id) {
 		int n = rte_eal_wait_lcore(lcore_id);
@@ -1407,6 +1418,7 @@ int main(int argc, char **argv)
 		}
 	}
 
+	uint16_t portid;
 	RTE_ETH_FOREACH_DEV(portid) {
 		if ((enabled_port_mask & (1u << portid)) == 0) {
 			continue;
@@ -1420,8 +1432,13 @@ int main(int argc, char **argv)
 		printf(" Done\n");
 	}
 
-	pthread_barrier_destroy(&barrier);
+	pthread_barrier_destroy(&base.barrier);
 
+	base.return_value = ret;
+}
+
+void quit()
+{
 #ifdef RTE_LIB_PDUMP
 	rte_pdump_uninit();
 #endif
@@ -1429,11 +1446,42 @@ int main(int argc, char **argv)
 	/* clean up the EAL */
 	rte_eal_cleanup();
 
-	ws_server_stop(ctx);
+	ws_server_stop(base.system->ctx);
 
-	config_exit(conf_root);
+	config_exit(base.config->root);
 
-	printf("Bye ...\n");
+	LOG_WARN("Bye ...\n");
+}
 
-	return ret;
+int main(int argc, char **argv)
+{
+	init_base(argc, argv);
+
+	init_config();
+
+	init_system();
+
+	init_eal();
+
+	init_mbuf_dynfield();
+
+	init_metrics();
+
+	init_args();
+
+	init_signal();
+
+	base_init_topo();
+
+	init_port();
+
+	init_rumtime();
+
+	run();
+
+	stop();
+
+	quit();
+
+	return 0;
 }
