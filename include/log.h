@@ -120,45 +120,57 @@ static inline int log_cpu_id(void)
 /* =========================
  * 对外接口
  * ========================= */
-
-#define _L(fmt, ...)                                                    \
-	do {                                                                \
-		fprintf(stdout, "%s", COLOR(C_META));                               \
-		fprintf(stdout, "[%s %d] " fmt, __func__, __LINE__, ##__VA_ARGS__);                                \
-		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));                         \
+#define _L(...)                                                 \
+	do {                                                        \
+		struct timespec ts;                                     \
+		clock_gettime(CLOCK_REALTIME, &ts);                     \
+		fprintf(stdout, "%s[ %ld.%06ld %s:%d ]%s ",             \
+				COLOR(C_VALUE    C_LATENCY),                               \
+				ts.tv_sec, ts.tv_nsec / 1000,                   \
+				__func__, __LINE__,                             \
+				COLOR(ANSI_RESET));                             \
+		fprintf(stdout, "" __VA_ARGS__);                        \
+		fprintf(stdout, "\n");                                  \
 	} while (0)
 
-#define _E(fmt, ...)                                                    \
-	do {                                                                \
-		fprintf(stdout, "%s", COLOR(FG_RED));                               \
-		fprintf(stdout, fmt, ##__VA_ARGS__);                                \
-		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));                         \
+#define _E(...)                                                 \
+	do {                                                        \
+		fprintf(stdout, "%s", COLOR(FG_BRIGHT_MAGENTA));                 \
+		fprintf(stdout, "" __VA_ARGS__);                        \
+		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));             \
 	} while (0)
 
-#define LOG_HINT(fmt, ...)                                              \
+#define _(...)                                                 \
+	do {                                                        \
+		fprintf(stdout, "%s", COLOR(C_RATE));                 \
+		fprintf(stdout, "" __VA_ARGS__);                        \
+		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));             \
+	} while (0)
+
+#define LOG_HINT(fmt, ...)                                      \
 	LOG_BASE(stdout, "HINT", C_HINT, fmt, ##__VA_ARGS__)
 
-#define LOG_PATH(fmt, ...)                                              \
+#define LOG_PATH(fmt, ...)                                      \
 	LOG_BASE(stdout, "PATH", C_PATH, fmt, ##__VA_ARGS__)
 
-#define LOG_INFO(fmt, ...)                                              \
+#define LOG_INFO(fmt, ...)                                      \
 	LOG_BASE(stdout, "INFO", C_INFO, fmt, ##__VA_ARGS__)
 
-#define LOG_WARN(fmt, ...)                                              \
+#define LOG_WARN(fmt, ...)                                      \
 	LOG_BASE(stderr, "WARN", C_WARN, fmt, ##__VA_ARGS__)
 
-#define LOG_ERR(fmt, ...)                                               \
+#define LOG_ERR(fmt, ...)                                       \
 	LOG_BASE(stderr, "ERRR", C_ERR, fmt, ##__VA_ARGS__)
 
 #if LOG_ENABLE_DEBUG
-#define LOG_DEBUG(fmt, ...)                                             \
+#define LOG_DEBUG(fmt, ...)                                     \
 	LOG_BASE(stdout, "DBUG", C_DEBUG, fmt, ##__VA_ARGS__)
 #else
 #define LOG_DEBUG(fmt, ...) ((void)0)
 #endif
 
 #if LOG_ENABLE_TRACE
-#define LOG_TRACE(fmt, ...)                                             \
+#define LOG_TRACE(fmt, ...)                                     \
 	LOG_BASE(stdout, "TRAC", C_TRACE, fmt, ##__VA_ARGS__)
 #else
 #define LOG_TRACE(fmt, ...) ((void)0)

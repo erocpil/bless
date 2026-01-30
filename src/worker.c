@@ -26,7 +26,6 @@ void worker_loop(void *data)
 	struct rte_mbuf **rx_mbufs = NULL;
 	unsigned lcore_id;
 	uint16_t portid = 0;
-	struct lcore_queue_conf *qconf;
 
 	lcore_id = rte_lcore_id();
 
@@ -36,15 +35,14 @@ void worker_loop(void *data)
 
 	struct bless_conf *bconf = (struct bless_conf*)data;
 
-	LOG_INFO("wait barrier");
-	pthread_barrier_wait(bconf->barrier);
-	LOG_ERR("return");
-	return;
+	// LOG_INFO("wait barrier");
+	// pthread_barrier_wait(bconf->barrier);
 
+	/*
 	qconf = bconf->qconf + lcore_id;
 	LOG_DEBUG("lid %d pid %d qid %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
-	getchar();
-	assert(1 == qconf->enabled);
+	*/
+	// assert(1 == qconf->enabled);
 
 	struct bless_conf *conf = rte_malloc(NULL, sizeof(struct bless_conf), 0);
 	if (!conf) {
@@ -64,12 +62,23 @@ void worker_loop(void *data)
 
 	memcpy(conf, bconf, offsetof(struct bless_conf, dist_ratio));
 	struct distribution *dist = conf->dist;
+
+	// XXX
+#if 0
 	conf->qconf = rte_malloc(NULL, sizeof(struct lcore_queue_conf), 0);
 	if (unlikely(!conf->qconf)) {
 		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(qconf)\n",
 				__func__, __LINE__);
 	}
 	memcpy(conf->qconf, &bconf->qconf[lcore_id], sizeof(struct lcore_queue_conf));
+#endif
+
+	struct base_core_view *cv = rte_malloc(NULL, sizeof(struct base_core_view), 0);
+	if (unlikely(!cv)) {
+		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(base core view)\n",
+				__func__, __LINE__);
+	}
+	memcpy(cv, conf->base->topo.cv + lcore_id, sizeof(struct base_core_view));
 
 	Cnode *cnode = conf->cnode;
 	if (cnode) {
@@ -87,7 +96,8 @@ void worker_loop(void *data)
 		rte_exit(EXIT_FAILURE, "[%s %d] no config.yaml\n", __func__, __LINE__);
 	}
 
-	qconf = conf->qconf; // bconf->qconf + lcore_id;
+	// XXX
+	// qconf = conf->qconf; // bconf->qconf + lcore_id;
 	atomic_int *state = conf->state;
 	// uint32_t *l2fwd_dst_ports = conf->dst_ports;
 
@@ -123,9 +133,12 @@ void worker_loop(void *data)
 	   }
 	   */
 
+	// XXX
+#if 0
 	RTE_LOG(INFO, BLESS, "entering worker loop %s: lid %d pid %d tid %d self %lu lcore %d port %d txq %d\n",
 			name, lcore_id, getpid(), rte_gettid(), (unsigned long)rte_thread_self().opaque_id,
 			qconf->txl_id, qconf->txp_id, qconf->txq_id);
+#endif
 
 	// 获取当前线程 CPU 亲和性
 	cpu_set_t cpuset;
@@ -156,8 +169,8 @@ void worker_loop(void *data)
 	if (batch > num) {
 		batch = num;
 	}
-	portid = qconf->txp_id;
-	uint16_t qid = qconf->txq_id;
+	portid = cv->port;
+	uint16_t qid = cv->rxq;
 	uint16_t nb_tx = batch;
 	printf("num %ld batch %u nb_tx %u\n", num, batch, nb_tx);
 
@@ -169,6 +182,7 @@ void worker_loop(void *data)
 		}
 	}
 
+#if 0
 	/* rx-only */
 	if (BLESS_MODE_RX_ONLY == mode) {
 		pthread_barrier_wait(bconf->barrier);
@@ -211,22 +225,25 @@ void worker_loop(void *data)
 		printf("worker exit\n");
 		return;
 	}
+#endif
 
-	mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
-	if (unlikely(!mbufs)) {
-		rte_exit(EXIT_FAILURE, "mbufs alloc failed");
+	if (BLESS_MODE_TX_ONLY == mode) {
+		mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
+		if (unlikely(!mbufs)) {
+			rte_exit(EXIT_FAILURE, "mbufs alloc failed");
+		}
+
+		sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool", cv->core, cv->port, cv->rxq);
+		struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
+
+		if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
+			printf("bless_alloc_mbufs() failed\n");
+		}
+
+		printf("cpu=%d lcore=%u lid=%d pid=%d qid=%d tid=%lu\n", sched_getcpu(), rte_lcore_id(),
+				cv->port, cv->txq, cv->core, pthread_self());
+		assert(cv->core == rte_lcore_id());
 	}
-
-	sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool", qconf->txl_id, qconf->txp_id, qconf->txq_id);
-	struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
-
-	if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
-		printf("bless_alloc_mbufs() failed\n");
-	}
-
-	printf("cpu=%d lcore=%u lid=%d pid=%d qid=%d tid=%lu\n", sched_getcpu(), rte_lcore_id(),
-			qconf->txp_id, qconf->txq_id, qconf->txl_id, pthread_self());
-	assert(qconf->txl_id == rte_lcore_id());
 
 	/* check if src mac address is provided */
 	if (!cnode->ether.n_src) {
@@ -254,35 +271,36 @@ void worker_loop(void *data)
 			i = 0;
 			while (unlikely(val == STATE_STOPPED)) {
 				if (!i++) {
-					printf("Detect STOPPED %d\n", qconf->txl_id);
+					printf("Detect STOPPED @ core %u\n", cv->core);
 				}
 				rte_delay_ms(1000);
 				val = atomic_load_explicit(state, memory_order_acquire);
 			}
 			while (unlikely(val == STATE_INIT)) {
 				if (!i++) {
-					printf("Detect INIT %d\n", qconf->txl_id);
+					printf("Detect INIT @ core %u\n", cv->core);
 				}
 				rte_delay_ms(1000);
 				val = atomic_load_explicit(state, memory_order_acquire);
 			}
 			if (val == STATE_EXIT) {
-				printf("Detect EXIT %d\n", qconf->txl_id);
+				printf("Detect EXIT %d\n", cv->core);
 				goto EXIT;
 			}
 			if (val == STATE_RUNNING) {
-				printf("Detect START %d %d %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
+				printf("Detect START %d %d %d\n", cv->core, cv->port, cv->rxq);
 			}
 		}
 
 		if (unlikely(num <= 0)) {
 			sleep(1);
 			atomic_store(state, STATE_EXIT);
-			printf("Finished: lcore_id %d lid %d pid %d qid %d\n", rte_lcore_id(),
-					qconf->txl_id, qconf->txp_id, qconf->txq_id);
+			printf("Finished: lcore_id %u core %u port %u rxq %u\n", rte_lcore_id(),
+					cv->core, cv->port, cv->rxq);
 			goto EXIT;
 		}
 
+#if 1
 		/* fwd */
 		if (mode == BLESS_MODE_FWD) {
 			const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
@@ -306,6 +324,7 @@ void worker_loop(void *data)
 			val = atomic_load_explicit(state, memory_order_acquire);
 			continue;
 		}
+#endif
 
 		/* tx-only */
 		for (int j = 0; j < nb_tx; j++) {
@@ -365,7 +384,7 @@ void worker_loop(void *data)
 	}
 
 EXIT:
-	printf("core %d exit\n", qconf->txl_id);
+	LOG_INFO("core %u %u exit", lcore_id, cv->core);
 }
 
 void dpdk_generate_cmdReply(const char *str)
@@ -414,28 +433,18 @@ void dpdk_generate_stats(uint32_t enabled_port_mask)
 
 void worker_main_loop(void *data)
 {
-	uint64_t prev_tsc = 0, diff_tsc = 0, cur_tsc = 0, timer_tsc = 0;
 	unsigned int lcore_id = rte_lcore_id();
 	struct bless_conf *conf = (struct bless_conf*)data;
+	struct base_core_view *cv = conf->base->topo.cv + lcore_id;
 	atomic_int *state = conf->state;
-	LOG_TRACE("state %p %p", state, conf->state);
-
 	uint64_t timer_period = conf->timer_period;
-
-	printf("lcore=%u cpu=%d\n", rte_lcore_id(), sched_getcpu());
-
-	LOG_INFO("wait barrier");
-
-	printf("[%s %d] pthread_barrier_wait(&conf->barrier);\n", __func__, __LINE__);
-	pthread_barrier_wait(conf->barrier);
-	LOG_INFO("Bless pid %d is running ...\n", getpid());
-
-	LOG_ERR("return");
-	return;
-
-	static uint64_t i = 0;
+	uint64_t prev_tsc = 0, diff_tsc = 0, cur_tsc = 0, timer_tsc = 0;
 	uint64_t val = 0;
+
+	pthread_barrier_wait(conf->barrier);
+
 	while ((val = atomic_load_explicit(state, memory_order_acquire)) != STATE_EXIT) {
+		static uint64_t i = 0;
 		rte_delay_ms(100);
 		cur_tsc = rte_rdtsc();
 		diff_tsc = cur_tsc - prev_tsc;
@@ -458,6 +467,8 @@ void worker_main_loop(void *data)
 			}
 		}
 	}
+
+	LOG_INFO("main core %u %u exit", lcore_id, cv->core);
 }
 
 const char *ws_json_get_string(cJSON *obj, const char *key)
@@ -517,32 +528,4 @@ void ws_user_func(void *user, void *data, size_t size)
 	}
 	cJSON_Delete(root);
 	dpdk_generate_cmdReply(cmd);
-}
-
-void worker_dump_lcore_queue_conf_single(struct lcore_queue_conf* lqc)
-{
-	LOG_TRACE("  lqc %p", lqc);
-	LOG_HINT("    enabled: %d", lqc->enabled);
-	LOG_HINT("    numa: %d", lqc->numa);
-	LOG_HINT("    core: %d", lqc->txl_id);
-	LOG_HINT("    port: %d", lqc->txp_id);
-	LOG_HINT("    type: %d", lqc->type);
-	LOG_HINT("    queue: %d", lqc->txq_id);
-	LOG_HINT("    n_rx_port: %d", lqc->n_rx_port);
-}
-
-void worker_dump_lcore_queue_conf(struct lcore_queue_conf* lqc, int n)
-{
-	if (n <= 0) {
-		return;
-	}
-
-	LOG_HINT("worker lqc %p %d", lqc, n);
-	for (int i = 0; i < RTE_MAX_LCORE; i++) {
-		struct lcore_queue_conf *q = lqc + i;
-		if (!q->enabled) {
-			continue;
-		}
-		worker_dump_lcore_queue_conf_single(q);
-	}
 }

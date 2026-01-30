@@ -10,11 +10,11 @@
  * ========================= */
 static inline int log_color_enabled(void)
 {
-    if (getenv("NO_COLOR")) {
-        return 0;
+	if (getenv("NO_COLOR")) {
+		return 0;
 	}
 
-    return isatty(fileno(stdout));
+	return isatty(fileno(stdout));
 }
 
 /* =========================
@@ -25,22 +25,25 @@ static inline int log_color_enabled(void)
 #define ANSI_BOLD         "\x1b[1m"
 #define ANSI_DIM          "\x1b[2m"
 
-/* 现代好看配色 */
-#define FG_GRAY           "\x1b[90m"
+/* 普通颜色（暗色调） */
+#define FG_BLACK          "\x1b[30m"
 #define FG_RED            "\x1b[31m"
 #define FG_GREEN          "\x1b[32m"
 #define FG_YELLOW         "\x1b[33m"
 #define FG_BLUE           "\x1b[34m"
 #define FG_MAGENTA        "\x1b[35m"
 #define FG_CYAN           "\x1b[36m"
+#define FG_WHITE          "\x1b[37m"
 
-/* 高亮（Bright） */
+/* 高亮颜色（亮色调） */
+#define FG_BRIGHT_BLACK   "\x1b[90m"   // 或叫 FG_GRAY
 #define FG_BRIGHT_RED     "\x1b[91m"
 #define FG_BRIGHT_GREEN   "\x1b[92m"
 #define FG_BRIGHT_YELLOW  "\x1b[93m"
 #define FG_BRIGHT_BLUE    "\x1b[94m"
 #define FG_BRIGHT_MAGENTA "\x1b[95m"
 #define FG_BRIGHT_CYAN    "\x1b[96m"
+#define FG_BRIGHT_WHITE   "\x1b[97m"   // 这就是 BRIGHT_GRAY
 
 /* Truecolor foreground */
 #define RGB_FG(r,g,b) "\x1b[38;2;" #r ";" #g ";" #b "m"
@@ -87,5 +90,93 @@ static inline int log_color_enabled(void)
 #define C_DARK_YELLOW RGB_FG(220, 190, 120)
 
 #define COLOR(c) (log_color_enabled() ? (c) : "")
+
+#ifdef COLOR_THEME
+
+/* 成功/正向类 - 绿色系 */
+#define C_SUCCESS  RGB_FG(80, 200, 120)    /* 你的 INFO */
+#define C_MINT     RGB_FG(100, 220, 180)   /* 薄荷绿 */
+#define C_LIME     RGB_FG(160, 220, 100)   /* 青柠绿 */
+
+/* 警告类 - 橙黄色系 */
+#define C_WARN     RGB_FG(255, 190, 70)    /* 你的 WARN */
+#define C_AMBER    RGB_FG(255, 170, 90)    /* 琥珀色 */
+#define C_GOLD     RGB_FG(255, 200, 100)   /* 金色 */
+#define C_PEACH    RGB_FG(255, 180, 130)   /* 桃色 */
+
+/* 错误/重要类 - 红色系 */
+#define C_ERROR    RGB_FG(255, 90, 90)     /* 你的 ERR */
+#define C_CORAL    RGB_FG(255, 120, 100)   /* 珊瑚红 */
+#define C_ROSE     RGB_FG(255, 110, 130)   /* 玫瑰红 */
+
+/* 信息/冷静类 - 蓝色系 */
+#define C_DEBUG    RGB_FG(120, 180, 255)   /* 你的 DEBUG */
+#define C_SKY      RGB_FG(100, 200, 255)   /* 天空蓝 */
+#define C_OCEAN    RGB_FG(80, 160, 220)    /* 海洋蓝 */
+#define C_STEEL    RGB_FG(130, 160, 200)   /* 钢蓝色 */
+
+/* 特殊/辅助类 - 紫/粉色系 */
+#define C_TRACE    RGB_FG(170, 140, 255)   /* 你的 TRACE */
+#define C_VIOLET   RGB_FG(180, 120, 240)   /* 紫罗兰 */
+#define C_MAUVE    RGB_FG(200, 150, 220)   /* 淡紫色 */
+#define C_PINK     RGB_FG(255, 140, 180)   /* 粉红色 */
+
+/* 中性类 - 灰/青色系 */
+#define C_SLATE    RGB_FG(140, 160, 180)   /* 板岩灰 */
+#define C_TEAL     RGB_FG(100, 200, 200)   /* 青色 */
+#define C_AQUA     RGB_FG(120, 220, 220)   /* 水绿色 */
+#define C_SILVER   RGB_FG(180, 190, 200)   /* 银色 */
+
+// 方案 1：Pastel（柔和）风格
+#define C_INFO     RGB_FG(120, 220, 160)   /* 薄荷绿 */
+#define C_WARN     RGB_FG(255, 200, 120)   /* 柔和金 */
+#define C_ERROR    RGB_FG(255, 130, 130)   /* 柔和红 */
+#define C_DEBUG    RGB_FG(140, 200, 255)   /* 柔和蓝 */
+#define C_TRACE    RGB_FG(200, 160, 255)   /* 柔和紫 */
+#define C_META     RGB_FG(160, 170, 190)   /* 柔和灰 */
+// 方案 2：Vibrant（鲜明）风格
+#define C_INFO     RGB_FG(60, 220, 100)    /* 鲜绿 */
+#define C_WARN     RGB_FG(255, 180, 50)    /* 鲜橙 */
+#define C_ERROR    RGB_FG(255, 70, 90)     /* 鲜红 */
+#define C_DEBUG    RGB_FG(80, 180, 255)    /* 鲜蓝 */
+#define C_TRACE    RGB_FG(160, 100, 255)   /* 鲜紫 */
+#define C_META     RGB_FG(120, 140, 160)   /* 钢灰 */
+// 方案 3：Warm（暖色）风格
+#define C_INFO     RGB_FG(180, 220, 140)   /* 黄绿 */
+#define C_WARN     RGB_FG(255, 200, 100)   /* 金黄 */
+#define C_ERROR    RGB_FG(255, 110, 100)   /* 珊瑚 */
+#define C_DEBUG    RGB_FG(200, 180, 220)   /* 淡紫 */
+#define C_TRACE    RGB_FG(255, 160, 180)   /* 粉色 */
+#define C_META     RGB_FG(200, 190, 180)   /* 米色 */
+// 方案 4：Cool（冷色）风格
+#define C_INFO     RGB_FG(100, 220, 180)   /* 青绿 */
+#define C_WARN     RGB_FG(200, 220, 140)   /* 冷黄 */
+#define C_ERROR    RGB_FG(255, 120, 140)   /* 玫瑰 */
+#define C_DEBUG    RGB_FG(100, 180, 240)   /* 天空蓝 */
+#define C_TRACE    RGB_FG(140, 160, 255)   /* 淡蓝紫 */
+#define C_META     RGB_FG(140, 160, 180)   /* 冷灰 */
+
+#endif
+
+/* Solarized 风格 */
+#define SOL_GREEN   RGB_FG(133, 153, 0)
+#define SOL_YELLOW  RGB_FG(181, 137, 0)
+#define SOL_RED     RGB_FG(220, 50, 47)
+#define SOL_BLUE    RGB_FG(38, 139, 210)
+#define SOL_VIOLET  RGB_FG(108, 113, 196)
+
+/* Nord 风格 */
+#define NORD_GREEN  RGB_FG(163, 190, 140)
+#define NORD_YELLOW RGB_FG(235, 203, 139)
+#define NORD_RED    RGB_FG(191, 97, 106)
+#define NORD_BLUE   RGB_FG(136, 192, 208)
+#define NORD_PURPLE RGB_FG(180, 142, 173)
+
+/* Dracula 风格 */
+#define DRAC_GREEN  RGB_FG(80, 250, 123)
+#define DRAC_YELLOW RGB_FG(241, 250, 140)
+#define DRAC_RED    RGB_FG(255, 85, 85)
+#define DRAC_BLUE   RGB_FG(139, 233, 253)
+#define DRAC_PURPLE RGB_FG(189, 147, 249)
 
 #endif

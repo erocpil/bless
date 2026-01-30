@@ -20,7 +20,5 @@ struct lcore_queue_conf {
 void worker_loop(void *conf);
 void worker_main_loop(void *conf);
 void ws_user_func(void *user, void *data, size_t size);
-void worker_dump_lcore_queue_conf(struct lcore_queue_conf* lqc, int n);
-void worker_dump_lcore_queue_conf_single(struct lcore_queue_conf* lqc);
 
 #endif

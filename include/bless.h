@@ -173,7 +173,6 @@ struct bless_conf {
 	// struct lcore_queue_conf (*lcore_queue_conf)[RTE_MAX_LCORE];
 	struct base *base;
 	uint32_t enabled_port_mask;
-	struct lcore_queue_conf *qconf;
 	struct port_statistics **stats;
 	uint32_t *dst_ports;
 	uint64_t timer_period;
