@@ -50,14 +50,22 @@ struct server_options_cfg {
 	struct civet_kv kv[SERVER_OPTS_MAX];
 	/* key,value,...,NULL */
 	const char *civet_opts[(SERVER_OPTS_MAX << 1) + 1];
+};
+
+#define SERVER_SERVICE_HTTP_MAX 16
+#define SERVER_SERVICE_HTTP_LEN_MAX 128
+struct server_service {
 	char *websocket_uri;
 	/* TODO */
-	char *http;
+	uint16_t n_http;
+	char http[SERVER_SERVICE_HTTP_MAX][SERVER_SERVICE_HTTP_LEN_MAX];
 };
 
 struct server {
-	struct server_options_cfg cfg;
+	struct mg_context *ctx;
 	struct ws_user_data wsud;
+	struct server_service svc;
+	struct server_options_cfg cfg;
 };
 
 /* YAML value -> cfg */
@@ -78,8 +86,8 @@ struct server {
 void server_options_set_defaults(struct server_options_cfg *cfg);
 int server_options_from_yaml(struct server_options_cfg *cfg, void *yaml_node);
 size_t build_civet_options(const struct server_options_cfg *cfg, struct civet_kv *out, size_t max);
-void server_show_options_cfg(struct server_options_cfg *cfg);
-void server_show_options_cfg_format(struct server_options_cfg *cfg, char *pref);
+void server_show(struct server* srv);
+void server_show_format(struct server* srv, char *pref);
 
 struct mg_context *ws_server_start(void*);
 int ws_server_stop(struct mg_context *ctx);

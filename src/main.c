@@ -946,11 +946,8 @@ void init_system()
 		LOG_INFO("Daemonized");
 	}
 
-	struct server *server = (struct server*)malloc(sizeof(struct server));
-	if (!server) {
-		rte_exit(EXIT_FAILURE, "malloc(service)\n");
-	}
-	server->wsud.conf = (void*)&cfg->srvcfg;
+	struct server *server = &system->cfg.server;
+	server->wsud.conf = (void*)server;
 	server->wsud.data = (void*)&base;
 	server->wsud.func = ws_user_func;
 
@@ -958,12 +955,10 @@ void init_system()
 	if (!ctx) {
 		rte_exit(EXIT_FAILURE, "ws_server_start failed\n");
 	}
-	server_show_options_cfg(&cfg->srvcfg);
-	system->ctx = ctx;
+	system->cfg.server.ctx = ctx;
 	base.system = system;
 	LOG_INFO("Websocket Server Started");
-	system_show_cfg(&system->cfg);
-	getchar();
+	system_show(system);
 }
 
 void init_config()
@@ -1436,7 +1431,7 @@ void quit()
 	/* clean up the EAL */
 	rte_eal_cleanup();
 
-	ws_server_stop(base.system->ctx);
+	ws_server_stop(base.system->cfg.server.ctx);
 
 	config_exit(base.config->root);
 

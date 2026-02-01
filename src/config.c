@@ -600,27 +600,30 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 	}
 	printf("system theme: %s\n", cfg->theme);
 
-	if (config_parse_server(system_node, &cfg->srvcfg) < 0) {
+	if (config_parse_server(system_node, &cfg->server) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
 	}
 
 	return 0;
 }
 
-int config_parse_server(Node *root, struct server_options_cfg *cfg)
+int config_parse_server(Node *root, struct server *srv)
 {
-	/* 1. defaults */
-	server_options_set_defaults(cfg);
-
-	if (!cfg) {
+	if (!srv) {
+		printf("NULL server\n");
 		return -1;
 	}
+
+	/* 1. defaults */
+	server_options_set_defaults(&srv->cfg);
+
+	struct server_options_cfg *cfg = &srv->cfg;
 
 	char *path = "server";
 	Node *node = find_by_path(root, path);
 	if (!node) {
 		printf("No server found\n");
-		return 0;
+		return -1;
 	}
 
 	/* 2. YAML override */
@@ -670,6 +673,7 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 	}
 #endif
 
+	struct server_service *svc = &srv->svc;
 	path = "server.service";
 	node = find_by_path(root, path);
 	if (node) {
@@ -679,22 +683,29 @@ int config_parse_server(Node *root, struct server_options_cfg *cfg)
 			printf("%s %s\n", path, node->value);
 			int len = strlen(node->value);
 			if (len > 0) {
-				cfg->websocket_uri = (char*)malloc(len + 1);
-				strncpy(cfg->websocket_uri, node->value, len + 1);
+				svc->websocket_uri = (char*)malloc(len + 1);
+				strncpy(svc->websocket_uri, node->value, len + 1);
 			} else {
-				cfg->websocket_uri = NULL;
+				svc->websocket_uri = NULL;
 			}
 		}
 		path = "server.service.http";
 		node = find_by_path(root, path);
 		if (node && NODE_SEQUENCE == node->type) {
-			// TODO
-#if 0
+			int i = 0;
 			printf("%s:\n", path);
-			for (Node *n = node->child; n; n = n->next) {
-				printf("  %s\n", n->value);
+			for (Node *n = node->child; n && i < SERVER_SERVICE_HTTP_MAX;
+					n = n->next, i++) {
+				printf("%d  %s\n", i, n->value);
+				int len = strlen(n->value);
+				if (len > 0 && len < SERVER_SERVICE_HTTP_LEN_MAX) {
+					strncpy(svc->http[i], n->value, SERVER_SERVICE_HTTP_LEN_MAX);
+					svc->n_http++;
+				} else {
+					printf("Server service length error\n");
+					return -1;
+				}
 			}
-#endif
 		}
 	} else {
 		printf("No server service found, use default\n");

@@ -2845,13 +2845,13 @@ struct mg_context * ws_server_start(void *data)
 	mg_init_library(0);
 
 	struct ws_user_data *wsud = (struct ws_user_data*)data;
-	struct server_options_cfg *cfg = wsud->conf;
+	struct server *srv = wsud->conf;
 
 	struct mg_callbacks cb = {0};
 	struct mg_init_data init = {
 		.callbacks = &cb,
 		.user_data = data,
-		.configuration_options = cfg->civet_opts[0] ? cfg->civet_opts : SERVER_OPTIONS,
+		.configuration_options = srv->cfg.civet_opts[0] ? srv->cfg.civet_opts : SERVER_OPTIONS,
 	};
 
 	struct mg_context *ctx = mg_start2(&init, NULL);
@@ -2861,7 +2861,7 @@ struct mg_context * ws_server_start(void *data)
 	}
 
 	mg_set_websocket_handler_with_subprotocols(ctx,
-			cfg->websocket_uri ? cfg->websocket_uri : WS_URL,
+			srv->svc.websocket_uri ? srv->svc.websocket_uri : WS_URL,
 			&wsprot,
 			ws_connect_handler,
 			ws_ready_handler,
@@ -2914,17 +2914,47 @@ size_t build_civet_options(const struct server_options_cfg *cfg, struct civet_kv
 	return i;
 }
 
+void server_show_options_cfg_format(struct server_options_cfg *cfg, char *pref)
+{
+	LOG_HINT("%soptions %p", pref, cfg);
+	for (int i = 0; i < (SERVER_OPTS_MAX << 1) && cfg->civet_opts[i * 2]; i++) {
+		LOG_PATH("%s  %s: %s", pref, cfg->civet_opts[i * 2], cfg->civet_opts[i * 2 + 1]);
+	}
+}
+
 void server_show_options_cfg(struct server_options_cfg *cfg)
 {
 	server_show_options_cfg_format(cfg, "");
 }
 
-void server_show_options_cfg_format(struct server_options_cfg *cfg, char *pref)
+void server_show_service_format(struct server_service *svc, char *pref)
 {
-	LOG_HINT("%sserver options cfg %p", pref, cfg);
-	for (int i = 0; i < (SERVER_OPTS_MAX << 1) && cfg->civet_opts[i * 2]; i++) {
-		LOG_PATH("%s  %s: %s", pref, cfg->civet_opts[i * 2], cfg->civet_opts[i * 2 + 1]);
+	LOG_HINT("%sservice %p", pref, svc);
+	LOG_PATH("%s  websocket url    %s", pref, svc->websocket_uri);
+	LOG_HINT("%s  http", pref);
+	for (int i = 0; i < svc->n_http; i++) {
+		LOG_PATH("%s    %s", pref, svc->http[i]);
 	}
-	LOG_HINT("%sserver service cfg %p", pref, cfg);
-	LOG_PATH("%s  websocket uri: %s", pref, cfg->websocket_uri);
+}
+
+void server_show_service(struct server_service *svc)
+{
+	server_show_service_format(svc, "");
+}
+
+void server_show_format(struct server* srv, char *pref)
+{
+	LOG_INFO("%sserver   %p", pref, srv);
+	LOG_PATH("%sctx      %p", pref, srv->ctx);
+	LOG_HINT("%swsud     %p", pref, &srv->wsud);
+	LOG_PATH("%s  conf   %p", pref, &srv->wsud.conf);
+	LOG_PATH("%s  data   %p", pref, &srv->wsud.data);
+	LOG_PATH("%s  func   %p", pref, &srv->wsud.func);
+	server_show_service_format(&srv->svc, pref);
+	server_show_options_cfg_format(&srv->cfg, pref);
+}
+
+void server_show(struct server* srv)
+{
+	server_show_format(srv, "");
 }

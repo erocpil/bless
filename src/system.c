@@ -1,5 +1,6 @@
 #include "system.h"
 #include "log.h"
+#include "server.h"
 #include <string.h>
 
 void system_set_defaults(struct system_cfg *cfg)
@@ -59,13 +60,13 @@ void system_dump_status(struct system_status *sysstat)
 	system_print_cpuset(&sysstat->cpuset, CPU_SETSIZE);
 }
 
-void system_show_cfg(struct system_cfg *cfg)
+void system_show(struct system *sys)
 {
-	if (!cfg) {
+	if (!sys) {
 		return;
 	}
-	LOG_HINT("system cfg %p", cfg);
-	LOG_PATH("  daemonize %d", cfg->daemonize);
-	LOG_PATH("  theme     %s", cfg->theme);
-	server_show_options_cfg_format(&cfg->srvcfg, "  ");
+	LOG_HINT("system %p", sys);
+	LOG_PATH("  daemonize %d", sys->cfg.daemonize);
+	LOG_PATH("  theme     %s", sys->cfg.theme);
+	server_show_format(&sys->cfg.server, "   ");
 }

@@ -226,7 +226,7 @@ int config_check_file_map(struct config_file_map *cfm);
 Node *config_init(char *f);
 int config_exit(Node *root);
 int config_parse_system(Node *root, struct system_cfg *cfg);
-int config_parse_server(Node *root, struct server_options_cfg *cfg);
+int config_parse_server(Node *root, struct server *server);
 int config_parse_dpdk(Node *root, int *targc, char ***targv);
 int config_parse_generic(Node *node, int *targc, char ***targv, int i, const char *prefix);
 Cnode *config_parse_bless(Node *root);
