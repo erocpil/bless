@@ -587,6 +587,19 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 	}
 	printf("system daemonize: %s\n", cfg->daemonize ? "yes" : "no");
 
+	path = "theme";
+	node = find_by_path(system_node, path);
+	if (node) {
+		if (NODE_SCALAR == node->type && node->value && strlen(node->value) < 16) {
+			strncpy(cfg->theme, node->value, 16);
+		} else {
+			rte_exit(EXIT_FAILURE, "Invalid server theme: %s\n", node->value);
+		}
+	} else {
+		strncpy(cfg->theme, "default", strlen("default") + 1);
+	}
+	printf("system theme: %s\n", cfg->theme);
+
 	if (config_parse_server(system_node, &cfg->srvcfg) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
 	}

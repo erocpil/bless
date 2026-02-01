@@ -117,6 +117,32 @@ static inline int log_cpu_id(void)
 		fprintf(fp, "%s\n", COLOR(ANSI_RESET));                         \
 	} while (0)
 
+#define LOG_BASE_NNL(fp, level, color, fmt, ...)                            \
+	do {                                                                \
+		fprintf(fp, "%s", COLOR(C_META));                               \
+		fprintf(fp, "[ ");                                              \
+		if (LOG_ENABLE_TIMESTAMP) {                                     \
+			log_print_timestamp(fp);                                    \
+			fprintf(fp, " ");                                           \
+		}                                                               \
+		if (LOG_ENABLE_THREAD) {                                        \
+			fprintf(fp, "T%ld ", log_thread_id());                      \
+		}                                                               \
+		if (LOG_ENABLE_CPU) {                                           \
+			fprintf(fp, "C%d ", log_cpu_id());                          \
+		}                                                               \
+		fprintf(fp, "]");                                               \
+		\
+		fprintf(fp, "%s[ %s ]%s ",                                      \
+				COLOR(ANSI_BOLD),                                       \
+				level,                                                  \
+				COLOR(ANSI_RESET));                                     \
+		\
+		fprintf(fp, "%s", COLOR(color));                                \
+		fprintf(fp, fmt, ##__VA_ARGS__);                                \
+		fprintf(fp, "%s", COLOR(ANSI_RESET));                         \
+	} while (0)
+
 /* =========================
  * 对外接口
  * ========================= */
@@ -125,7 +151,7 @@ static inline int log_cpu_id(void)
 		struct timespec ts;                                     \
 		clock_gettime(CLOCK_REALTIME, &ts);                     \
 		fprintf(stdout, "%s[ %ld.%06ld %s:%d ]%s ",             \
-				COLOR(C_VALUE    C_LATENCY),                               \
+				COLOR(C_UI_VALUE    C_LATENCY),                    \
 				ts.tv_sec, ts.tv_nsec / 1000,                   \
 				__func__, __LINE__,                             \
 				COLOR(ANSI_RESET));                             \
@@ -135,32 +161,53 @@ static inline int log_cpu_id(void)
 
 #define _E(...)                                                 \
 	do {                                                        \
-		fprintf(stdout, "%s", COLOR(FG_BRIGHT_MAGENTA));                 \
+		fprintf(stdout, "%s", COLOR(FG_BRIGHT_MAGENTA));        \
 		fprintf(stdout, "" __VA_ARGS__);                        \
 		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));             \
 	} while (0)
 
-#define _(...)                                                 \
+#define _(...)                                                  \
 	do {                                                        \
-		fprintf(stdout, "%s", COLOR(C_RATE));                 \
+		fprintf(stdout, "%s", COLOR(C_RATE));                   \
 		fprintf(stdout, "" __VA_ARGS__);                        \
 		fprintf(stdout, "%s\n", COLOR(ANSI_RESET));             \
 	} while (0)
+
+typedef struct {
+    const char *name;
+    const char *green;
+    const char *yellow;
+    const char *red;
+    const char *blue;
+    const char *purple;
+    const char *grey;
+} theme_config;
+
+extern const theme_config *g_current_theme;
+
+#define LOG_META(...) \
+	LOG_BASE(stdout, "META", C_SILVER, __VA_ARGS__)
+
+#define LOG_META_NNL(...) \
+	LOG_BASE_NNL(stdout, "META", C_SILVER, __VA_ARGS__)
+
+#define LOG_TRACE(fmt, ...)                                     \
+	LOG_BASE(stdout, "TRAC", g_current_theme->grey, fmt, ##__VA_ARGS__)
 
 #define LOG_HINT(fmt, ...)                                      \
-	LOG_BASE(stdout, "HINT", C_HINT, fmt, ##__VA_ARGS__)
+	LOG_BASE(stdout, "HINT", g_current_theme->green, fmt, ##__VA_ARGS__)
 
 #define LOG_PATH(fmt, ...)                                      \
-	LOG_BASE(stdout, "PATH", C_PATH, fmt, ##__VA_ARGS__)
+	LOG_BASE(stdout, "PATH", g_current_theme->purple, fmt, ##__VA_ARGS__)
 
 #define LOG_INFO(fmt, ...)                                      \
-	LOG_BASE(stdout, "INFO", C_INFO, fmt, ##__VA_ARGS__)
+	LOG_BASE(stdout, "INFO", g_current_theme->blue, fmt, ##__VA_ARGS__)
 
 #define LOG_WARN(fmt, ...)                                      \
-	LOG_BASE(stderr, "WARN", C_WARN, fmt, ##__VA_ARGS__)
+	LOG_BASE(stderr, "WARN", g_current_theme->yellow, fmt, ##__VA_ARGS__)
 
 #define LOG_ERR(fmt, ...)                                       \
-	LOG_BASE(stderr, "ERRR", C_ERR, fmt, ##__VA_ARGS__)
+	LOG_BASE(stderr, "ERRR", g_current_theme->red, fmt, ##__VA_ARGS__)
 
 #if LOG_ENABLE_DEBUG
 #define LOG_DEBUG(fmt, ...)                                     \
@@ -169,11 +216,8 @@ static inline int log_cpu_id(void)
 #define LOG_DEBUG(fmt, ...) ((void)0)
 #endif
 
-#if LOG_ENABLE_TRACE
-#define LOG_TRACE(fmt, ...)                                     \
-	LOG_BASE(stdout, "TRAC", C_TRACE, fmt, ##__VA_ARGS__)
-#else
-#define LOG_TRACE(fmt, ...) ((void)0)
-#endif
+void log_init(const char *theme);
+void log_show_theme();
+void log_show_all_theme(void);
 
 #endif /* LOG_H */

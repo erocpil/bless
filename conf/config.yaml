@@ -118,6 +118,7 @@ bless:
 
 system:
   daemonize: true
+  theme: default # Dark, Warm, Cool, Vibrant, Pastel, Accent-UI, Solarized, Nord, Dracula
   server:
     # civetweb service: websocket and http
     service:

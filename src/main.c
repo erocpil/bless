@@ -16,30 +16,6 @@ void print_version(void)
 	_(C_DEBUG "  Build Type : " FG_CYAN "%s %s", BUILD_TYPE, STATIC ? "static" : "shared");
 	_(C_TRACE "  Build Host : " FG_MAGENTA "%s", BUILD_HOST);
 	_(C_HINT "  Build Time : " FG_BRIGHT_BLACK "%s\n" ANSI_RESET, BUILD_TIME);
-
-
-	/* Solarized 风格 */
-	_("Solarized");
-	_(SOL_GREEN "green");
-	_(SOL_YELLOW "yellow");
-	_(SOL_RED "red");
-	_(SOL_BLUE "blue");
-	_(SOL_VIOLET "violet");
-
-	_("Nord");
-	_(NORD_GREEN "green");
-	_(NORD_YELLOW "yellow");
-	_(NORD_RED "red");
-	_(NORD_BLUE "blue");
-	_(NORD_PURPLE "purple");
-
-	_("Dracula");
-	_(DRAC_GREEN "green");
-	_(DRAC_YELLOW "yellow");
-	_(DRAC_RED "red");
-	_(DRAC_BLUE "blue");
-	_(DRAC_PURPLE "purple");
-
 }
 
 struct base base;
@@ -961,6 +937,10 @@ void init_system()
 	if (config_parse_system(base.config->root, cfg) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
 	}
+
+	log_init(system->cfg.theme);
+	log_show_all_theme();
+
 	if (cfg->daemonize) {
 		daemon(1, 1);
 		LOG_INFO("Daemonized");
@@ -983,6 +963,7 @@ void init_system()
 	base.system = system;
 	LOG_INFO("Websocket Server Started");
 	system_show_cfg(&system->cfg);
+	getchar();
 }
 
 void init_config()

@@ -10,6 +10,7 @@
 
 struct system_cfg {
 	uint8_t daemonize;
+	char theme[16];
 	struct server_options_cfg srvcfg;
 };
 

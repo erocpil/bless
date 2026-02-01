@@ -16,6 +16,7 @@ static void system_print_cpuset(const cpu_set_t *set, int max_cpus)
 	int first = 1;
 	int start = -1;
 
+	LOG_META_NNL("  cpuset  ");
 	for (int cpu = 0; cpu <= max_cpus; cpu++) {
 		int is_set = (cpu < max_cpus) && CPU_ISSET(cpu, set);
 
@@ -43,19 +44,18 @@ static void system_print_cpuset(const cpu_set_t *set, int max_cpus)
 	if (first) {
 		printf("(empty)");
 	}
-
 	printf("\n");
 }
 
 void system_dump_status(struct system_status *sysstat)
 {
-	printf("\nSystem status %p:\n", sysstat);
+	printf("\n");
+	LOG_INFO("System status %p   ", sysstat);
 	if (!sysstat) {
 		return;
 	}
-	printf("  ppid    %u\n", sysstat->ppid);
-	printf("  pid     %u\n", sysstat->pid);
-	printf("  cpuset  ");
+	LOG_PATH("  ppid    %u", sysstat->ppid);
+	LOG_PATH("  pid     %u", sysstat->pid);
 	system_print_cpuset(&sysstat->cpuset, CPU_SETSIZE);
 }
 
@@ -66,5 +66,6 @@ void system_show_cfg(struct system_cfg *cfg)
 	}
 	LOG_HINT("system cfg %p", cfg);
 	LOG_PATH("  daemonize %d", cfg->daemonize);
+	LOG_PATH("  theme     %s", cfg->theme);
 	server_show_options_cfg_format(&cfg->srvcfg, "  ");
 }
