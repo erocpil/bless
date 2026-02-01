@@ -53,7 +53,7 @@ pkg-config --libs libdpdk
 pkg-config --libs --static libdpdk
 ```
 
-### Ubuntu / Debian
+#### Ubuntu / Debian
 ```
 sudo apt install \
     clang \
@@ -62,7 +62,7 @@ sudo apt install \
     autoconf automake libtool
 ```
 
-### Fedora / RHEL
+#### Fedora / RHEL
 ```
 sudo dnf install \
     clang \
@@ -71,7 +71,7 @@ sudo dnf install \
     autoconf automake libtool
 ```
 
-## Clone the Source Code
+### Clone the Source Code
 
 BLESS uses git submodules to manage third-party libraries.
 
@@ -85,7 +85,7 @@ If you have already cloned the repository without submodules, run:
 git submodule update --init --recursive
 ```
 
-Third-Party Libraries Only
+### Third-Party Libraries Only
 
 To fetch and build third-party libraries only:
 ```
@@ -94,11 +94,14 @@ make third_party
 
 This command will:
 
-Initialize and update all submodules
+- Initialize and update all submodules
 
-Build the required third-party libraries
+- Build the required third-party libraries
 
-Generate the third_party/third_party.mk file for use in the main project
+- Generate the third_party/third_party.mk file for use in the main project
+
+
+---
 
 ## Build BLESS
 ### Default Build
@@ -125,6 +128,8 @@ Example:
 make BUILD=release STATIC=1 V=1 -j
 ```
 
+---
+
 ## Installation
 
 To install BLESS:
@@ -149,9 +154,11 @@ Installation will copy files to the following directories:
 
 - bin/: The bless executable
 - lib/: Required runtime libraries
-- conf/: Example configuration files
-- www/: Web-related resources
 - include/bless/: Public headers
+- conf/: Example configuration files
+- www/: Web-related resources (if any)
+
+---
 
 ## Notes
 
@@ -161,13 +168,17 @@ All build parameters are recorded in the binary's build info for traceability.
 
 It is recommended to use clang for better diagnostics.
 
+
+---
+
 ## License
 
 MIT License. See the LICENSE file for details.
 
+
 ---
 
-### Key Changes / Enhancements:
+## Key Changes / Enhancements:
 
 1. **Clear Explanation of the Project Layout**:
    - I added a short explanation of the project layout for first-time users, so they know what each folder is used for.

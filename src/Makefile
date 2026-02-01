@@ -174,22 +174,27 @@ install: all
 		$(DESTDIR)$(PREFIX)/lib \
 		$(DESTDIR)$(PREFIX)/conf \
 		$(DESTDIR)$(PREFIX)/www \
-		$(DESTDIR)$(PREFIX)/www/log \
 		$(DESTDIR)$(PREFIX)/include/$(APP)
 
 	$(Q)install -m 0755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/
+	$(Q)install -m 0644 ../include/*.h $(DESTDIR)$(PREFIX)/include/$(APP)/
+	$(Q)install -m 0644 ../conf/config.yaml.template $(DESTDIR)$(PREFIX)/conf/
 
 	@if ls ../lib/* >/dev/null 2>&1; then \
 		echo "  INSTALL libs"; \
-		install -m 0755 ../lib/*.so* $(DESTDIR)$(PREFIX)/lib/ 2>/dev/null; \
-		install -m 0644 ../lib/*.a   $(DESTDIR)$(PREFIX)/lib/ 2>/dev/null; \
+		$(Q)install -m 0755 ../lib/*.so* $(DESTDIR)$(PREFIX)/lib/ 2>/dev/null; \
+		$(Q)install -m 0644 ../lib/*.a   $(DESTDIR)$(PREFIX)/lib/ 2>/dev/null; \
 	fi
 
-	$(Q)install -m 0644 ../www/index.html $(DESTDIR)$(PREFIX)/www/
+	@if ls ../www/index.html > /dev/null 2>&1; then \
+		echo "  INSTALL www/index.html"; \
+		$(Q)install -m 0644 ../www/index.html $(DESTDIR)$(PREFIX)/www/; \
+	fi
 
 uninstall:
 	$(Q)rm -f $(DESTDIR)$(PREFIX)/bin/$(APP)
 	$(Q)rm -rf $(DESTDIR)$(PREFIX)/include/$(APP)
+	$(Q)rm -rf $(DESTDIR)$(PREFIX)/conf/config.yaml.template
 
 Test:
 	$(info >>>CFLAGS<<<)

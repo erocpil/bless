@@ -1,0 +1,136 @@
+# build/bless --main-lcore 0 -c 0x7 -n 4 \
+# -- -p 0x3 -a1 -i1 -u1 -t1 -b512 -s-1 \
+# --src-ip=192.168.0.1+-99 --dst-ip=172.16.0.1+10 \
+# --dst-mac=10:70:fd:af:21:10 \
+# --src-port=8000+100 --dst-port=9000+-100 \
+# --vxlan=1.1.1.1,2.2.2.2,1234+6,50 \
+# --erroneous=...
+
+dpdk:
+  main-lcore: 16
+  l: 0-16
+  n: 4
+  lcores: null
+  socket-mem: null
+  # ls -l /sys/class/net/*/device
+  # !!! the order here is not identical to dpdk's RTE_ETH_FOREACH_DEV()
+  allow: [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
+  block: null # [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
+  # NOTE: block all ports and set p and q to 1
+  vdev: null # net_pcap0,tx_pcap=tx.pcap
+  proc-type: primary
+  # --log-level=pmd.net.af_xdp:debug
+  log-level: info
+  trace: regex-match
+  trace-dir: /tmp
+  trace-bufsz: 100M
+  trace-mode: discard
+  huge-dir: /dev/hugepages
+  # bless
+  file-prefix: null
+
+injector:
+  # ports
+  p: 0x6
+  # queues on each port
+  q: 2
+  # Promiscuous
+  P:
+  T: 1
+  no-mac-updating:
+  auto-start: true
+  # Not used
+  portmap: null # (0, 1)
+  # tx/rx batch
+  batch: 32
+  # delay us after each batch
+  batch-delay-us: 0
+  # one of rx-only, rx-only, fwd
+  mode: tx-only
+  # per-lcore
+  num: -1
+  arp: 1
+  icmp: 1
+  tcp: 1
+  udp: 1
+
+bless:
+  hw-offload: [ ipv4, udp, tcp ]
+  ether:
+    # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    mtu: 0
+    # copy payload to mbuf, default false
+    copy-payload: true
+    dst: 10:70:fd:af:21:10
+    src: # 10:70:fd:af:21:02
+    type:
+      arp:
+        src: [ 10.0.0.1 ]
+        dst: [ 20.0.0.2, 30.0.0.3 ]
+      ipv4:
+        src: 172.16.1.1+2
+        dst: [ 192.168.0.1, 192.168.1.1 ]
+        icmp:
+          ident: [ 0x1234, 0xface ]
+          payload: "injector: icmp payload."
+        tcp:
+          src: [ 80, 808, 8080, 8888 ]
+          dst: 9000+10
+          payload: "injector: tcp payload."
+        udp:
+          src: 8000+-10
+          dst: [ 10000, 10001, 10003 ]
+          payload: "injector: udp payload."
+        # TODO https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+        proto: [ 0, 0x8C-0xFF ]
+  vxlan:
+    enable: false
+    ratio: 100
+    ether:
+      dst: 10:70:fd:af:21:10
+      src:
+      type:
+        ipv4:
+          src: [ 172.31.30.246:2619682 ]
+          # not supported
+          src-range: 0
+          dst: [ 4.0.0.1, 5.0.0.1, 6.0.0.1 ]
+          # not supported
+          dst-range: -5
+          udp:
+            src: [ 4000, 4001, 4002 ]
+            # not supported
+            src-range: 123
+            dst: 4789
+            dst-range: 10
+  erroneous:
+    ratio: 0
+    class:
+      mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
+      arp: [ src ] # 3
+      ipv4: [ version, ihl, dscp, ecn, total_length, id, flags, fragment_offset, ttl, protocol, cksum, ipsec ]
+      #       4        5    6     7    8             9   10     11               12   13        14     15
+      icmp: [ type ] # 16
+      tcp: [ syn_flood, data_off, flags, window, cksum ]
+      #      17         18        19     20      21
+      udp: [ len, cksum, vxlan ] # 22, 23, 24
+      other: [ toa ] # 25
+
+system:
+  daemonize: true
+  server:
+    # civetweb service: websocket and http
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: 8000
+      num_threads: 4
+      enable_keep_alive: yes
+      request_timeout_ms: 2000
+      document_root: /root/src/bless/www
+      access_log_file: /root/src/bless/www/log/access.log
+      error_log_file: /root/src/bless/www/log/error.log
