@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <string.h>
 
+/* TODO more offloads */
 static struct offload_table_item offload_table[] = {
 	{ "ipv4", OF_IPV4 },
 	{ "ipv6", OF_IPV6 },
@@ -55,6 +56,7 @@ Node *parse_mapping(yaml_parser_t *parser)
 
 	while (1) {
 		if (!yaml_parser_parse(parser, &event)) {
+			/* FIXME free, log */
 			return mapping;
 		}
 		if (event.type == YAML_MAPPING_END_EVENT) {
@@ -62,13 +64,15 @@ Node *parse_mapping(yaml_parser_t *parser)
 			break;
 		}
 		if (event.type == YAML_SCALAR_EVENT) {
-			char *key = strdup((char *)event.data.scalar.value);
-			yaml_event_delete(&event);
 			Node *val = parse_node(parser);
 			if (val) {
-				val->key = key;
+				val->key = strdup((char *)event.data.scalar.value);
 				add_child(mapping, val);
+			} else {
+				/* TODO */
+				LOG_WARN("Null value detected");
 			}
+			yaml_event_delete(&event);
 		} else {
 			yaml_event_delete(&event);
 		}
@@ -91,7 +95,8 @@ Node *parse_sequence(yaml_parser_t *parser)
 			break;
 		}
 		if (event.type == YAML_SCALAR_EVENT) {
-			Node *child = create_node(NULL, (char *)event.data.scalar.value, NODE_SCALAR);
+			Node *child = create_node(NULL, (char *)event.data.scalar.value,
+					NODE_SCALAR);
 			add_child(sequence, child);
 			yaml_event_delete(&event);
 		} else if (event.type == YAML_MAPPING_START_EVENT) {
@@ -141,7 +146,7 @@ Node *parse_yaml(const char *filename)
 {
 	FILE *fh = fopen(filename, "rb");
 	if (!fh) {
-		perror("fopen");
+		LOG_ERR("fopen(%s) %s", filename, strerror(errno));
 		return NULL;
 	}
 
@@ -152,6 +157,7 @@ Node *parse_yaml(const char *filename)
 		fclose(fh);
 		return NULL;
 	}
+
 	yaml_parser_set_input_file(&parser, fh);
 
 	if (!yaml_parser_parse(&parser, &event)) {
@@ -183,7 +189,8 @@ Node *parse_yaml(const char *filename)
 	return root;
 }
 
-void free_tree(Node *node) {
+void free_tree(Node *node)
+{
 	if (!node) {
 		return;
 	}
@@ -265,7 +272,6 @@ void print_post(Node *node, int depth, void *userdata)
 	}
 }
 
-// 路径解析：例如 "dpdk[1].app"
 Node *find_by_path(Node *root, const char *path)
 {
 	char *copy = strdup(path);
@@ -284,12 +290,13 @@ Node *find_by_path(Node *root, const char *path)
 			}
 
 			if (!child) {
+				LOG_ERR("no child found from key %s", key);
 				free(copy);
 				return NULL;
 			}
 			cur = child;
 
-			// 如果是数组，取索引
+			// get index for array
 			if (idx >= 0 && cur->type == NODE_SEQUENCE) {
 				Node *elem = cur->child;
 				for (int i = 0; elem && i < idx; i++) {
@@ -297,6 +304,9 @@ Node *find_by_path(Node *root, const char *path)
 				}
 				cur = elem;
 			}
+		} else {
+			LOG_ERR("sscanf(%s)", token);
+			return NULL;
 		}
 		token = strtok(NULL, ".");
 	}
@@ -370,7 +380,6 @@ err:
 
 int config_check_file_map(struct config_file_map *cfm)
 {
-	// 检查文件是否存在
 	LOG_HINT("检测配置文件 \"%s\"。", cfm->name);
 	if (access(cfm->name, F_OK) != 0) {
 		LOG_ERR("文件 \"%s\" 不存在。", cfm->name);
@@ -416,6 +425,7 @@ int config_check_file_map(struct config_file_map *cfm)
 err:
 	config_file_unmap_close(cfm);
 	free(cfm);
+
 	return -1;
 }
 
@@ -427,35 +437,6 @@ Node *config_init(char *f)
 	}
 
 	return root;
-
-	/* XXX test */
-	printf("===== Traverse All =====\n");
-	traverse(root, 0, print_pre, print_post, NULL);
-
-	printf("\n===== Traverse Path:  =====\n");
-	char *path = "bless.vxlan.ether.type.udp.dst-range";
-	Node *target = find_by_path(root, path);
-	if (target) {
-		printf("print %s: \"%s\" %lu\n", path, target->value, strlen(target->value));
-		traverse(target, 0, print_pre, print_post, NULL);
-	} else {
-		printf("Path not found\n");
-	}
-
-	path = "bless.erroneous.class.ipv4";
-	target = find_by_path(root, path);
-	if (target) {
-		printf("print %s:\n", path);
-		if (NODE_SCALAR == target->type && target->value) {
-			printf("\"%s\"(%lu)\n", target->value, strlen(target->value));
-		} else {
-			traverse_node(target, 0, print_pre, print_post, NULL);
-		}
-	} else {
-		printf("Path not found\n");
-	}
-
-	return 0;
 }
 
 int config_exit(Node *root)
@@ -473,8 +454,6 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 	char **argv = *targv;
 
 	for (Node *n = node->child; n != NULL; n = n->next) {
-		printf("%s: %s\n", n->key, n->value);
-
 		if (n->type == NODE_SCALAR) {
 			if (!n->value || !strcmp(n->value, "null") || !strcmp(n->value, "NULL")) {
 				continue;
@@ -494,7 +473,6 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 				perror("malloc");
 				exit(EXIT_FAILURE);
 			}
-			// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 
 			if (strlen(n->key) == 1) {
 				if (strlen(n->value)) {
@@ -513,14 +491,17 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 		} else if (n->type == NODE_SEQUENCE) {
 			size_t len;
 			if (strlen(n->key) == 1) {
-				len = 1 + 1 + strlen(n->key) + 1;   // "-k "
+				// "-k "
+				len = 1 + 1 + strlen(n->key) + 1;
 			} else {
-				len = 2 + strlen(n->key) + 1;       // "--key="
+				// "--key="
+				len = 2 + strlen(n->key) + 1;
 			}
 
 			Node *t = n->child;
 			while (t) {
-				len += strlen(t->value) + 1;  // 加上逗号或空格
+				// ',' or ' '
+				len += strlen(t->value) + 1;
 				t = t->next;
 			}
 			len += 1; // '\0'
@@ -529,10 +510,9 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 			while (t) {
 				argv[i] = malloc(len);
 				if (!argv[i]) {
-					perror("malloc");
+					LOG_ERR("malloc(%s)", t->value);
 					exit(EXIT_FAILURE);
 				}
-				// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 
 				char *p = argv[i];
 				if (strlen(n->key) == 1) {
@@ -550,19 +530,20 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 				i += !!t;
 			}
 		} else {
-			// NODE_MAPPING 其它情况略过
+			// NODE_MAPPING
+			LOG_WARN("Omitted %s", n->value);
 		}
-
 		i++;
 	}
 
 	*targc = i;
 	*targv = argv;
+
 	return i;
 }
 
 /** config_parse_system - set system cfg from root
- */
+*/
 int config_parse_system(Node *root, struct system_cfg *cfg)
 {
 	system_set_defaults(cfg);
@@ -585,7 +566,7 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 			cfg->daemonize = 1;
 		}
 	}
-	printf("system daemonize: %s\n", cfg->daemonize ? "yes" : "no");
+	LOG_INFO("system daemonize: %s", cfg->daemonize ? "yes" : "no");
 
 	path = "theme";
 	node = find_by_path(system_node, path);
@@ -598,7 +579,6 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 	} else {
 		strncpy(cfg->theme, "default", strlen("default") + 1);
 	}
-	printf("system theme: %s\n", cfg->theme);
 
 	if (config_parse_server(system_node, &cfg->server) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid server arguments\n");
@@ -656,22 +636,15 @@ int config_parse_server(Node *root, struct server *srv)
 	}
 
 	/* 3. cfg -> kv[] */
-	// struct civet_kv kv[16];              /* 每个 option 一项 */
+	/* 每个 option 一项 */
 	int n = build_civet_options(cfg, cfg->kv, 16);
 	/* 4. kv[] -> civet const char * */
-	// const char *civet_opts[32 + 1];      /* key,value,...,NULL */
 	int i = 0;
 	for (i = 0; i < n; i++) {
 		cfg->civet_opts[i * 2]     = cfg->kv[i].key;
 		cfg->civet_opts[i * 2 + 1] = cfg->kv[i].val;
 	}
 	cfg->civet_opts[i * 2] = NULL;
-
-#if 0
-	for (int i = 0; i < n; i++) {
-		printf("%s => %s\n", cfg->civet_opts[i * 2], cfg->civet_opts[i * 2 + 1]);
-	}
-#endif
 
 	struct server_service *svc = &srv->svc;
 	path = "server.service";
@@ -680,7 +653,6 @@ int config_parse_server(Node *root, struct server *srv)
 		path = "server.service.websocket";
 		node = find_by_path(root, path);
 		if (node && NODE_SCALAR == node->type) {
-			printf("%s %s\n", path, node->value);
 			int len = strlen(node->value);
 			if (len > 0) {
 				svc->websocket_uri = (char*)malloc(len + 1);
@@ -693,31 +665,28 @@ int config_parse_server(Node *root, struct server *srv)
 		node = find_by_path(root, path);
 		if (node && NODE_SEQUENCE == node->type) {
 			int i = 0;
-			printf("%s:\n", path);
 			for (Node *n = node->child; n && i < SERVER_SERVICE_HTTP_MAX;
 					n = n->next, i++) {
-				printf("%d  %s\n", i, n->value);
 				int len = strlen(n->value);
 				if (len > 0 && len < SERVER_SERVICE_HTTP_LEN_MAX) {
 					strncpy(svc->http[i], n->value, SERVER_SERVICE_HTTP_LEN_MAX);
 					svc->n_http++;
 				} else {
-					printf("Server service length error\n");
+					LOG_ERR("Server service length error");
 					return -1;
 				}
 			}
 		}
 	} else {
-		printf("No server service found, use default\n");
+		LOG_WARN("No server service found, use default");
 	}
 
 	return 0;
 }
 
-#define MAX_EAL_PARAMS 128
-
 int config_parse_dpdk(Node *root, int *targc, char ***targv)
 {
+#define MAX_EAL_PARAMS 128
 	char *path = "dpdk";
 	Node *node = find_by_path(root, path);
 	if (!node) {
@@ -731,7 +700,6 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 		exit(EXIT_FAILURE);
 	}
 	memset(argv, 0, sizeof(char*) * (MAX_EAL_PARAMS + 1));
-	// printf("malloc(argv) %p\n", argv);
 
 	int i = 0;
 	size_t len = strlen((*targv)[i]) + 1;
@@ -740,7 +708,6 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 		perror("malloc");
 		exit(EXIT_FAILURE);
 	}
-	// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 	strcpy(argv[i], (*targv)[i]);
 
 	i = config_parse_dpdk_internal(node, &argc, &argv, ++i);
@@ -751,7 +718,6 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 		perror("strdup");
 		exit(EXIT_FAILURE);
 	}
-	// printf("malloc(argv[%d]) %p %p\n", i, argv[i], &argv[i]);
 
 	path = "injector";
 	node = find_by_path(root, path);
@@ -767,8 +733,6 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 	if (!node) {
 		return -1;
 	}
-
-	// i = config_parse_generic(node, &argc, &argv, ++i, path);
 
 	*targc = argc;
 	*targv = argv;
@@ -818,7 +782,7 @@ int config_parse_generic(Node *node, int *targc, char ***targv, int i, const cha
 
 			argv[i] = malloc(len);
 			if (!argv[i]) {
-				perror("malloc");
+				LOG_ERR("malloc(%s)", t->value);
 				exit(EXIT_FAILURE);
 			}
 
@@ -939,18 +903,16 @@ static int config_parse_port_maybe_range_to_array(Node *node, uint16_t *port, in
 				uint16_t p;
 				int32_t ra;
 				if (bless_parse_port_range(node->value, &p, &ra)) {
-					break;
+					goto ERROR;
 				}
 				port[0] = p;
 				*range = ra;
-				// printf("> range: %u %d\n", p, ra);
 				n++;
 			}
 			break;
 		case NODE_SEQUENCE:
 			for (Node *i = node->child; i != NULL && n <= limit; i = i->next, n++) {
 				port[n] = atoi(i->value);
-				// printf("%u ", port[n]);
 			}
 			*range = 0;
 			break;
@@ -961,6 +923,10 @@ static int config_parse_port_maybe_range_to_array(Node *node, uint16_t *port, in
 	}
 
 	return n;
+
+ERROR:
+	LOG_ERR("yaml config parse error: %s", node->value);
+	exit(-1);
 }
 
 static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array, uint32_t *vni, int size, uint16_t limit)
@@ -977,14 +943,14 @@ static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array, 
 			/* vtep ipv4 */
 			token = strtok_r(dup, ":", &saveptr);
 			if (!token) {
-				printf("no vni\n");
+				LOG_ERR("no vni");
 				exit(-1);
 			}
 			inet_pton(AF_INET, token, (char*)array + size * n);
 			/* vni */
 			token = strtok_r(NULL, ":", &saveptr);
 			if (!token) {
-				printf("no vni\n");
+				LOG_ERR("no vni");
 				exit(-1);
 			}
 			val = atoi(token);
@@ -998,14 +964,14 @@ static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array, 
 				/* vtep ipv4 */
 				token = strtok_r(dup, ":", &saveptr);
 				if (!token) {
-					printf("no vni\n");
+					LOG_ERR("no vni");
 					exit(-1);
 				}
 				inet_pton(AF_INET, token, &array[n]);
 				/* vni */
 				token = strtok_r(NULL, ":", &saveptr);
 				if (!token) {
-					printf("no vni\n");
+					LOG_ERR("no vni");
 					exit(-1);
 				}
 				val = atoi(token);
@@ -1040,16 +1006,16 @@ static int config_parse_ipv4_maybe_range_to_array(Node *node, uint32_t *addr, in
 				addr[0] = ipv4;
 				*range = ra;
 				n++;
-				// bless_print_ipv4(ipv4);
 			}
 			break;
 		case NODE_SEQUENCE:
-			for (Node *i = node->child; i != NULL && n <= limit; i = i->next, n++) {
+			for (Node *i = node->child; i != NULL && n <= limit;
+					i = i->next, n++) {
 				/* FIXME */
 				if (inet_pton(AF_INET, i->value, &addr[n]) != 1) {
 					return -1;
 				}
-				bless_print_ipv4(addr[n]);
+				// bless_print_ipv4(addr[n]);
 			}
 			*range = 0;
 			break;
@@ -1062,7 +1028,8 @@ static int config_parse_ipv4_maybe_range_to_array(Node *node, uint32_t *addr, in
 	return n;
 }
 
-static int config_parse_sequence_ipv4_to_array(Node *node, void *array, int size, uint16_t limit)
+static int config_parse_sequence_ipv4_to_array(Node *node, void *array,
+		int size, uint16_t limit)
 {
 	int n = 0;
 	int val = 0;
@@ -1073,12 +1040,12 @@ static int config_parse_sequence_ipv4_to_array(Node *node, void *array, int size
 			n++;
 			break;
 		case NODE_SEQUENCE:
-			for (Node *i = node->child; i != NULL && n <= limit; i = i->next, n++) {
+			for (Node *i = node->child; i != NULL && n <= limit;
+					i = i->next, n++) {
 				/* FIXME */
 				if (inet_pton(AF_INET, i->value, &val) != 1) {
 					return -1;
 				}
-				// bless_print_ipv4(val);
 				inet_pton(AF_INET, i->value, (char*)array + size * n);
 			}
 			break;
@@ -1103,15 +1070,14 @@ static int config_parse_bless_ether(Node *root, Cnode *cnode)
 	if (node) {
 		mtu = atoll(node->value);
 		if (mtu < 46) {
-			printf("set invalid mtu %lu to 0\n", mtu);
+			LOG_INFO("set invalid mtu value %lu to 0(disabled)", mtu);
 			mtu = 0;
 		} else if (mtu > 1500) {
-			printf("set invalid mtu %lu to 0\n", mtu);
+			LOG_INFO("set invalid mtu value %lu to 0(disabled)", mtu);
 			mtu = 1500;
 		}
 	}
 	cnode->ether.mtu = (uint16_t)mtu;
-	printf("%s: %d\n", path, cnode->ether.mtu);
 
 	path = "bless.ether.copy-payload";
 	cnode->ether.copy_payload = 0;
@@ -1127,17 +1093,15 @@ static int config_parse_bless_ether(Node *root, Cnode *cnode)
 	path = "bless.ether.dst";
 	node = find_by_path(root, path);
 	if (!node) {
-		printf("no dst mac address provided.\n");
-		exit(-1);
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
 	/* take only 1 mac address */
 	if (node->value && strlen(node->value) && NODE_SCALAR == node->type &&
 			(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->ether.dst)) == 0)) {
-		bless_print_mac((struct rte_ether_addr*)cnode->ether.dst);
+		// bless_print_mac((struct rte_ether_addr*)cnode->ether.dst);
 	} else {
-		printf("Invalid dst mac address.\n");
+		LOG_ERR("Invalid dst mac address");
 		exit(-1);
 	}
 	cnode->ether.n_dst = 1;
@@ -1145,21 +1109,25 @@ static int config_parse_bless_ether(Node *root, Cnode *cnode)
 	path = "bless.ether.src";
 	node = find_by_path(root, path);
 	if (!node) {
-		printf("no src mac address node provided.\n");
+		LOG_INFO("no src mac address node provided");
 		cnode->ether.n_src = 0;
 	} else {
-		printf("%s: %s\n", path, node->value);
 		if (node->value && strlen(node->value) && NODE_SCALAR == node->type &&
-				(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->ether.src)) == 0)) {
-			bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
+				(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)
+										 &(cnode->ether.src)) == 0)) {
+			// bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
 			cnode->ether.n_src = 1;
 		} else {
-			printf("Invalid src mac address, injector will try it's local port.\n");
+			LOG_INFO("Invalid src mac address, injector will try local port");
 			cnode->ether.n_src = 0;
 		}
 	}
 
 	return 1;
+
+ERROR:
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
+	exit(-1);
 }
 
 static int config_parse_bless_vxlan_ether(Node *root, Cnode *cnode)
@@ -1169,37 +1137,44 @@ static int config_parse_bless_vxlan_ether(Node *root, Cnode *cnode)
 	path = "bless.vxlan.ether.dst";
 	Node *node = find_by_path(root, path);
 	if (!node) {
-		printf("Invalid vxlan dst mac address.\n");
-		exit(-1);
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
+	cnode->vxlan.ether.n_dst = 0;
 	if (node->value && strlen(node->value) &&
-			(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->vxlan.ether.dst)) == 0)) {
-		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.dst);
+			(rte_ether_unformat_addr(node->value,
+									 (struct rte_ether_addr*)&
+									 (cnode->vxlan.ether.dst)) == 0)) {
+		// bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.dst);
+		cnode->vxlan.ether.n_dst = 1;
 	} else {
-		printf("Invalid vxlan dst mac address.\n");
-		exit(-1);
+		goto ERROR;
 	}
 
 	path = "bless.vxlan.ether.src";
 	node = find_by_path(root, path);
 	if (!node) {
-		printf("no vxlan src mac address node provided.\n");
+		LOG_INFO("no vxlan src mac address node provided");
 		cnode->vxlan.ether.n_src = 0;
 	} else {
-		printf("%s: %s\n", path, node->value);
 		if (node->value && strlen(node->value) &&
-				(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->vxlan.ether.src)) == 0)) {
-			bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
+				(rte_ether_unformat_addr(node->value,
+										 (struct rte_ether_addr*)&
+										 (cnode->vxlan.ether.src)) == 0)) {
+			// bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
 			cnode->vxlan.ether.n_src = 1;
 		} else {
-			printf("Invalid vxlan src mac address, injector will try it's local port.\n");
-			cnode->vxlan.ether.n_src = 1;
+			LOG_WARN("Invalid vxlan src mac address, "
+					"injector will try local port");
+			cnode->vxlan.ether.n_src = 0;
 		}
 	}
 
 	return 1;
+
+ERROR:
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
+	exit(-1);
 }
 
 static int config_parse_bless_ether_type_arp(Node *root, Cnode *cnode)
@@ -1210,43 +1185,48 @@ static int config_parse_bless_ether_type_arp(Node *root, Cnode *cnode)
 	path = "bless.ether.type.arp.src";
 	Node *node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
-	n = config_parse_sequence_ipv4_to_array(node, cnode->ether.type.arp.src, sizeof(uint32_t), IP_ADDR_MAX);
+	n = config_parse_sequence_ipv4_to_array(node, cnode->ether.type.arp.src,
+			sizeof(uint32_t), IP_ADDR_MAX);
 	if (n > 0) {
-		cnode->ether.type.arp.n_dst = n;
+		cnode->ether.type.arp.n_src = n;
 	} else {
 		goto ERROR;
 	}
-	printf("  src:\n");
-	for (int i = 0; i < n; i++) {
-		bless_print_ipv4(cnode->ether.type.arp.src[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  src(%d):\n", n);
+	   for (int i = 0; i < n; i++) {
+	   bless_print_ipv4(cnode->ether.type.arp.src[i]);
+	   }
+	   printf("\n");
+	   */
 	path = "bless.ether.type.arp.dst";
 	node = find_by_path(root, path);
 	if (!node) {
+		LOG_WARN("path %s not found", path);
 		return -1;
 	}
-	printf("%s: %s\n", path, node->value);
-	n = config_parse_sequence_ipv4_to_array(node, cnode->ether.type.arp.dst, sizeof(uint32_t), IP_ADDR_MAX);
+	n = config_parse_sequence_ipv4_to_array(node, cnode->ether.type.arp.dst,
+			sizeof(uint32_t), IP_ADDR_MAX);
 	if (n > 0) {
 		cnode->ether.type.arp.n_dst = n;
 	} else {
 		goto ERROR;
 	}
-	printf("  dst:\n");
-	for (int i = 0; i < n; i++) {
-		bless_print_ipv4(cnode->ether.type.arp.dst[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  dst:\n");
+	   for (int i = 0; i < n; i++) {
+	   bless_print_ipv4(cnode->ether.type.arp.dst[i]);
+	   }
+	   printf("\n");
+	   */
 
 	return n;
 
 ERROR:
-	printf("yaml config parse error %s: %s\n", path, node->value);
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
 	exit(-1);
 }
 
@@ -1258,21 +1238,23 @@ static int config_parse_bless_ether_type_ipv4_icmp(Node *root, Cnode *cnode)
 	path = "bless.ether.type.ipv4.icmp.ident";
 	Node *node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
-	n = config_parse_sequence_to_array(node, cnode->ether.type.ipv4.icmp.ident, sizeof(uint16_t), PORT_MAX);
+	n = config_parse_sequence_to_array(node,
+			cnode->ether.type.ipv4.icmp.ident, sizeof(uint16_t), PORT_MAX);
 	if (n > 0) {
 		cnode->ether.type.ipv4.icmp.n_ident = n;
 	} else {
 		goto ERROR;
 	}
-	printf("  ident:\n");
-	for (int i = 0; i < n; i++) {
-		printf("%u 0x%x ", cnode->ether.type.ipv4.icmp.ident[i], cnode->ether.type.ipv4.icmp.ident[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  ident:\n");
+	   for (int i = 0; i < n; i++) {
+	   printf("%u 0x%x ", cnode->ether.type.ipv4.icmp.ident[i], cnode->ether.type.ipv4.icmp.ident[i]);
+	   }
+	   printf("\n");
+	   */
 
 	path = "bless.ether.type.ipv4.icmp.payload";
 	node = find_by_path(root, path);
@@ -1280,13 +1262,12 @@ static int config_parse_bless_ether_type_ipv4_icmp(Node *root, Cnode *cnode)
 		char *payload = strdup(node->value);
 		cnode->ether.type.ipv4.icmp.payload = payload;
 		cnode->ether.type.ipv4.icmp.payload_len = strlen(payload) + 1;
-		printf("%s: %s\n", path, node->value);
 	}
 
 	return n;
 
 ERROR:
-	printf("yaml config parse error %s: %s\n", path, node->value);
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
 	exit(-1);
 }
 
@@ -1298,12 +1279,12 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 	path = "bless.ether.type.ipv4.tcp.src";
 	Node *node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("path: %s value: %s\n", path, node->value);
 
 	int32_t range = 0;
-	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.tcp.src, &range, PORT_MAX);
+	n = config_parse_port_maybe_range_to_array(node,
+			cnode->ether.type.ipv4.tcp.src, &range, PORT_MAX);
 	if (n > 0) {
 		if (range) {
 			cnode->ether.type.ipv4.tcp.src_range = range;
@@ -1315,25 +1296,27 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  src: ");
-	if (range) {
-		printf("%u + %u", cnode->ether.type.ipv4.tcp.src[0],
-				cnode->ether.type.ipv4.tcp.src_range);
-	} else {
-		for (int i = 0; i < n; i++) {
-			printf("%u ", cnode->ether.type.ipv4.tcp.src[i]);
-		}
-	}
-	printf("\n");
+	/*
+	   printf("  src: ");
+	   if (range) {
+	   printf("%u + %u", cnode->ether.type.ipv4.tcp.src[0],
+	   cnode->ether.type.ipv4.tcp.src_range);
+	   } else {
+	   for (int i = 0; i < n; i++) {
+	   printf("%u ", cnode->ether.type.ipv4.tcp.src[i]);
+	   }
+	   }
+	   printf("\n");
+	   */
 
 	path = "bless.ether.type.ipv4.tcp.dst";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("path: %s value: %s\n", path, node->value);
 	range = 0;
-	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.tcp.dst, &range, PORT_MAX);
+	n = config_parse_port_maybe_range_to_array(node,
+			cnode->ether.type.ipv4.tcp.dst, &range, PORT_MAX);
 	if (n > 0) {
 		if (range) {
 			cnode->ether.type.ipv4.tcp.dst_range = range;
@@ -1345,16 +1328,18 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  dst: ");
-	if (range) {
-		printf("%u + %u", cnode->ether.type.ipv4.tcp.dst[0],
-				cnode->ether.type.ipv4.tcp.dst_range);
-	} else {
-		for (int i = 0; i < n; i++) {
-			printf("%u ", cnode->ether.type.ipv4.tcp.dst[i]);
-		}
-	}
-	printf("\n");
+	/*
+	   printf("  dst: ");
+	   if (range) {
+	   printf("%u + %u", cnode->ether.type.ipv4.tcp.dst[0],
+	   cnode->ether.type.ipv4.tcp.dst_range);
+	   } else {
+	   for (int i = 0; i < n; i++) {
+	   printf("%u ", cnode->ether.type.ipv4.tcp.dst[i]);
+	   }
+	   }
+	   printf("\n");
+	   */
 
 	path = "bless.ether.type.ipv4.tcp.payload";
 	node = find_by_path(root, path);
@@ -1362,13 +1347,12 @@ static int config_parse_bless_ether_type_ip_tcp(Node *root, Cnode *cnode)
 		char *payload = strdup(node->value);
 		cnode->ether.type.ipv4.tcp.payload = payload;
 		cnode->ether.type.ipv4.tcp.payload_len = strlen(payload) + 1;
-		printf("%s: %s\n", path, node->value);
 	}
 
 	return n;
 
 ERROR:
-	printf("yaml config parse error %s: %s\n", path, node->value);
+	LOG_ERR("yaml config parse error %s: %s\n", path, node->value);
 	exit(-1);
 }
 
@@ -1380,9 +1364,8 @@ static int config_parse_bless_ether_type_ip_udp(Node *root, Cnode *cnode)
 	path = "bless.ether.type.ipv4.udp.src";
 	Node *node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
 	int32_t range = 0;
 	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.udp.src, &range, PORT_MAX);
@@ -1397,17 +1380,19 @@ static int config_parse_bless_ether_type_ip_udp(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  src:\n");
-	for (int i = 0; i < n; i++) {
-		printf("%u ", cnode->ether.type.ipv4.udp.src[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  src:\n");
+	   for (int i = 0; i < n; i++) {
+	   printf("%u ", cnode->ether.type.ipv4.udp.src[i]);
+	   }
+	   printf("\n");
+	   */
+
 	path = "bless.ether.type.ipv4.udp.dst";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 	range = 0;
 	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.udp.dst, &range, PORT_MAX);
 	if (n > 0) {
@@ -1421,11 +1406,13 @@ static int config_parse_bless_ether_type_ip_udp(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  dst:\n");
-	for (int i = 0; i < n; i++) {
-		printf("%u ", cnode->ether.type.ipv4.udp.dst[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  dst:\n");
+	   for (int i = 0; i < n; i++) {
+	   printf("%u ", cnode->ether.type.ipv4.udp.dst[i]);
+	   }
+	   printf("\n");
+	   */
 
 	path = "bless.ether.type.ipv4.udp.payload";
 	node = find_by_path(root, path);
@@ -1433,13 +1420,12 @@ static int config_parse_bless_ether_type_ip_udp(Node *root, Cnode *cnode)
 		char *payload = strdup(node->value);
 		cnode->ether.type.ipv4.udp.payload = payload;
 		cnode->ether.type.ipv4.udp.payload_len = strlen(payload) + 1;
-		printf("%s: %s\n", path, node->value);
 	}
 
 	return n;
 
 ERROR:
-	printf("yaml config parse error %s: %s\n", path, node->value);
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
 	exit(-1);
 }
 
@@ -1451,9 +1437,8 @@ static int config_parse_bless_ether_type_ipv4(Node *root, Cnode *cnode)
 	path = "bless.ether.type.ipv4.src";
 	Node *node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
 	int64_t range = 0;
 	n = config_parse_ipv4_maybe_range_to_array(node, cnode->ether.type.ipv4.src, &range, IP_ADDR_MAX);
@@ -1468,17 +1453,19 @@ static int config_parse_bless_ether_type_ipv4(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  src:\n");
-	for (int i = 1; i <= cnode->ether.type.ipv4.n_src; i++) {
-		bless_print_ipv4(cnode->ether.type.ipv4.src[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  src:\n");
+	   for (int i = 1; i <= cnode->ether.type.ipv4.n_src; i++) {
+	   bless_print_ipv4(cnode->ether.type.ipv4.src[i]);
+	   }
+	   printf("\n");
+	   */
+
 	path = "bless.ether.type.ipv4.dst";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 	n = config_parse_ipv4_maybe_range_to_array(node, cnode->ether.type.ipv4.dst, &range, IP_ADDR_MAX);
 	if (n > 0) {
 		if (range) {
@@ -1491,16 +1478,18 @@ static int config_parse_bless_ether_type_ipv4(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  dst:\n");
-	for (int i = 0; i <= cnode->ether.type.ipv4.n_dst; i++) {
-		bless_print_ipv4(cnode->ether.type.ipv4.dst[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  dst:\n");
+	   for (int i = 0; i <= cnode->ether.type.ipv4.n_dst; i++) {
+	   bless_print_ipv4(cnode->ether.type.ipv4.dst[i]);
+	   }
+	   printf("\n");
+	   */
 
 	return n;
 
 ERROR:
-	printf("yaml config parse error %s: %s\n", path, node->value);
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
 	exit(-1);
 }
 
@@ -1518,37 +1507,34 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 				strcmp("TRUE", node->value)
 				)
 	   ) {
-		printf("vxlan disabled\n");
+		LOG_HINT("vxlan disabled");
 		cnode->vxlan.enable = 0;
 	}
 
 	path = "bless.vxlan.ratio";
 	node = find_by_path(root, path);
 	if (!node || !strlen(node->value)) {
-		printf("vxlan disabled\n");
+		LOG_HINT("vxlan disabled");
 		cnode->vxlan.enable = 0;
 	}
 
 	/* XXX do not return, mutation may use vxlan */
 	cnode->vxlan.ratio = atoi(node->value);
 	if (cnode->vxlan.ratio < 0 || cnode->vxlan.ratio > 100) {
-		printf("vxlan disabled\n");
+		LOG_HINT("vxlan disabled");
 		cnode->vxlan.enable = 0;
 		// return 1;
 	}
-	printf("%s: %s\n", path, node->value);
 
 	n = config_parse_bless_vxlan_ether(root, cnode);
-	bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
-	bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.dst);
+	// bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
+	// bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.dst);
 
 	path = "bless.vxlan.ether.type.ipv4.src";
 	node = find_by_path(root, path);
 	if (!node) {
-		printf("Invalid vxlan ipv4 src address.\n");
-		exit(-1);
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
 	n = config_parse_sequence_ipv4_vni_to_array(node, cnode->vxlan.ether.type.ipv4.src, cnode->vxlan.ether.type.ipv4.vni, sizeof(uint16_t), PORT_MAX);
 	// n = config_parse_sequence_ipv4_to_array(node, cnode->vxlan.ether.type.ipv4.src, sizeof(uint32_t), IP_ADDR_MAX);
@@ -1557,12 +1543,14 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  src:\n");
-	for (int i = 0; i < n; i++) {
-		bless_print_ipv4(cnode->vxlan.ether.type.ipv4.src[i]);
-		printf("  vni: %u\n", cnode->vxlan.ether.type.ipv4.vni[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  src:\n");
+	   for (int i = 0; i < n; i++) {
+	   bless_print_ipv4(cnode->vxlan.ether.type.ipv4.src[i]);
+	   printf("  vni: %u\n", cnode->vxlan.ether.type.ipv4.vni[i]);
+	   }
+	   printf("\n");
+	   */
 
 	path = "bless.vxlan.ether.type.ipv4.dst";
 	node = find_by_path(root, path);
@@ -1570,7 +1558,6 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 		printf("Invalid vxlan ipv4 dst address.\n");
 		exit(-1);
 	}
-	printf("%s: %s\n", path, node->value);
 
 	n = config_parse_sequence_ipv4_to_array(node, cnode->vxlan.ether.type.ipv4.dst, sizeof(uint32_t), IP_ADDR_MAX);
 	if (n > 0) {
@@ -1578,18 +1565,19 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  dst:\n");
-	for (int i = 0; i < n; i++) {
-		bless_print_ipv4(cnode->vxlan.ether.type.ipv4.dst[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  dst:\n");
+	   for (int i = 0; i < n; i++) {
+	   bless_print_ipv4(cnode->vxlan.ether.type.ipv4.dst[i]);
+	   }
+	   printf("\n");
+	   */
 
 	path = "bless.vxlan.ether.type.ipv4.udp.src";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
 	n = config_parse_sequence_to_array(node, cnode->vxlan.ether.type.ipv4.udp.src, sizeof(uint16_t), PORT_MAX);
 	if (n > 0) {
@@ -1597,33 +1585,37 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 	} else {
 		goto ERROR;
 	}
-	printf("  src:\n");
-	for (int i = 0; i < n; i++) {
-		printf("%u ", cnode->vxlan.ether.type.ipv4.udp.src[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  src:\n");
+	   for (int i = 0; i < n; i++) {
+	   printf("%u ", cnode->vxlan.ether.type.ipv4.udp.src[i]);
+	   }
+	   printf("\n");
+	   */
+
 	path = "bless.vxlan.ether.type.ipv4.udp.dst";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 	n = config_parse_sequence_to_array(node, cnode->vxlan.ether.type.ipv4.udp.dst, sizeof(uint16_t), PORT_MAX);
 	if (n > 0) {
 		cnode->vxlan.ether.type.ipv4.udp.n_dst = n;
 	} else {
 		goto ERROR;
 	}
-	printf("  dst:\n");
-	for (int i = 0; i < n; i++) {
-		printf("%u ", cnode->vxlan.ether.type.ipv4.udp.dst[i]);
-	}
-	printf("\n");
+	/*
+	   printf("  dst:\n");
+	   for (int i = 0; i < n; i++) {
+	   printf("%u ", cnode->vxlan.ether.type.ipv4.udp.dst[i]);
+	   }
+	   printf("\n");
+	   */
 
 	return n;
 
 ERROR:
-	printf("yaml config parse error %s: %s\n", path, node->value);
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
 	exit(-1);
 }
 
@@ -1636,19 +1628,19 @@ static int config_parse_bless_erroneous(Node *root, Cnode *cnode)
 	node = find_by_path(root, path);
 	if (!node || !strlen(node->value) || '0' == node->value[0]) {
 		cnode->erroneous.ratio = 0;
-		printf("erroneous disabled\n");
+		LOG_INFO("erroneous disabled");
 		return 1;
 	}
 	cnode->erroneous.ratio = atoi(node->value);
 	if (!cnode->erroneous.ratio) {
-		printf("erroneous disabled due to no ratio\n");
+		LOG_INFO("erroneous disabled due to no ratio");
 		return 1;
 	}
 	path = "bless.erroneous.class";
 	node = find_by_path(root, path);
 	if (!node || !node->child ) {
 		cnode->erroneous.ratio = 0;
-		printf("erroneous disabled due to no class\n");
+		LOG_INFO("erroneous disabled due to no class");
 		return 1;
 	}
 
@@ -1666,25 +1658,25 @@ static int config_parse_bless_erroneous(Node *root, Cnode *cnode)
 	}
 	cnode->erroneous.n_clas = n_clas;
 	cnode->erroneous.n_mutation = res;
-	printf("> parsed %d erroneous mutations:\n", res);
+
 	int pos = 0;
 	mutation_func *func = malloc(sizeof(mutation_func) * (uint64_t)res);
 	for (int i = 0; i < cnode->erroneous.n_clas; i++) {
 		struct ec_clas *clas = &cnode->erroneous.clas[i];
-		printf("  %d_%s: ", i, clas->name);
+		// printf("  %d_%s: ", i, clas->name);
 		for (int j = 0; j < clas->n_type; j++) {
-			printf(" %s ", clas->type[j]);
+			// printf(" %s ", clas->type[j]);
 			mutation_func f = find_mutation_func(clas->name, clas->type[j]);
 			if (!f) {
-				printf(" no mutation `%s:%s'\n", clas->name, clas->type[j]);
+				LOG_ERR(" no mutation `%s:%s'\n", clas->name, clas->type[j]);
 				exit(-1);
 			}
 			func[pos++] = f;
 		}
-		printf("\n");
+		// printf("\n");
 	}
 	cnode->erroneous.func = func;
-	printf("\n");
+	// printf("\n");
 
 	return res;
 }
@@ -1693,41 +1685,36 @@ Cnode *config_parse_bless(Node *root)
 {
 	struct Cnode *cnode = malloc(sizeof(struct Cnode));
 	memset(cnode, 0, sizeof(struct Cnode));
-	Node *node = find_by_path(root, "bless");
-	if (!node) {
-		return NULL;
-	}
 
-	char *path = NULL;
-	node = NULL;
+	char *path = "bless";
+	Node *node = find_by_path(root, path);
+	if (!node) {
+		goto ERROR;
+	}
 
 	/* hw offload */
 	path = "bless.hw-offload";
 	node = find_by_path(root, path);
-	printf("hw offload: ");
 	if (node) {
 		int n_item = sizeof(offload_table) / sizeof(offload_table[0]);
 		for (Node *t = node->child; t; t = t->next) {
 			for (int i = 0; i < n_item; i++) {
 				if (strcmp(t->value, offload_table[i].name)) {
-					// printf("unknown offload type %s\n", t->value);
 					continue;
 				}
 				cnode->offload |= 1 << offload_table[i].type;
-				printf("found offload type %s ", t->value);
+				LOG_HINT("matched offload type %s ", t->value);
 			}
 		}
 	}
-	printf("\n%lu\n", cnode->offload);
 
 	/* ether */
 	config_parse_bless_ether(root, cnode);
 	path = "bless.ether.dst";
 	node = find_by_path(root, path);
 	if (!node) {
-		return NULL;
+		goto ERROR;
 	}
-	printf("%s: %s\n", path, node->value);
 
 	config_parse_bless_ether_type_arp(root, cnode);
 	config_parse_bless_ether_type_ipv4(root, cnode);
@@ -1738,6 +1725,80 @@ Cnode *config_parse_bless(Node *root)
 	config_parse_bless_erroneous(root, cnode);
 
 	return cnode;
+
+ERROR:
+	LOG_ERR("yaml config parse error %s: %s", path, node->value);
+	exit(-1);
+}
+
+int config_clone_cnode(Cnode *src, Cnode *dst)
+{
+	if (!src || !dst) {
+		return -1;
+	}
+
+	memcpy(dst, src, sizeof(Cnode));
+
+	/* icmp payload */
+	if (src->ether.type.ipv4.icmp.payload &&
+			src->ether.type.ipv4.icmp.payload_len) {
+		char *payload = malloc(src->ether.type.ipv4.icmp.payload_len);
+		if (!payload) {
+			rte_exit(EXIT_FAILURE, "malloc(icmp.payload)\n");
+		}
+		memcpy(payload, src->ether.type.ipv4.icmp.payload,
+				src->ether.type.ipv4.icmp.payload_len);
+		dst->ether.type.ipv4.icmp.payload = payload;
+		dst->ether.type.ipv4.icmp.payload_len =
+			src->ether.type.ipv4.icmp.payload_len;
+	}
+
+	/* tcp payload */
+	if (src->ether.type.ipv4.tcp.payload &&
+			src->ether.type.ipv4.tcp.payload_len) {
+		char *payload = malloc(src->ether.type.ipv4.tcp.payload_len);
+		if (!payload) {
+			rte_exit(EXIT_FAILURE, "malloc(tcp.payload)\n");
+		}
+		memcpy(payload, src->ether.type.ipv4.tcp.payload,
+				src->ether.type.ipv4.tcp.payload_len);
+		dst->ether.type.ipv4.tcp.payload = payload;
+		dst->ether.type.ipv4.tcp.payload_len =
+			src->ether.type.ipv4.tcp.payload_len;
+	}
+
+	/* udp payload */
+	if (src->ether.type.ipv4.udp.payload &&
+			src->ether.type.ipv4.udp.payload_len) {
+		char *payload = malloc(src->ether.type.ipv4.udp.payload_len);
+		if (!payload) {
+			rte_exit(EXIT_FAILURE, "malloc(udp.payload)\n");
+		}
+		memcpy(payload, src->ether.type.ipv4.udp.payload,
+				src->ether.type.ipv4.udp.payload_len);
+		dst->ether.type.ipv4.udp.payload = payload;
+		dst->ether.type.ipv4.udp.payload_len =
+			src->ether.type.ipv4.udp.payload_len;
+	}
+
+	/* TODO vxlan payload, not used */
+
+	if (src->erroneous.n_mutation) {
+		/* erroneous mutation */
+		mutation_func *func =
+			malloc(sizeof(mutation_func) * src->erroneous.n_mutation);
+		for (int i = 0; i < src->erroneous.n_mutation; i++) {
+			func[i] = src->erroneous.func[i];
+		}
+		dst->erroneous.func = func;
+		/* from config.yaml */
+	}
+
+	return 0;
+}
+
+void config_show_cnode(Cnode *c)
+{
 }
 
 void config_show(struct config *cfg)
@@ -1748,4 +1809,11 @@ void config_show(struct config *cfg)
 	LOG_PATH("    fd     %d", cfg->cfm.fd);
 	LOG_PATH("    len    %lu", cfg->cfm.len);
 	LOG_PATH("    addr   %p", cfg->cfm.addr);
+	LOG_HINT("  root     %p", cfg->root);
+	LOG_HINT("  cnode    %p", cfg->cnode);
+}
+
+void config_show_root(struct config *cfg)
+{
+	traverse(cfg->root, 0, print_pre, print_post, NULL);
 }

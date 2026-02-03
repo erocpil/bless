@@ -25,8 +25,9 @@ struct system {
 	struct system_status status;
 };
 
-void system_dump_status(struct system_status *sysstat);
 void system_set_defaults(struct system_cfg *cfg);
 void system_show(struct system *sys);
+void system_show_status(struct system_status *sysstat);
+void system_show_cpuset(const cpu_set_t *set, int max_cpus);
 
 #endif

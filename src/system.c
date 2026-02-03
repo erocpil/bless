@@ -12,7 +12,7 @@ void system_set_defaults(struct system_cfg *cfg)
 	memset(cfg, 0, sizeof(struct system_cfg));
 }
 
-static void system_print_cpuset(const cpu_set_t *set, int max_cpus)
+void system_show_cpuset(const cpu_set_t *set, int max_cpus)
 {
 	int first = 1;
 	int start = -1;
@@ -48,7 +48,7 @@ static void system_print_cpuset(const cpu_set_t *set, int max_cpus)
 	printf("\n");
 }
 
-void system_dump_status(struct system_status *sysstat)
+void system_show_status(struct system_status *sysstat)
 {
 	printf("\n");
 	LOG_INFO("System status %p   ", sysstat);
@@ -57,7 +57,7 @@ void system_dump_status(struct system_status *sysstat)
 	}
 	LOG_PATH("  ppid    %u", sysstat->ppid);
 	LOG_PATH("  pid     %u", sysstat->pid);
-	system_print_cpuset(&sysstat->cpuset, CPU_SETSIZE);
+	system_show_cpuset(&sysstat->cpuset, CPU_SETSIZE);
 }
 
 void system_show(struct system *sys)

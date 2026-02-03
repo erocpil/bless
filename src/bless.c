@@ -1,13 +1,5 @@
 #include "bless.h"
-
-#define SIP RTE_IPV4(10, 0, 0, 1)
-#define SIP_OFFSET 10000
-
-#define DIP RTE_IPV4(192, 168, 0, 1)
-#define DIP_OFFSET 10000
-
-#define PORT 9000
-#define PORT_OFFSET 10000
+#include "log.h"
 
 static char *BLESS_TYPE_STR[] = {
 	"arp", "icmp", "tcp", "udp", "erroneous", "max",
@@ -29,7 +21,6 @@ int bless_parse_port_range(char *data, uint16_t *port, int32_t *range)
 	if ('+' == port_range[i]) {
 		port_range[i] = '\0';
 		*range = atoi(&port_range[++i]);
-		// printf("%d\n", *range);
 	} else {
 		*range = 0;
 	}
@@ -61,7 +52,6 @@ int bless_parse_ip_range(char *data, uint32_t *ip, int64_t *range)
 	if ('+' == ip_range[i]) {
 		ip_range[i] = '\0';
 		*range = atoi(&ip_range[++i]);
-		printf("%ld\n", *range);
 	} else {
 		*range = 0;
 	}
@@ -98,7 +88,6 @@ int32_t bless_seperate_port_range(char *port_range)
 	while (port_range[i] != '\0') {
 		if ( '+' == port_range[i]) {
 			port_range[i] = '\0';
-			printf(">> %s %s\n", port_range, &port_range[i + 1]);
 			return atoi(&port_range[i + 1]);
 		}
 		i++;
@@ -332,31 +321,6 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	return tx_bytes;
 }
 
-#if 0
-/* 计算 16-bit one's complement checksum（标准实现） */
-static uint16_t calc_cksum(const void *buf, size_t len)
-{
-	const uint8_t *data = buf;
-	uint32_t sum = 0;
-
-	while (len > 1) {
-		sum += (uint16_t)((data[0] << 8) | data[1]);
-		data += 2;
-		len -= 2;
-	}
-
-	if (len == 1) {
-		sum += (uint16_t)(data[0] << 8);
-	}
-
-	/* add carry */
-	while (sum >> 16)
-		sum = (sum & 0xffff) + (sum >> 16);
-
-	return (uint16_t)~sum;
-}
-#endif
-
 uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	Cnode *cnode = (Cnode*)data;
@@ -440,14 +404,6 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	}
 
 	return tx_bytes;
-}
-
-uint64_t bless_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data)
-{
-	(void)mbufs;
-	(void)n;
-	(void)data;
-	return 0;
 }
 
 #define SIZEOF_VXLAN (sizeof(struct rte_ether_hdr) + \
@@ -568,7 +524,6 @@ static uint64_t (*bless_get_funcs[])(struct rte_mbuf **mbufs, unsigned int n, vo
 	bless_mbufs_icmp,
 	bless_mbufs_tcp,
 	bless_mbufs_udp,
-	bless_mbufs_erroneous,
 	NULL
 };
 
@@ -626,14 +581,13 @@ struct rte_mempool *bless_create_pktmbuf_pool(uint32_t n, char *name)
 		rte_exit(EXIT_FAILURE, "Too many mbuf %u\n", n);
 	}
 
-	printf("creating pktmbufpool %s %u ...\n", name, n);
+	LOG_TRACE("creating pktmbufpool %s %u", name, n);
 	struct rte_mempool *pktmbuf_pool = rte_pktmbuf_pool_create(name, n,
 			0 /* MEMPOOL_CACHE_SIZE */, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
 			rte_socket_id());
 	if (!pktmbuf_pool) {
 		rte_exit(EXIT_FAILURE, "Cannot init rte_pktmbuf_pool_create()\n");
 	}
-
 	// rte_mempool_dump(stdout, pktmbuf_pool);
 
 	return pktmbuf_pool;
@@ -663,7 +617,7 @@ struct bless_conf *bless_init()
 static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *result)
 {
 	if (total < n) {
-		fprintf(stderr, "总数太小，无法保证每个变量至少为 1\n");
+		LOG_ERR("分布总数太小，无法保证每个变量至少为1");
 		exit(1);
 	}
 
@@ -679,7 +633,7 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 	double *temp = (double*)malloc(n * sizeof(double));
 	double *frac = (double*)malloc(n * sizeof(double));
 	if (!temp || !frac) {
-		fprintf(stderr, "Memory allocation failed\n");
+		LOG_ERR("Memory allocation failed");
 		exit(1);
 	}
 
@@ -691,13 +645,10 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 		result[i] += add;
 		frac[i] = temp[i] - add;    // 小数部分
 		allocated += add;
-		asm volatile ("" : : : "memory");
-		// printf("%d: t %.4f weight %d temp %.4f add %lu frac %.4f\n", i, t, weights[i], temp[i], add, frac[i]);
 	}
 
 	// Step3: 把剩下的分配给小数部分最大的
 	int remain = total - allocated;
-	// printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
 	while (remain > 0) {
 		int idx = 0;
 		for (uint32_t i = 1; i < n; i++) {
@@ -707,7 +658,6 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 		frac[idx] = -1; // 标记已处理
 		remain--;
 	}
-	// printf("total %lu allocated %lu remain %d\n", total, allocated, remain);
 
 	free(temp);
 	free(frac);
@@ -715,32 +665,41 @@ static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *
 
 static unsigned int make_power_of_2(unsigned int n)
 {
-	if (!n) return n;
-	n -= 1;
+	if (!n) {
+		return n;
+	}
+
 	int c = 0;
+	n -= 1;
 	while (n) {
 		c++;
 		n >>= 1;
 	}
+
 	return 1 << c;
 }
 
-int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bless_encap_params *bep)
+int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio,
+		struct bless_encap_params *bep)
 {
-	uint32_t weight[TYPE_MAX - 1] = { 0 };
 	int n = 0;
 	uint64_t *result = NULL;
+	uint32_t weight[TYPE_MAX] = { 0 };
 
-	for (int i = 0; i < TYPE_MAX - 1; i++) {
+	for (int i = 0; i < TYPE_MAX; i++) {
 		if (ratio->weight[i] > 0) {
 			weight[n++] = ratio->weight[i];
 		} else {
-			printf("skip 0 ratio type %s\n", BLESS_TYPE_STR[i]);
+			LOG_INFO("skip 0 ratio type %s", BLESS_TYPE_STR[i]);
 		}
 	}
-	printf("weight from ratio:\n");
-	for (int i = 0; i < n; i++) {
-		printf("%d: %d\n", i, weight[i]);
+	/* FIXME */
+	LOG_META_NNL("weight from ratio: ");
+	for (int i = 0; i < TYPE_MAX; i++) {
+		if (ratio->weight[i] <= 0) {
+			continue;
+		}
+		printf("%d: %d, ", i, weight[i]);
 	}
 	printf("\n");
 	result = (uint64_t*)malloc(sizeof(uint64_t) * n);
@@ -749,23 +708,23 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 			rte_exit(EXIT_FAILURE, "Cannot rte_malloc(distribution)\n");
 		} else {
 			distribute(weight, n, bconf->num, result);
-			printf("weight distribution from ratio:\n");
-			for (int i = 0, n = 0; i < TYPE_MAX - 1; i++) {
+			LOG_META_NNL("weight distribution from ratio: ");
+			for (int i = 0, n = 0; i < TYPE_MAX; i++) {
 				if (ratio->weight[i] > 0) {
-					printf("-> ");
 					ratio->quota[i] = result[n++];
 				}
-				printf("%s \t\t%u\n", BLESS_TYPE_STR[i], ratio->quota[i]);
+				printf("%s %u, ", BLESS_TYPE_STR[i], ratio->quota[i]);
 			}
 		}
 	} else {
-		for (int i = 0; i < TYPE_MAX - 1; i++) {
+		for (int i = 0; i < TYPE_MAX; i++) {
 			ratio->quota[i] = ratio->weight[i];
-			printf("%s \t\t%lu\n", BLESS_TYPE_STR[i], result[n]);
+			printf("%s %lu, ", BLESS_TYPE_STR[i], result[n]);
 		}
 	}
-	ratio->quota[TYPE_MAX - 1] = ratio->weight[TYPE_MAX - 1];
-	printf("%s \t%u\n", BLESS_TYPE_STR[TYPE_MAX - 1], ratio->quota[TYPE_MAX - 1]);
+	printf("\n");
+	// ratio->quota[TYPE_MAX] = ratio->weight[TYPE_MAX];
+	// printf("%s \t%u\n", BLESS_TYPE_STR[TYPE_MAX], ratio->quota[TYPE_MAX]);
 	memcpy(&bconf->dist_ratio, ratio, sizeof(*ratio));
 
 	uint32_t capacity = bconf->dist_ratio.num;
@@ -784,16 +743,16 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 	dist->size = size;
 
 	distribute(weight, n, size, result);
-	printf("unified weight distribution:\n");
+	LOG_META_NNL("unified weight distribution: ");
 	for (int i = 0; i < n; i++) {
-		printf("%d %lu\n", i, result[i]);
+		printf("%s %lu, ", BLESS_TYPE_STR[i], result[i]);
 	}
-	printf("\n");
-	for (int i = 0, pos = 0, q = 0; i < TYPE_MAX - 1; i++) {
+	printf("=> size %u\n", size);
+
+	for (int i = 0, pos = 0, q = 0; i < TYPE_MAX; i++) {
 		if (bconf->dist_ratio.weight[i] <= 0) {
 			continue;
 		}
-		printf("type %d %s\n", q, BLESS_TYPE_STR[i]);
 		for (uint32_t j = 0; j < result[q]; j++) {
 			dist->data[pos++] = i;
 		}
@@ -801,7 +760,6 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bl
 	}
 	free(result);
 
-	printf("=> size %u\n", size);
 	dist->capacity = capacity;
 	dist->mask = size - 1;
 	bconf->dist = dist;
@@ -819,22 +777,14 @@ int32_t bless_parse_type(enum BLESS_TYPE type, char *optarg)
 	char *end = NULL;
 	int64_t n = 0;
 
-	if (!optarg) {
-		printf("INT_MIN %d\n", INT_MIN);
-		return INT_MIN;
-	} else if ('-' == optarg[0]) {
+	if (type < 0 || type >= TYPE_MAX) {
 		goto ERROR;
 	}
 
-	if (TYPE_MAX == type) {
-		uint64_t n = strtoul(optarg, &end, 0);
-		printf("total packets ");
-		if ('0' == optarg[0] || '\0' == optarg[0] || !end || (*end != '\0')) {
-			printf(" => inf ");
-			n = 0;
-		}
-		printf("%lu\n", n);
-		return n;
+	if (!optarg) {
+		return INT_MIN;
+	} else if ('-' == optarg[0]) {
+		goto ERROR;
 	}
 
 	n = strtoul(optarg, &end, 0);
@@ -842,22 +792,15 @@ int32_t bless_parse_type(enum BLESS_TYPE type, char *optarg)
 		goto ERROR;
 	}
 	if ('\0' == optarg[0] || !end || (*end != '\0')) {
-		printf(" => ");
 		n = 0;
 	} else if (n > INT_MAX / TYPE_MAX) {
-		n = INT_MAX / TYPE_MAX - 1;
-		printf(" => ");
-	}
-	printf("%lu\n", n);
-
-	if (TYPE_ERRONEOUS == type && n > 100) {
-		goto ERROR;
+		n = INT_MAX / TYPE_MAX;
 	}
 
 	return n;
 
 ERROR:
-	rte_exit(EXIT_FAILURE, "Invalid bless arguments a `%s'\n", optarg);
+	rte_exit(EXIT_FAILURE, "Invalid bless arguments `%s'\n", optarg);
 }
 
 // void bless_set_config_file(struct bless_conf* bconf, struct config_file_map *cfm)
@@ -869,7 +812,7 @@ void bless_print_mac(const struct rte_ether_addr *mac)
 {
 	char buf[RTE_ETHER_ADDR_FMT_SIZE];
 	rte_ether_format_addr(buf, sizeof(buf), mac);
-	printf("MAC: %s\n", buf);
+	printf("%s\n", buf);
 }
 
 void bless_print_ipv4(uint32_t ip)

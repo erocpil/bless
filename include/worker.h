@@ -3,19 +3,27 @@
 
 #include "define.h"
 
-/* TODO rte_eth_hairpin_peer */
-/* List of queues to be polled for a given lcore. 8< */
-struct lcore_queue_conf {
-	int enabled;
-	int numa;
-	int type;
-	uint16_t txl_id;
-	uint16_t txp_id;
-	uint16_t txq_id;
-	unsigned n_rx_port;
-	unsigned rx_port_list[MAX_RX_QUEUE_PER_LCORE];
-} __attribute__((__aligned__(sizeof(char)))); /* DO NOT TOUCH ATTR!!! */
-/* >8 End of list of queues to be polled for a given lcore. */
+struct worker_core_view {
+	uint8_t enabled;
+	uint8_t socket;
+	uint8_t numa;
+	uint8_t role; /* core role */
+	uint16_t core; /* core */
+	uint16_t port; /* port */
+	uint16_t type; /* port type */
+	uint16_t txq; /* tx queue */
+	uint16_t rxq; /* rx queue */
+	uint16_t n_rx_port;
+	uint16_t rx_port_list[MAX_RX_QUEUE_PER_LCORE];
+};
+
+struct worker {
+	int mode;
+	char *thead_name;
+	struct rte_mbuf **mbufs;
+	struct rte_mbuf **rx_mbufs;
+	struct worker_core_view cv;
+};
 
 void worker_loop(void *conf);
 void worker_main_loop(void *conf);

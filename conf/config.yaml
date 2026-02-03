@@ -65,12 +65,16 @@ bless:
     src: # 10:70:fd:af:21:02
     type:
       arp:
+        # only array accepted
         src: [ 10.0.0.1 ]
         dst: [ 20.0.0.2, 30.0.0.3 ]
       ipv4:
-        src: 172.16.1.1+2
+        # use range
+        src: 172.16.1.1+10
+        # use array
         dst: [ 192.168.0.1, 192.168.1.1 ]
         icmp:
+          # only array supported
           ident: [ 0x1234, 0xface ]
           payload: "injector: icmp payload."
         tcp:
@@ -84,7 +88,7 @@ bless:
         # TODO https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
         proto: [ 0, 0x8C-0xFF ]
   vxlan:
-    enable: false
+    enable: true
     ratio: 100
     ether:
       dst: 10:70:fd:af:21:10
@@ -92,10 +96,10 @@ bless:
       type:
         ipv4:
           src: [ 172.31.30.246:2619682 ]
-          # not supported
+          # range not supported
           src-range: 0
           dst: [ 4.0.0.1, 5.0.0.1, 6.0.0.1 ]
-          # not supported
+          # range not supported
           dst-range: -5
           udp:
             src: [ 4000, 4001, 4002 ]
@@ -104,7 +108,7 @@ bless:
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 0
+    ratio: 1
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3
@@ -117,7 +121,7 @@ bless:
       other: [ toa ] # 25
 
 system:
-  daemonize: true
+  daemonize: false
   theme: default # Dark, Warm, Cool, Vibrant, Pastel, Accent-UI, Solarized, Nord, Dracula
   server:
     # civetweb service: websocket and http

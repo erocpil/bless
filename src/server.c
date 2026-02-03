@@ -2833,7 +2833,6 @@ static int root_handler(struct mg_connection *conn, void *cbdata)
 			"Content-Type: text/html\r\n"
 			"Connection: close\r\n\r\n"
 			"%s", index_html);
-	_L();
 	return 1;
 }
 

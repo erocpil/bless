@@ -57,7 +57,6 @@ struct base {
 	// uint32_t enabled_port_mask;
 	uint32_t enabled_lcores;
 	unsigned int rxtxq_per_port;
-	// uint64_t timer_period; /* default period is 10 seconds */
 	struct system_status sysstat;
 	struct rte_mempool rx_pktmbuf_pool;
 	struct lcore_queue_conf *lcore_queue_conf;

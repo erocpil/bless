@@ -1,12 +1,15 @@
 #include "base.h"
 #include "bless.h"
+#include "cnode.h"
 #include "define.h"
 #include "worker.h"
+#include "system.h"
 #include "metric.h"
 // #include "device.h"
 #include "log.h"
 #include "server.h"
 #include "log.h"
+
 #include <stdatomic.h>
 #include <stdint.h>
 
@@ -75,31 +78,39 @@ void worker_loop(void *data)
 
 	struct base_core_view *cv = rte_malloc(NULL, sizeof(struct base_core_view), 0);
 	if (unlikely(!cv)) {
-		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(base core view)\n",
+		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(base core view)\n",
 				__func__, __LINE__);
 	}
 	memcpy(cv, conf->base->topo.cv + lcore_id, sizeof(struct base_core_view));
 
-	Cnode *cnode = conf->cnode;
-	if (cnode) {
-		if (cnode->erroneous.n_mutation) {
-			/* erroneous mutation */
-			mutation_func *func = rte_malloc(NULL, sizeof(mutation_func) * cnode->erroneous.n_mutation, 0);
-			for (int i = 0; i < cnode->erroneous.n_mutation; i++) {
-				func[i] = bconf->cnode->erroneous.func[i];
-			}
-			cnode->erroneous.func = func;
-			/* from config.yaml */
-		}
-	} else {
-		/* TODO from command line params */
-		rte_exit(EXIT_FAILURE, "[%s %d] no config.yaml\n", __func__, __LINE__);
+	Cnode *cnode = rte_malloc(NULL, sizeof(Cnode), 0);
+	if (unlikely(!cnode)) {
+		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(Cnode)\n",
+				__func__, __LINE__);
+	}
+	if (unlikely(config_clone_cnode(conf->cnode, cnode) < 0)) {
+		rte_exit(EXIT_FAILURE, "[%s %d] config_clone_cnode(%p)\n",
+				__func__, __LINE__, conf->cnode);
 	}
 
-	// XXX
-	// qconf = conf->qconf; // bconf->qconf + lcore_id;
-	atomic_int *state = conf->state;
-	// uint32_t *l2fwd_dst_ports = conf->dst_ports;
+	/* check if src mac address is provided */
+	if (!cnode->ether.n_src) {
+		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->ether.src);
+		LOG_META_NNL("injector will use local port mac address: ");
+		bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
+		cnode->ether.n_src = 1;
+	}
+	/* check if vxlan src mac address is provided */
+	if (cnode->vxlan.enable && !cnode->vxlan.ether.n_src) {
+		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->vxlan.ether.src);
+		LOG_META_NNL("injector vxlan will use local port mac address: ");
+		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
+		cnode->vxlan.ether.n_src = 1;
+	}
+
+	conf->cnode = cnode;
+	// cnode_show(conf->cnode, 0);
+	cnode_show_summary(conf->cnode);
 
 #if 0
 	/* FIXME */
@@ -148,6 +159,8 @@ void worker_loop(void *data)
 		perror("pthread_getaffinity_np");
 		pthread_exit(NULL);
 	}
+
+	/*
 	printf("cpu set: ");
 	for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
 		if (CPU_ISSET(cpu, &cpuset)) {
@@ -155,16 +168,17 @@ void worker_loop(void *data)
 		}
 	}
 	printf("\n");
+	*/
 
 	uint8_t mode = conf->mode;
 	int64_t num = conf->num < 0 ? INT64_MAX : conf->num;
-	printf("conf.num %ld num %ld\n", conf->num, num);
+	atomic_int *state = conf->state;
 
 	uint16_t batch = conf->batch;
 	uint64_t batch_delay_us = bconf->batch_delay_us;
 	if (batch > 2048) {
 		batch = 2048;
-		printf("batch -> 2048\n");
+		LOG_INFO("batch -> 2048");
 	}
 	if (batch > num) {
 		batch = num;
@@ -172,7 +186,6 @@ void worker_loop(void *data)
 	portid = cv->port;
 	uint16_t qid = cv->rxq;
 	uint16_t nb_tx = batch;
-	printf("num %ld batch %u nb_tx %u\n", num, batch, nb_tx);
 
 	/* XXX */
 	if (mode == BLESS_MODE_RX_ONLY || mode == BLESS_MODE_FWD) {
@@ -237,31 +250,17 @@ void worker_loop(void *data)
 		struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
 
 		if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
-			printf("bless_alloc_mbufs() failed\n");
+			LOG_ERR("bless_alloc_mbufs() failed");
+			rte_exit(EXIT_FAILURE, "bless_alloc_mbufs(%s)\n", name);
 		}
 
-		printf("cpu=%d lcore=%u lid=%d pid=%d qid=%d tid=%lu\n", sched_getcpu(), rte_lcore_id(),
-				cv->port, cv->txq, cv->core, pthread_self());
+		LOG_META("cpu %u lcore %u core %u port %u txq %u tid %lu",
+				sched_getcpu(), rte_lcore_id(), cv->core,
+				cv->port, cv->txq, pthread_self());
 		assert(cv->core == rte_lcore_id());
 	}
 
-	/* check if src mac address is provided */
-	if (!cnode->ether.n_src) {
-		/* FIXME race condition */
-		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->ether.src);
-		printf("injector will use local port mac address:\n  ");
-		bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
-		cnode->ether.n_src = 1;
-	}
-	/* check if vxlan src mac address is provided */
-	if (cnode->vxlan.enable && !cnode->ether.n_src) {
-		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->vxlan.ether.src);
-		printf("injector vxlan will use local port mac address:\n  ");
-		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
-	}
-
-	printf("[%s %d] >>> %d pthread_barrier_wait(%p);\n",
-			__func__, __LINE__, lcore_id, bconf->barrier);
+	LOG_INFO("core %d pthread_barrier_wait(%p);", lcore_id, bconf->barrier);
 	pthread_barrier_wait(bconf->barrier);
 
 	uint64_t val = atomic_load_explicit(state, memory_order_acquire);
@@ -271,31 +270,31 @@ void worker_loop(void *data)
 			i = 0;
 			while (unlikely(val == STATE_STOPPED)) {
 				if (!i++) {
-					printf("Detect STOPPED @ core %u\n", cv->core);
+					LOG_INFO("Detect STOPPED @ core %u", cv->core);
 				}
 				rte_delay_ms(1000);
 				val = atomic_load_explicit(state, memory_order_acquire);
 			}
 			while (unlikely(val == STATE_INIT)) {
 				if (!i++) {
-					printf("Detect INIT @ core %u\n", cv->core);
+					LOG_INFO("Detect INIT @ core %u", cv->core);
 				}
 				rte_delay_ms(1000);
 				val = atomic_load_explicit(state, memory_order_acquire);
 			}
 			if (val == STATE_EXIT) {
-				printf("Detect EXIT %d\n", cv->core);
+				LOG_INFO("Detect EXIT @ core %u", cv->core);
 				goto EXIT;
 			}
 			if (val == STATE_RUNNING) {
-				printf("Detect START %d %d %d\n", cv->core, cv->port, cv->rxq);
+				LOG_INFO("Detect START @ core %u %u %u", cv->core, cv->port, cv->rxq);
 			}
 		}
 
 		if (unlikely(num <= 0)) {
 			sleep(1);
 			atomic_store(state, STATE_EXIT);
-			printf("Finished: lcore_id %u core %u port %u rxq %u\n", rte_lcore_id(),
+			LOG_INFO("Finished: lcore_id %u @ core %u port %u rxq %u", rte_lcore_id(),
 					cv->core, cv->port, cv->rxq);
 			goto EXIT;
 		}
@@ -328,7 +327,6 @@ void worker_loop(void *data)
 
 		/* tx-only */
 		for (int j = 0; j < nb_tx; j++) {
-			// uint64_t tx_bytes = 0;
 			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation) {
 				/* should this mbuf be a mutation? */
 				uint64_t tsc = fast_rand_next();
@@ -393,7 +391,7 @@ void dpdk_generate_cmdReply(const char *str)
 		return;
 	}
 	char *reply = encode_cmdReply_to_json(str);
-	printf("cmdReply %s\n", reply);
+	LOG_TRACE("cmdReply %s", reply);
 	ws_broadcast_log(reply, strlen(reply));
 	free(reply);
 }
@@ -404,7 +402,7 @@ void dpdk_generate_log(const char *str)
 		return;
 	}
 	char *msg = encode_log_to_json(str);
-	printf("msg %s\n", msg);
+	LOG_TRACE("msg %s", msg);
 	ws_broadcast_log(msg, strlen(msg));
 	free(msg);
 }
@@ -489,7 +487,7 @@ void ws_user_func(void *user, void *data, size_t size)
 	struct config_file_map *cfm = &base->config->cfm;
 	cJSON *root = cJSON_Parse(data);
 	if (!root) {
-		printf("[%s %d] JSON parse error\n", __func__, __LINE__);
+		LOG_WARN("[%s %d] JSON parse error\n", __func__, __LINE__);
 		return;
 	}
 
@@ -497,35 +495,36 @@ void ws_user_func(void *user, void *data, size_t size)
 
 	const char *cmd = ws_json_get_string(root, "cmd");
 	if (cmd) {
-		printf("cmd = %s\n", cmd);
+		LOG_TRACE("cmd = %s\n", cmd);
 		if (strcmp(cmd, "start") == 0) {
-			printf("Received START command\n");
+			LOG_TRACE("Received START command");
 			atomic_store(state, STATE_RUNNING);
 			cmd = "started";
 		} else if (strcmp(cmd, "stop") == 0) {
-			printf("Received STOP command\n");
+			LOG_TRACE("Received STOP command");
 			atomic_store(state, STATE_STOPPED);
 			cmd = "stopped";
 		} else if (strcmp(cmd, "init") == 0) {
-			printf("Received INIT command\n");
+			LOG_TRACE("Received INIT command");
 			// TODO reinit
 			// atomic_store(&g_state, STATE_INIT);
 			cmd = "already inited";
 		} else if (strcmp(cmd, "exit") == 0) {
-			printf("Received EXIT command\n");
+			LOG_TRACE("Received EXIT command");
 			atomic_store(state, STATE_EXIT);
 			cmd = "exited";
 		} else if (strcmp(cmd, "conf") == 0) {
-			printf("Received conf command\n");
+			LOG_TRACE("Received conf command");
 			cmd = (char*)cfm->addr;
 			printf("name %s\n", cfm->name);
 		} else {
 			cmd = "Not supported";
 		}
 	} else {
-		printf("cmd missing or not a string\n");
+		LOG_WARN("cmd missing or not a string");
 		cmd = "cmd missing or not a string";
 	}
+
 	cJSON_Delete(root);
 	dpdk_generate_cmdReply(cmd);
 }

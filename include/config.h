@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #include <yaml.h>
-#include "define.h"
+#include "cnode.h"
 #include "server.h"
 #include "system.h"
 
@@ -31,15 +31,6 @@ typedef struct Node {
 	struct Node *child;
 	struct Node *next;
 } Node;
-
-#define BLESS_CONFIG_MAX 1024
-#define BLESS_ERRNONEOUS_CLASS_TYPE_MAX 32
-#define BLESS_ERRNONEOUS_CLASS_TYPE_NAME_MAX 32
-#define ETHER_ADDR_LEN 6
-#define ETHER_ADDR_MAX BLESS_CONFIG_MAX
-#define IP_PROTO_MAX 256
-#define IP_ADDR_MAX BLESS_CONFIG_MAX
-#define PORT_MAX BLESS_CONFIG_MAX
 
 #define RANDOM_VXLAN_IP_SRC(p) \
 	random_array_elem_uint32_t(p->vxlan.ether.type.ipv4.src, \
@@ -127,95 +118,6 @@ struct offload_table_item {
 	int type;
 };
 
-typedef struct Cnode {
-	uint64_t offload;
-	struct {
-		uint16_t mtu;
-		uint8_t copy_payload;
-		uint8_t dst[ETHER_ADDR_LEN];
-		uint8_t src[ETHER_ADDR_LEN];
-		uint16_t n_dst;
-		uint16_t n_src;
-		struct {
-			struct {
-				uint32_t src[IP_ADDR_MAX];
-				uint32_t dst[IP_ADDR_MAX];
-				uint16_t n_dst;
-				uint16_t n_src;
-			} arp;
-			struct {
-				uint32_t src[IP_ADDR_MAX];
-				uint32_t dst[IP_ADDR_MAX];
-				/* TODO */
-				uint16_t proto[IP_PROTO_MAX];
-				uint16_t n_dst;
-				uint16_t n_src;
-				int64_t dst_range;
-				int64_t src_range;
-				struct {
-					uint16_t ident[BLESS_CONFIG_MAX];
-					uint16_t n_ident;
-					char *payload;
-					uint16_t payload_len;
-				} icmp;
-				struct {
-					uint16_t src[PORT_MAX];
-					uint16_t dst[PORT_MAX];
-					uint16_t n_dst;
-					uint16_t n_src;
-					int32_t dst_range;
-					int32_t src_range;
-					char *payload;
-					uint16_t payload_len;
-				} tcp, udp;
-			} ipv4;
-		} type;
-	} ether;
-	struct {
-		uint8_t enable;
-		uint8_t ratio;
-		struct {
-			uint8_t dst[ETHER_ADDR_LEN];
-			uint8_t src[ETHER_ADDR_LEN];
-			uint16_t n_dst;
-			uint16_t n_src;
-			struct {
-				struct {
-					uint32_t src[IP_ADDR_MAX];
-					uint32_t dst[IP_ADDR_MAX]; /* TODO uint64_t dst[] = { vni:ipv4 } */
-					uint32_t vni[IP_ADDR_MAX];
-					uint16_t n_src;
-					uint16_t n_dst;
-					int64_t src_range; // xxx
-					int64_t dst_range; // xxx
-					struct {
-						uint16_t src[PORT_MAX];
-						uint16_t dst[PORT_MAX];
-						uint16_t n_src;
-						uint16_t n_dst;
-						int32_t src_range; // xxx
-						int32_t dst_range; // xxx
-						char *payload;
-						uint16_t payload_len;
-					} udp;
-				} ipv4;
-			} type;
-		} ether;
-	} vxlan;
-	struct {
-		uint8_t ratio;
-		mutation_func *func;
-		uint16_t n_mutation;
-		// mac, arp, ipv4, icmp, tcp, udp, etc ...
-		struct ec_clas {
-			char *name;
-			char *type[BLESS_CONFIG_MAX];
-			uint16_t n_type;
-		} clas[BLESS_ERRNONEOUS_CLASS_TYPE_MAX];
-		uint16_t n_clas;
-	} erroneous;
-} __attribute__((__aligned__(sizeof(char)))) Cnode;
-
 struct config {
 	struct config_file_map cfm;
 	Node *root;
@@ -232,5 +134,7 @@ int config_parse_generic(Node *node, int *targc, char ***targv, int i, const cha
 Cnode *config_parse_bless(Node *root);
 Node *parse_node(yaml_parser_t *parser);
 void config_show(struct config *cfg);
+void config_show_root(struct config *cfg);
+int config_clone_cnode(Cnode *src, Cnode *dst);
 
 #endif

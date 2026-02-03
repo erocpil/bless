@@ -103,7 +103,7 @@ static inline int log_cpu_id(void)
 			fprintf(fp, "T%ld ", log_thread_id());                      \
 		}                                                               \
 		if (LOG_ENABLE_CPU) {                                           \
-			fprintf(fp, "C%d ", log_cpu_id());                          \
+			fprintf(fp, "C%02d ", log_cpu_id());                          \
 		}                                                               \
 		fprintf(fp, "]");                                               \
 		\
@@ -129,7 +129,7 @@ static inline int log_cpu_id(void)
 			fprintf(fp, "T%ld ", log_thread_id());                      \
 		}                                                               \
 		if (LOG_ENABLE_CPU) {                                           \
-			fprintf(fp, "C%d ", log_cpu_id());                          \
+			fprintf(fp, "C%02d ", log_cpu_id());                          \
 		}                                                               \
 		fprintf(fp, "]");                                               \
 		\
