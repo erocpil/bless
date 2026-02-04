@@ -2,10 +2,10 @@
 #include "color.h"
 
 /**
- * helper
+ * helpers
  */
 
-// 打印缩进
+// print indent
 static void print_indent(int depth)
 {
 	for (int i = 0; i < depth; i++) {
@@ -13,14 +13,14 @@ static void print_indent(int depth)
 	}
 }
 
-// 打印 MAC 地址
+// print MAC address
 static void print_mac(const uint8_t *mac)
 {
 	printf("%02x:%02x:%02x:%02x:%02x:%02x",
 			mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-// 打印 IP 地址（网络字节序）
+// print IP address (network byte order)
 static void print_ip(uint32_t ip)
 {
 	struct in_addr addr;
@@ -28,7 +28,8 @@ static void print_ip(uint32_t ip)
 	printf("%s", inet_ntoa(addr));
 }
 
-// 打印数组（通用）
+#define ED 4
+// print array (generic)
 static void print_array_u16(const char *name, const uint16_t *arr,
 		uint16_t count, int32_t range, int depth)
 {
@@ -45,26 +46,29 @@ static void print_array_u16(const char *name, const uint16_t *arr,
 
 	/* array case */
 	printf("%s[%u]: [ ", name, count);
-	for (uint16_t i = 0; i < count && i < 10; i++) {
+	for (uint16_t i = 0; i < count && i < ED; i++) {
 		printf("%u%s", arr[i], (i < count - 1) ? ", " : "");
 	}
-	if (count > 10) {
-		printf(" ... (%u more)", count - 10);
+	if (count > ED) {
+		printf(" ... (%u more)", count - ED);
 	}
 	printf(" ]\n");
 }
 
-static void print_array_u32(const char *name, const uint32_t *arr, uint16_t count, int depth)
+static void print_array_u32(const char *name, const uint32_t *arr,
+		uint16_t count, int depth)
 {
-	if (count == 0) return;
+	if (count == 0) {
+		return;
+	}
 
 	print_indent(depth);
 	printf("%s[%u]: [ ", name, count);
-	for (uint16_t i = 0; i < count && i < 10; i++) {
+	for (uint16_t i = 0; i < count && i < ED; i++) {
 		printf("0x%08x%s", arr[i], (i < count - 1) ? ", " : "");
 	}
-	if (count > 10) {
-		printf(" ... (%u more)", count - 10);
+	if (count > ED) {
+		printf(" ... (%u more)", count - ED);
 	}
 	printf(" ]\n");
 }
@@ -72,8 +76,6 @@ static void print_array_u32(const char *name, const uint32_t *arr, uint16_t coun
 static void print_ip_array(const char *name, const uint32_t *arr,
 		uint16_t count, int64_t range, int depth)
 {
-	// if (count == 0) return;
-
 	print_indent(depth);
 
 	if (!count) {
@@ -87,21 +89,17 @@ static void print_ip_array(const char *name, const uint32_t *arr,
 
 	/* array case */
 	printf("%s[%u]: [ ", name, count);
-	for (uint16_t i = 0; i < count && i < 10; i++) {
+	for (uint16_t i = 0; i < count && i < ED; i++) {
 		print_ip(arr[i]);
 		if (i < count - 1) {
 			printf(", ");
 		}
 	}
-	if (count > 10) {
-		printf(" ... (%u more)", count - 10);
+	if (count > ED) {
+		printf(" ... (%u more)", count - ED);
 	}
 	printf(" ]\n");
 }
-
-// ============================================
-// 主 dump 函数
-// ============================================
 
 void cnode_show(const Cnode *node, int depth)
 {
@@ -151,10 +149,10 @@ void cnode_show(const Cnode *node, int depth)
 	print_indent(depth);
 	printf("arp: {\n");
 	depth++;
-	print_ip_array("src", node->ether.type.arp.src, node->ether.type.arp.n_src,
-			-1, depth);
-	print_ip_array("dst", node->ether.type.arp.dst, node->ether.type.arp.n_dst,
-			-1, depth);
+	print_ip_array("src", node->ether.type.arp.src,
+			node->ether.type.arp.n_src, -1, depth);
+	print_ip_array("dst", node->ether.type.arp.dst,
+			node->ether.type.arp.n_dst, -1, depth);
 	depth--;
 	print_indent(depth);
 	printf("}\n");
@@ -164,9 +162,11 @@ void cnode_show(const Cnode *node, int depth)
 	printf("ipv4: {\n");
 	depth++;
 
-	print_ip_array("src", node->ether.type.ipv4.src, node->ether.type.ipv4.n_src,
+	print_ip_array("src", node->ether.type.ipv4.src,
+			node->ether.type.ipv4.n_src,
 			node->ether.type.ipv4.src_range, depth);
-	print_ip_array("dst", node->ether.type.ipv4.dst, node->ether.type.ipv4.n_dst,
+	print_ip_array("dst", node->ether.type.ipv4.dst,
+			node->ether.type.ipv4.n_dst,
 			node->ether.type.ipv4.dst_range, depth);
 
 	print_indent(depth);
@@ -178,7 +178,7 @@ void cnode_show(const Cnode *node, int depth)
 	if (node->ether.type.ipv4.proto[0] != 0) {
 		print_indent(depth);
 		printf("proto: [ ");
-		for (int i = 0; i < 10 && node->ether.type.ipv4.proto[i] != 0; i++) {
+		for (int i = 0; i < ED && node->ether.type.ipv4.proto[i] != 0; i++) {
 			printf("0x%04x ", node->ether.type.ipv4.proto[i]);
 		}
 		printf("]\n");
@@ -389,17 +389,20 @@ void cnode_show(const Cnode *node, int depth)
 
 		print_indent(depth);
 		printf("name: \"%s\"\n",
-				node->erroneous.clas[i].name ? node->erroneous.clas[i].name : "(null)");
+				node->erroneous.clas[i].name ?
+				node->erroneous.clas[i].name : "(null)");
 
 		print_indent(depth);
 		printf("types[%u]: [ ", node->erroneous.clas[i].n_type);
-		for (uint16_t j = 0; j < node->erroneous.clas[i].n_type && j < 10; j++) {
+		for (uint16_t j = 0; j < node->erroneous.clas[i].n_type &&
+				j < ED; j++) {
 			printf("\"%s\"%s",
-					node->erroneous.clas[i].type[j] ? node->erroneous.clas[i].type[j] : "(null)",
+					node->erroneous.clas[i].type[j] ?
+					node->erroneous.clas[i].type[j] : "(null)",
 					(j < node->erroneous.clas[i].n_type - 1) ? ", " : "");
 		}
-		if (node->erroneous.clas[i].n_type > 10) {
-			printf(" ... (%u more)", node->erroneous.clas[i].n_type - 10);
+		if (node->erroneous.clas[i].n_type > ED) {
+			printf(" ... (%u more)", node->erroneous.clas[i].n_type - ED);
 		}
 		printf(" ]\n");
 

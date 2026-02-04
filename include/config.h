@@ -130,7 +130,8 @@ int config_exit(Node *root);
 int config_parse_system(Node *root, struct system_cfg *cfg);
 int config_parse_server(Node *root, struct server *server);
 int config_parse_dpdk(Node *root, int *targc, char ***targv);
-int config_parse_generic(Node *node, int *targc, char ***targv, int i, const char *prefix);
+int config_parse_generic(Node *node, int *targc, char ***targv,
+		int i, const char *prefix);
 Cnode *config_parse_bless(Node *root);
 Node *parse_node(yaml_parser_t *parser);
 void config_show(struct config *cfg);

@@ -5,7 +5,7 @@
 #include "define.h"
 #include "log.h"
 
-#include <ctype.h>    // isprint()
+#include <ctype.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -126,7 +126,8 @@ Node *parse_node(yaml_parser_t *parser)
 
 	switch (event.type) {
 		case YAML_SCALAR_EVENT:
-			node = create_node(NULL, (char *)event.data.scalar.value, NODE_SCALAR);
+			node = create_node(NULL, (char *)event.data.scalar.value,
+					NODE_SCALAR);
 			break;
 		case YAML_MAPPING_START_EVENT:
 			yaml_event_delete(&event);
@@ -203,7 +204,8 @@ void free_tree(Node *node)
 
 typedef void (*NodeVisitor)(Node *node, int depth, void *userdata);
 
-void traverse(Node *node, int depth, NodeVisitor pre, NodeVisitor post, void *userdata)
+void traverse(Node *node, int depth, NodeVisitor pre, NodeVisitor post,
+		void *userdata)
 {
 	for (; node; node = node->next) {
 		if (pre) {
@@ -218,7 +220,8 @@ void traverse(Node *node, int depth, NodeVisitor pre, NodeVisitor post, void *us
 	}
 }
 
-void traverse_node(Node *node, int depth, NodeVisitor pre, NodeVisitor post, void *userdata)
+void traverse_node(Node *node, int depth, NodeVisitor pre, NodeVisitor post,
+		void *userdata)
 {
 	if (node->key) {
 		printf("======\n%s: ", node->key);
@@ -364,7 +367,8 @@ int config_file_map_open(struct config_file_map *cfm)
 	}
 
 	cfm->len = st.st_size;
-	cfm->addr = mmap(NULL, cfm->len + 1, PROT_READ | PROT_WRITE, MAP_PRIVATE, cfm->fd, 0);
+	cfm->addr = mmap(NULL, cfm->len + 1, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE, cfm->fd, 0);
 	if (cfm->addr == MAP_FAILED) {
 		goto err;
 	}
@@ -455,7 +459,8 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 
 	for (Node *n = node->child; n != NULL; n = n->next) {
 		if (n->type == NODE_SCALAR) {
-			if (!n->value || !strcmp(n->value, "null") || !strcmp(n->value, "NULL")) {
+			if (!n->value || !strcmp(n->value, "null") ||
+					!strcmp(n->value, "NULL")) {
 				continue;
 			}
 
@@ -562,7 +567,8 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 	path = "daemonize";
 	Node *node = find_by_path(system_node, path);
 	if (node) {
-		if (NODE_SCALAR == node->type && node->value && 0 == strcmp(node->value, "true")) {
+		if (NODE_SCALAR == node->type && node->value && 0 ==
+				strcmp(node->value, "true")) {
 			cfg->daemonize = 1;
 		}
 	}
@@ -571,7 +577,8 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 	path = "theme";
 	node = find_by_path(system_node, path);
 	if (node) {
-		if (NODE_SCALAR == node->type && node->value && strlen(node->value) < 16) {
+		if (NODE_SCALAR == node->type && node->value &&
+				strlen(node->value) < 16) {
 			strncpy(cfg->theme, node->value, 16);
 		} else {
 			rte_exit(EXIT_FAILURE, "Invalid server theme: %s\n", node->value);
@@ -613,8 +620,10 @@ int config_parse_server(Node *root, struct server *srv)
 		if (NODE_MAPPING == node->type) {
 			for (Node *n = node->child; n; n = n->next) {
 				const char *k = n->key, *v = n->value;
-				if (strlen(n->key) > SERVER_KV_MAX || strlen(n->value) > SERVER_KV_MAX) {
-					printf("String too long %s => %s\n, omit.", n->key, n->value);
+				if (strlen(n->key) > SERVER_KV_MAX ||
+						strlen(n->value) > SERVER_KV_MAX) {
+					printf("String too long %s => %s\n, omit.",
+							n->key, n->value);
 					continue;
 				}
 #define X(name, type, civet_key, def)        \
@@ -669,7 +678,8 @@ int config_parse_server(Node *root, struct server *srv)
 					n = n->next, i++) {
 				int len = strlen(n->value);
 				if (len > 0 && len < SERVER_SERVICE_HTTP_LEN_MAX) {
-					strncpy(svc->http[i], n->value, SERVER_SERVICE_HTTP_LEN_MAX);
+					strncpy(svc->http[i], n->value,
+							SERVER_SERVICE_HTTP_LEN_MAX);
 					svc->n_http++;
 				} else {
 					LOG_ERR("Server service length error");
@@ -727,7 +737,6 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 
 	i = config_parse_dpdk_internal(node, &argc, &argv, ++i);
 
-
 	path = "bless";
 	node = find_by_path(root, path);
 	if (!node) {
@@ -741,7 +750,8 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 	return 0;
 }
 
-int config_parse_generic(Node *node, int *targc, char ***targv, int i, const char *prefix)
+int config_parse_generic(Node *node, int *targc, char ***targv, int i,
+		const char *prefix)
 {
 	char **argv = *targv;
 
@@ -754,11 +764,13 @@ int config_parse_generic(Node *node, int *targc, char ***targv, int i, const cha
 		}
 
 		if (n->type == NODE_SCALAR) {
-			if (!n->value || !strcmp(n->value, "null") || !strcmp(n->value, "NULL")) {
+			if (!n->value || !strcmp(n->value, "null") ||
+					!strcmp(n->value, "NULL")) {
 				continue;
 			}
 
-			size_t len = 2 + strlen(fullkey) + 1 + strlen(n->value) + 1; // --key=value
+			// --key=value
+			size_t len = 2 + strlen(fullkey) + 1 + strlen(n->value) + 1;
 			argv[i] = malloc(len);
 			if (!argv[i]) {
 				perror("malloc");
@@ -818,7 +830,8 @@ static int parse_uint16(const char *s, uint16_t *out)
 	char *endptr;
 	errno = 0;
 
-	unsigned long val = strtoul(s, &endptr, 0);  // base=0 自动识别 0x / 0 前缀
+	// base=0 自动识别 0x / 0 前缀
+	unsigned long val = strtoul(s, &endptr, 0);
 	if (errno != 0) {
 		return 0;  // 溢出或其他错误
 	}
@@ -843,7 +856,8 @@ static int parse_uint32(const char *s, uint32_t *out)
 	char *endptr;
 	errno = 0;
 
-	unsigned long long val = strtoull(s, &endptr, 0);  // base=0 自动识别 0x / 0 前缀
+	// base=0 自动识别 0x / 0 前缀
+	unsigned long long val = strtoull(s, &endptr, 0);
 	if (errno != 0) {
 		return 0;  // 溢出或其他错误
 	}
@@ -863,7 +877,8 @@ static int parse_uint32(const char *s, uint32_t *out)
  * config_parse_sequence_to_array - convert string in Node to int[].
  * Only for uint16_t / uint32_t
  */
-static int config_parse_sequence_to_array(Node *node, void *array, int size, uint16_t limit)
+static int config_parse_sequence_to_array(Node *node, void *array,
+		int size, uint16_t limit)
 {
 	int n = 0;
 	int val = 0;
@@ -875,7 +890,8 @@ static int config_parse_sequence_to_array(Node *node, void *array, int size, uin
 			n++;
 			break;
 		case NODE_SEQUENCE:
-			for (Node *i = node->child; i != NULL && n <= limit; i = i->next, n++) {
+			for (Node *i = node->child; i != NULL && n <= limit;
+					i = i->next, n++) {
 				val = atoi(i->value);
 				if (sizeof(uint16_t) == size) {
 					parse_uint16(i->value, (uint16_t*)((char*)array + size * n));
@@ -893,7 +909,8 @@ static int config_parse_sequence_to_array(Node *node, void *array, int size, uin
 	return n;
 }
 
-static int config_parse_port_maybe_range_to_array(Node *node, uint16_t *port, int32_t *range, uint16_t limit)
+static int config_parse_port_maybe_range_to_array(Node *node, uint16_t *port,
+		int32_t *range, uint16_t limit)
 {
 	int n = 0;
 
@@ -911,7 +928,8 @@ static int config_parse_port_maybe_range_to_array(Node *node, uint16_t *port, in
 			}
 			break;
 		case NODE_SEQUENCE:
-			for (Node *i = node->child; i != NULL && n <= limit; i = i->next, n++) {
+			for (Node *i = node->child; i != NULL && n <= limit;
+					i = i->next, n++) {
 				port[n] = atoi(i->value);
 			}
 			*range = 0;
@@ -929,7 +947,8 @@ ERROR:
 	exit(-1);
 }
 
-static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array, uint32_t *vni, int size, uint16_t limit)
+static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array,
+		uint32_t *vni, int size, uint16_t limit)
 {
 	int n = 0;
 	int val = 0;
@@ -959,7 +978,8 @@ static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array, 
 			n++;
 			break;
 		case NODE_SEQUENCE:
-			for (Node *i = node->child; i != NULL && n <= limit; i = i->next, n++) {
+			for (Node *i = node->child; i != NULL && n <= limit;
+					i = i->next, n++) {
 				dup = strdup(i->value);
 				/* vtep ipv4 */
 				token = strtok_r(dup, ":", &saveptr);
@@ -991,7 +1011,8 @@ static int config_parse_sequence_ipv4_vni_to_array(Node *node, uint32_t *array, 
  * A scalar value provides an ipv4 address and range, like: 10.0.0.1+100.
  * A qequence value provides a series of ipv4 addresses: [ 1.0.0.1, 2.0.0.2 ]
  */
-static int config_parse_ipv4_maybe_range_to_array(Node *node, uint32_t *addr, int64_t *range, uint32_t limit)
+static int config_parse_ipv4_maybe_range_to_array(Node *node, uint32_t *addr,
+		int64_t *range, uint32_t limit)
 {
 	uint32_t n = 0;
 
@@ -1098,7 +1119,9 @@ static int config_parse_bless_ether(Node *root, Cnode *cnode)
 
 	/* take only 1 mac address */
 	if (node->value && strlen(node->value) && NODE_SCALAR == node->type &&
-			(rte_ether_unformat_addr(node->value, (struct rte_ether_addr*)&(cnode->ether.dst)) == 0)) {
+			(rte_ether_unformat_addr(node->value,
+									 (struct rte_ether_addr*)&(cnode->ether.dst))
+			 == 0)) {
 		// bless_print_mac((struct rte_ether_addr*)cnode->ether.dst);
 	} else {
 		LOG_ERR("Invalid dst mac address");
@@ -1368,7 +1391,8 @@ static int config_parse_bless_ether_type_ip_udp(Node *root, Cnode *cnode)
 	}
 
 	int32_t range = 0;
-	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.udp.src, &range, PORT_MAX);
+	n = config_parse_port_maybe_range_to_array(node,
+			cnode->ether.type.ipv4.udp.src, &range, PORT_MAX);
 	if (n > 0) {
 		if (range) {
 			cnode->ether.type.ipv4.udp.src_range = range;
@@ -1394,7 +1418,8 @@ static int config_parse_bless_ether_type_ip_udp(Node *root, Cnode *cnode)
 		goto ERROR;
 	}
 	range = 0;
-	n = config_parse_port_maybe_range_to_array(node, cnode->ether.type.ipv4.udp.dst, &range, PORT_MAX);
+	n = config_parse_port_maybe_range_to_array(node,
+			cnode->ether.type.ipv4.udp.dst, &range, PORT_MAX);
 	if (n > 0) {
 		if (range) {
 			cnode->ether.type.ipv4.udp.dst_range = range;
@@ -1441,7 +1466,8 @@ static int config_parse_bless_ether_type_ipv4(Node *root, Cnode *cnode)
 	}
 
 	int64_t range = 0;
-	n = config_parse_ipv4_maybe_range_to_array(node, cnode->ether.type.ipv4.src, &range, IP_ADDR_MAX);
+	n = config_parse_ipv4_maybe_range_to_array(node,
+			cnode->ether.type.ipv4.src, &range, IP_ADDR_MAX);
 	if (n > 0) {
 		if (range) {
 			cnode->ether.type.ipv4.src_range = range;
@@ -1466,7 +1492,8 @@ static int config_parse_bless_ether_type_ipv4(Node *root, Cnode *cnode)
 	if (!node) {
 		goto ERROR;
 	}
-	n = config_parse_ipv4_maybe_range_to_array(node, cnode->ether.type.ipv4.dst, &range, IP_ADDR_MAX);
+	n = config_parse_ipv4_maybe_range_to_array(node,
+			cnode->ether.type.ipv4.dst, &range, IP_ADDR_MAX);
 	if (n > 0) {
 		if (range) {
 			cnode->ether.type.ipv4.dst_range = range;
@@ -1536,7 +1563,9 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 		goto ERROR;
 	}
 
-	n = config_parse_sequence_ipv4_vni_to_array(node, cnode->vxlan.ether.type.ipv4.src, cnode->vxlan.ether.type.ipv4.vni, sizeof(uint16_t), PORT_MAX);
+	n = config_parse_sequence_ipv4_vni_to_array(node,
+			cnode->vxlan.ether.type.ipv4.src, cnode->vxlan.ether.type.ipv4.vni,
+			sizeof(uint16_t), PORT_MAX);
 	// n = config_parse_sequence_ipv4_to_array(node, cnode->vxlan.ether.type.ipv4.src, sizeof(uint32_t), IP_ADDR_MAX);
 	if (n > 0) {
 		cnode->vxlan.ether.type.ipv4.n_src = n;
@@ -1559,7 +1588,8 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 		exit(-1);
 	}
 
-	n = config_parse_sequence_ipv4_to_array(node, cnode->vxlan.ether.type.ipv4.dst, sizeof(uint32_t), IP_ADDR_MAX);
+	n = config_parse_sequence_ipv4_to_array(node, cnode->vxlan.ether.type.ipv4.dst,
+			sizeof(uint32_t), IP_ADDR_MAX);
 	if (n > 0) {
 		cnode->vxlan.ether.type.ipv4.n_dst = n;
 	} else {
@@ -1579,7 +1609,8 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 		goto ERROR;
 	}
 
-	n = config_parse_sequence_to_array(node, cnode->vxlan.ether.type.ipv4.udp.src, sizeof(uint16_t), PORT_MAX);
+	n = config_parse_sequence_to_array(node, cnode->vxlan.ether.type.ipv4.udp.src,
+			sizeof(uint16_t), PORT_MAX);
 	if (n > 0) {
 		cnode->vxlan.ether.type.ipv4.udp.n_src = n;
 	} else {
@@ -1598,7 +1629,8 @@ static int config_parse_bless_vxlan(Node *root, Cnode *cnode)
 	if (!node) {
 		goto ERROR;
 	}
-	n = config_parse_sequence_to_array(node, cnode->vxlan.ether.type.ipv4.udp.dst, sizeof(uint16_t), PORT_MAX);
+	n = config_parse_sequence_to_array(node, cnode->vxlan.ether.type.ipv4.udp.dst,
+			sizeof(uint16_t), PORT_MAX);
 	if (n > 0) {
 		cnode->vxlan.ether.type.ipv4.udp.n_dst = n;
 	} else {
@@ -1795,10 +1827,6 @@ int config_clone_cnode(Cnode *src, Cnode *dst)
 	}
 
 	return 0;
-}
-
-void config_show_cnode(Cnode *c)
-{
 }
 
 void config_show(struct config *cfg)
