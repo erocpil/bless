@@ -641,7 +641,7 @@ int config_parse_server(Node *root, struct server *srv)
 			printf("No valid server options found, use default\n");
 		}
 	} else {
-		LOG_WARN("No server options found, use default\n");
+		LOG_WARN("No server options found, use default");
 	}
 
 	/* 3. cfg -> kv[] */

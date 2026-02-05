@@ -6,6 +6,7 @@
 #include "device.h"
 #include "civetweb.h"
 #include "log.h"
+#include <string.h>
 
 void base_show_version(void)
 {
@@ -804,7 +805,8 @@ void init_system()
 	system->cfg.server.ctx = ctx;
 	base.system = system;
 	LOG_INFO("Websocket Server Started");
-	// system_show(system);
+	system_show(system);
+	getchar();
 }
 
 void init_config()
@@ -1290,6 +1292,10 @@ void quit()
 
 int main(int argc, char **argv)
 {
+	LOG_INFO("%p", ws_server_start(NULL));
+
+	sleep(-1);
+
 	init_base(argc, argv);
 
 	init_config();
