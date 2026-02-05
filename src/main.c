@@ -804,8 +804,7 @@ void init_system()
 	system->cfg.server.ctx = ctx;
 	base.system = system;
 	LOG_INFO("Websocket Server Started");
-	system_show(system);
-	getchar();
+	// system_show(system);
 }
 
 void init_config()

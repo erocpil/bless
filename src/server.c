@@ -2704,6 +2704,7 @@ static int ws_connect_handler(const struct mg_connection *conn, void *ud)
 
 static void ws_ready_handler(struct mg_connection *conn, void *ud)
 {
+	_L();
 	(void)ud;
 	const char *hello = "{\"hello\":\"world\"}";
 	mg_websocket_write(conn,
@@ -2715,6 +2716,7 @@ static void ws_ready_handler(struct mg_connection *conn, void *ud)
 static int ws_data_handler(struct mg_connection *conn, int opcode,
 		char *data, size_t datasize, void *ud)
 {
+	_L();
 	(void)conn;
 	(void)datasize;
 
@@ -2732,6 +2734,7 @@ static int ws_data_handler(struct mg_connection *conn, int opcode,
 
 static void ws_close_handler(const struct mg_connection *conn, void *ud)
 {
+	_L();
 	(void)ud;
 	pthread_mutex_lock(&mgc_lock);
 	for (int i = 0; i < n_mgc; i++) {
@@ -2755,6 +2758,7 @@ static void ws_close_handler(const struct mg_connection *conn, void *ud)
 /* ================================================================ */
 static int http_control_handler(struct mg_connection *conn, void *ud)
 {
+	_L();
 	(void)ud;
 	const struct stats_snapshot *s = stats_get_active();
 
@@ -2770,6 +2774,7 @@ static int http_control_handler(struct mg_connection *conn, void *ud)
 
 static int http_stats_handler(struct mg_connection *conn, void *ud)
 {
+	_L();
 	(void)ud;
 	const struct stats_snapshot *s = stats_get_active();
 
@@ -2785,6 +2790,7 @@ static int http_stats_handler(struct mg_connection *conn, void *ud)
 
 static int http_metrics_handler(struct mg_connection *conn, void *ud)
 {
+	_L();
 	(void)ud;
 	const struct stats_snapshot *s = stats_get_active();
 
@@ -2839,6 +2845,22 @@ static int root_handler(struct mg_connection *conn, void *cbdata)
 	return 1;
 }
 
+int universal_handler(struct mg_connection *conn, void *cbdata)
+{
+    printf("=== Universal handler called! ===\n");
+    printf(
+			"local uri %s\n"
+			"request uri %s\n"
+			"server port %d"
+			"remote port %d\n",
+			mg_get_request_info(conn)->local_uri,
+			mg_get_request_info(conn)->request_uri,
+			mg_get_request_info(conn)->server_port,
+			mg_get_request_info(conn)->remote_port
+			);
+    printf("Method: %s\n", mg_get_request_info(conn)->request_method);
+    return 0;  // 返回0继续处理，返回非0表示已处理
+}
 /* ================================================================ */
 /* Server lifecycle                                                 */
 /* ================================================================ */
@@ -2853,20 +2875,20 @@ struct mg_context * ws_server_start(void *data)
 	struct mg_init_data init = {
 		.callbacks = &cb,
 		.user_data = data,
-		.configuration_options = srv->cfg.civet_opts[0] ? srv->cfg.civet_opts : SERVER_OPTIONS,
+		// .configuration_options = srv->cfg.civet_opts[0] ? srv->cfg.civet_opts : SERVER_OPTIONS,
+		.configuration_options = SERVER_OPTIONS,
 	};
 
-	server_show(srv);
-	LOG_ERR("%s", srv->svc.websocket_uri);
-	getchar();
 	struct mg_context *ctx = mg_start2(&init, NULL);
 	if (!ctx) {
 		LOG_ERR("mg_start2(%p)\n", &init);
+		server_show(srv);
 		return NULL;
 	}
 
 	mg_set_websocket_handler_with_subprotocols(ctx,
-			srv->svc.websocket_uri ? srv->svc.websocket_uri : WS_URL,
+			// srv->svc.websocket_uri ? srv->svc.websocket_uri : WS_URL,
+			WS_URL,
 			&wsprot,
 			ws_connect_handler,
 			ws_ready_handler,
@@ -2874,10 +2896,16 @@ struct mg_context * ws_server_start(void *data)
 			ws_close_handler,
 			data);
 
-	mg_set_request_handler(ctx, "/", root_handler, NULL);
-	mg_set_request_handler(ctx, "/api/control", http_control_handler, NULL);
-	mg_set_request_handler(ctx, "/api/stats", http_stats_handler, NULL);
-	mg_set_request_handler(ctx, "/metrics", http_metrics_handler, NULL);
+	LOG_ERR("websocket uri: %s", WS_URL);
+
+	// mg_set_request_handler(ctx, "/", root_handler, NULL);
+	// mg_set_request_handler(ctx, "/api/control", http_control_handler, NULL);
+	// mg_set_request_handler(ctx, "/api/stats", http_stats_handler, NULL);
+	// mg_set_request_handler(ctx, "/metrics", http_metrics_handler, NULL);
+	// // 在mg_start()之后立即添加全局handler测试
+
+	// 注册为捕获所有请求
+	mg_set_request_handler(ctx, "**", universal_handler, NULL);
 
 	return ctx;
 }
