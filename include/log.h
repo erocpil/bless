@@ -191,6 +191,9 @@ extern const theme_config *g_current_theme;
 #define LOG_META_NNL(...) \
 	LOG_BASE_NNL(stdout, "META", C_SILVER, __VA_ARGS__)
 
+#define LOG_SHOW( fmt, ...)                                     \
+	LOG_BASE(stdout, "SHOW", g_current_theme->grey, fmt, ##__VA_ARGS__)
+
 #define LOG_TRACE(fmt, ...)                                     \
 	LOG_BASE(stdout, "TRAC", g_current_theme->grey, fmt, ##__VA_ARGS__)
 

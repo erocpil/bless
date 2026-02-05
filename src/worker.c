@@ -4,14 +4,13 @@
 #include "worker.h"
 #include "metric.h"
 #include "log.h"
-#include "rte_per_lcore.h"
 #include "server.h"
 #include "log.h"
 
 #include <stdatomic.h>
 #include <stdint.h>
 
-RTE_DEFINE_PER_LCORE(struct worker, worker);
+/* DO NOT USE ANY RTE_DEFINE_PER_LCORE() !!! */
 
 static inline void swap_mac(struct rte_ether_hdr *eth_hdr)
 {
@@ -30,9 +29,13 @@ void worker_loop(void *data)
 
 	struct rte_mbuf **mbufs = NULL;
 	struct rte_mbuf **rx_mbufs = NULL;
-	memset(&RTE_PER_LCORE(worker), 0, sizeof(struct worker));
 	struct bless_conf *bconf = (struct bless_conf*)data;
-	struct worker *worker = &RTE_PER_LCORE(worker);
+	struct worker *worker = rte_malloc(NULL, sizeof(struct worker), 0);
+	if (!worker) {
+		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(worker)\n",
+				__func__, __LINE__);
+	}
+	memset(worker, 0, sizeof(struct worker));
 
 	/* set this worker(lcore or pthread) name */
 	snprintf(worker->name, sizeof(worker->name), "worker@%u", lcore_id);
@@ -41,7 +44,7 @@ void worker_loop(void *data)
 	struct bless_conf *conf = &worker->conf;
 	memcpy(conf, bconf, offsetof(struct bless_conf, dist_ratio));
 
-	struct base_core_view *cv = &RTE_PER_LCORE(worker).cv;
+	struct base_core_view *cv = &worker->cv;
 	memcpy(cv, conf->base->topo.cv + lcore_id, sizeof(struct base_core_view));
 
 	conf->dist = rte_malloc(NULL, sizeof(struct distribution) + sizeof(uint8_t) * bconf->dist->size, 0);
@@ -50,17 +53,16 @@ void worker_loop(void *data)
 				__func__, __LINE__);
 	}
 	memcpy(conf->dist, bconf->dist, sizeof(struct distribution) + sizeof(uint8_t) * bconf->dist->size);
-	LOG_ERR("check %u element", bconf->dist->size);
+	LOG_TRACE("check %u element", bconf->dist->size);
 	for (int i = 0; i < bconf->dist->size; i++) {
 		if (bconf->dist->data[i] != conf->dist->data[i]) {
 			LOG_ERR("i %d %u %u", i, bconf->dist->data[i], conf->dist->data[i]);
 			exit(0);
 		}
 	}
-	LOG_ERR("identical");
+	LOG_TRACE("identical");
 	struct distribution *dist = conf->dist;
-	DISTRIBUTION_DUMP(dist);
-	// exit(0);
+	bless_show_dist(dist);
 	Cnode *cnode = rte_malloc(NULL, sizeof(Cnode), 0);
 	if (unlikely(!cnode)) {
 		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(Cnode)\n",
@@ -370,6 +372,8 @@ void worker_loop(void *data)
 EXIT:
 	LOG_INFO("core %u %u exit", lcore_id, cv->core);
 }
+#if defined(XXX)
+#endif
 
 void dpdk_generate_cmdReply(const char *str)
 {
@@ -426,7 +430,6 @@ void worker_main_loop(void *data)
 	uint64_t val = 0;
 
 	pthread_barrier_wait(conf->barrier);
-	_L();
 
 	while ((val = atomic_load_explicit(state, memory_order_acquire)) != STATE_EXIT) {
 		static uint64_t i = 0;

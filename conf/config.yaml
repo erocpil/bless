@@ -131,12 +131,12 @@ system:
         - /api/control
         - /api/stats
         - /metrics
-    # options:
-    #   listening_ports: 8000
-    #   num_threads: 4
-    #   enable_keep_alive: yes
-    #   request_timeout_ms: 2000
-    #   enable_websocket_ping_pong: yes
-    #   # document_root: /root/src/bless/www
-    #   access_log_file: /root/src/bless/www/log/access.log
-    #   error_log_file: /root/src/bless/www/log/error.log
+    options:
+      listening_ports: 8000
+      num_threads: 4
+      enable_keep_alive: yes
+      request_timeout_ms: 2000
+      enable_websocket_ping_pong: yes
+      # document_root: /root/src/bless/www
+      access_log_file: /root/src/bless/www/log/access.log
+      error_log_file: /root/src/bless/www/log/error.log

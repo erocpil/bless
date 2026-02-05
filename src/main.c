@@ -6,7 +6,6 @@
 #include "device.h"
 #include "civetweb.h"
 #include "log.h"
-#include <string.h>
 
 void base_show_version(void)
 {
@@ -590,9 +589,9 @@ static int init_mbuf_dynfield()
 			return rte_errno;
 		}
 		mbuf_dynfields_offset[i] = offset;
-		LOG_HINT("name: %s", md->name);
-		LOG_HINT("size: %lu", md->size);
-		LOG_HINT("align: %lu", md->align);
+		LOG_HINT("  name: %s", md->name);
+		LOG_HINT("  size: %lu", md->size);
+		LOG_HINT("  align: %lu", md->align);
 	}
 
 	rte_mbuf_dyn_dump(stdout);
@@ -613,15 +612,15 @@ static void base_show_core_view_format(struct base_core_view *view, char *pref)
 			continue;
 		}
 		LOG_HINT("%s  [%d]        %p", pref, i, v);
-		LOG_PATH("%s  enabled    %u", pref,v->enabled);
-		LOG_PATH("%s  socket     %u", pref,v->socket);
-		LOG_PATH("%s  numa       %u", pref,v->numa);
-		LOG_PATH("%s  core       %u", pref,v->core);
-		LOG_PATH("%s  role       %u", pref,v->role);
-		LOG_PATH("%s  port       %u", pref,v->port);
-		LOG_PATH("%s  type       %u (%s)", pref,v->type, device_get_string(v->type));
-		LOG_PATH("%s  rxq        %u", pref,v->rxq);
-		LOG_PATH("%s  txq        %u", pref,v->txq);
+		LOG_SHOW("%s  enabled    %u", pref,v->enabled);
+		LOG_SHOW("%s  socket     %u", pref,v->socket);
+		LOG_SHOW("%s  numa       %u", pref,v->numa);
+		LOG_SHOW("%s  core       %u", pref,v->core);
+		LOG_SHOW("%s  role       %u", pref,v->role);
+		LOG_SHOW("%s  port       %u", pref,v->port);
+		LOG_SHOW("%s  type       %u (%s)", pref,v->type, device_get_string(v->type));
+		LOG_SHOW("%s  rxq        %u", pref,v->rxq);
+		LOG_SHOW("%s  txq        %u", pref,v->txq);
 	}
 }
 
@@ -638,14 +637,14 @@ void base_show_topo(struct base_topo *topo)
 	// rte_lcore_dump(stdout);
 
 	LOG_HINT("base_topo           %p", topo);
-	LOG_PATH("  n_socket          %u", topo->n_socket);
-	LOG_PATH("  n_numa            %u", topo->n_numa);
-	LOG_PATH("  n_core            %u", topo->n_core);
-	LOG_PATH("  n_enabled_core    %u", topo->n_enabled_core);
-	LOG_PATH("  n_port            %u", topo->n_port);
-	LOG_PATH("  n_enabled_port    %u", topo->n_enabled_port);
-	LOG_PATH("  port_mask         %u", topo->port_mask);
-	LOG_PATH("  main_core         %u", topo->main_core);
+	LOG_SHOW("  n_socket          %u", topo->n_socket);
+	LOG_SHOW("  n_numa            %u", topo->n_numa);
+	LOG_SHOW("  n_core            %u", topo->n_core);
+	LOG_SHOW("  n_enabled_core    %u", topo->n_enabled_core);
+	LOG_SHOW("  n_port            %u", topo->n_port);
+	LOG_SHOW("  n_enabled_port    %u", topo->n_enabled_port);
+	LOG_SHOW("  port_mask         %u", topo->port_mask);
+	LOG_SHOW("  main_core         %u", topo->main_core);
 
 	base_show_core_view_format(topo->cv, "  ");
 }
@@ -804,9 +803,7 @@ void init_system()
 	}
 	system->cfg.server.ctx = ctx;
 	base.system = system;
-	LOG_INFO("Websocket Server Started");
 	system_show(system);
-	getchar();
 }
 
 void init_config()
@@ -997,14 +994,23 @@ void init_signal()
 
 void init_port()
 {
-	uint16_t ap = __builtin_popcount(enabled_port_mask);
-	unsigned int nb_mbufs =
-		ap * rxtxq_per_port * nb_rxd      /* RX ring 硬需求 */
-		+ ap * MAX_PKT_BURST * rxtxq_per_port
+	LOG_HINT("Calculating number of mbufs to be used");
+	uint16_t available_ports = __builtin_popcount(enabled_port_mask);
+	uint32_t nb_mbufs =
+		available_ports * rxtxq_per_port * nb_rxd      /* RX ring 硬需求 */
+		+ available_ports * MAX_PKT_BURST * rxtxq_per_port
 		+ base.topo.n_enabled_core * MEMPOOL_CACHE_SIZE * 2
 		+ 8192; /* 安全冗余 */
-	LOG_HINT("ap %d rxtxq_per_port %d nb_rxd %d MAX_PKT_BURST %d base.topo.n_enabled_core %d MEMPOOL_CACHE_SIZE %d nb_mbufs %u",
-			ap, rxtxq_per_port, nb_rxd, MAX_PKT_BURST, base.topo.n_enabled_core, MEMPOOL_CACHE_SIZE, nb_mbufs);
+	LOG_HINT("number of mbufs = ");
+	LOG_HINT("  available_ports * rxtxq_per_port * nb_rxd +");
+	LOG_HINT("  available_ports * MAX_PKT_BURST * rxtxq_per_port +");
+	LOG_HINT("  base.topo.n_enabled_core * MEMPOOL_CACHE_SIZE * 2 +");
+	LOG_HINT("  redundancy");
+	LOG_HINT("%u = ", nb_mbufs);
+	LOG_HINT("  %u * %u * %u +", available_ports, rxtxq_per_port, nb_rxd);
+	LOG_HINT("  %u * %u * %u +", available_ports, MAX_PKT_BURST, rxtxq_per_port);
+	LOG_HINT("  %u * %u * 2 +", base.topo.n_enabled_core, MEMPOOL_CACHE_SIZE);
+	LOG_HINT("  8192");
 
 	/* Create the mbuf pool. 8< */
 	rx_pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", nb_mbufs,
@@ -1292,16 +1298,11 @@ void quit()
 
 int main(int argc, char **argv)
 {
-	LOG_INFO("%p", ws_server_start(NULL));
-
-	sleep(-1);
-
 	init_base(argc, argv);
 
 	init_config();
 
 	init_system();
-	while (1);
 
 	init_eal();
 

@@ -50,13 +50,12 @@ void system_show_cpuset(const cpu_set_t *set, int max_cpus)
 
 void system_show_status(struct system_status *sysstat)
 {
-	printf("\n");
-	LOG_INFO("System status %p   ", sysstat);
+	LOG_INFO("\nSystem status %p   ", sysstat);
 	if (!sysstat) {
 		return;
 	}
-	LOG_PATH("  ppid    %u", sysstat->ppid);
-	LOG_PATH("  pid     %u", sysstat->pid);
+	LOG_SHOW("  ppid    %u", sysstat->ppid);
+	LOG_SHOW("  pid     %u", sysstat->pid);
 	system_show_cpuset(&sysstat->cpuset, CPU_SETSIZE);
 }
 
@@ -66,7 +65,7 @@ void system_show(struct system *sys)
 		return;
 	}
 	LOG_HINT("system %p", sys);
-	LOG_PATH("  daemonize %d", sys->cfg.daemonize);
-	LOG_PATH("  theme     %s", sys->cfg.theme);
+	LOG_SHOW("  daemonize %d", sys->cfg.daemonize);
+	LOG_SHOW("  theme     %s", sys->cfg.theme);
 	server_show_format(&sys->cfg.server, "   ");
 }

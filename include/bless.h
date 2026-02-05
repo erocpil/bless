@@ -63,19 +63,6 @@ struct distribution {
 	uint8_t data[0];
 };
 
-#ifndef DIST_RATIO_DUMP
-#define DISTRIBUTION_DUMP(d) \
-	do { \
-		printf("[%s %d] distribution %p:\n" \
-				"   pos\t%u\n" \
-				"   size\t%u\n" \
-				"   mask\t%u\n" \
-				"   capacity\t%u\n", \
-				__func__, __LINE__, \
-				d, d->pos, d->size, d->mask, d->capacity); \
-	} while (0)
-#endif
-
 enum BLESS_TYPE {
 	TYPE_ARP = 0,
 	TYPE_ICMP,
@@ -225,5 +212,6 @@ int bless_parse_port_range(char *data, uint16_t *port, int32_t *range);
 int64_t bless_seperate_ip_range(char *ip_range);
 int32_t bless_seperate_port_range(char *port_range);
 uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data);
+void bless_show_dist(struct distribution *dist);
 
 #endif

@@ -711,6 +711,20 @@ static unsigned int make_power_of_2(unsigned int n)
 	return 1 << c;
 }
 
+void bless_show_dist(struct distribution *dist)
+{
+	if (!dist) {
+		return;
+	}
+
+	LOG_HINT("distribution  %p", dist);
+	LOG_SHOW("  pos        %u", dist->pos);
+	LOG_SHOW("  size       %u", dist->size);
+	LOG_SHOW("  mask       %u", dist->mask);
+	LOG_SHOW("  capacity   %u", dist->capacity);
+}
+
+
 int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio,
 		struct bless_encap_params *bep)
 {
@@ -800,7 +814,7 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio,
 	bconf->bep.inner = bep->inner;
 	bconf->bep.outer = bep->outer;
 
-	// DISTRIBUTION_DUMP(bconf->dist);
+	bless_show_dist(bconf->dist);
 
 	return 0;
 }

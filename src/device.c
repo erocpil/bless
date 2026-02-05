@@ -77,14 +77,14 @@ void device_show_info(uint16_t portid)
 		return;
 	}
 
-	LOG_INFO("dev info          %p", &dev_info);
-	LOG_PATH("  port id         %u", portid);
-	LOG_PATH("  driver name     %s", dev_info.driver_name);
-	LOG_PATH("  if index        %u", dev_info.if_index);
-	LOG_PATH("  mtu             [%d, %d]", dev_info.min_mtu, dev_info.max_mtu);
-	LOG_PATH("  max rx queues   %u", dev_info.max_rx_queues);
-	LOG_PATH("  max tx queues   %u", dev_info.max_tx_queues);
-	LOG_PATH("  nb rx queues    %u", dev_info.nb_rx_queues);
-	LOG_PATH("  nb tx queues    %u", dev_info.nb_tx_queues);
-	LOG_PATH("  tx offload capa %lx", dev_info.tx_offload_capa);
+	LOG_HINT("device info       %p", &dev_info);
+	LOG_SHOW("  port id         %u", portid);
+	LOG_SHOW("  driver name     %s", dev_info.driver_name);
+	LOG_SHOW("  if index        %u", dev_info.if_index);
+	LOG_SHOW("  mtu             [%d, %d]", dev_info.min_mtu, dev_info.max_mtu);
+	LOG_SHOW("  max rx queues   %u", dev_info.max_rx_queues);
+	LOG_SHOW("  max tx queues   %u", dev_info.max_tx_queues);
+	LOG_SHOW("  nb rx queues    %u", dev_info.nb_rx_queues);
+	LOG_SHOW("  nb tx queues    %u", dev_info.nb_tx_queues);
+	LOG_SHOW("  tx offload capa %lx", dev_info.tx_offload_capa);
 }
