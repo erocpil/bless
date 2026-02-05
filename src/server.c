@@ -2678,6 +2678,7 @@ const struct stats_snapshot * stats_get_active(void)
 /* ================================================================ */
 static int ws_connect_handler(const struct mg_connection *conn, void *ud)
 {
+	_L();
 	(void)ud;
 
 	pthread_mutex_lock(&mgc_lock);
@@ -2801,6 +2802,7 @@ static int http_metrics_handler(struct mg_connection *conn, void *ud)
 /* ================================================================ */
 void ws_broadcast_stats(void)
 {
+	_L("n_mgc %d", n_mgc);
 	const struct stats_snapshot *s = stats_get_active();
 
 	pthread_mutex_lock(&mgc_lock);
@@ -2828,6 +2830,7 @@ void ws_broadcast_log(char *log, size_t len)
 
 static int root_handler(struct mg_connection *conn, void *cbdata)
 {
+	_L();
 	mg_printf(conn,
 			"HTTP/1.1 200 OK\r\n"
 			"Content-Type: text/html\r\n"
@@ -2853,9 +2856,12 @@ struct mg_context * ws_server_start(void *data)
 		.configuration_options = srv->cfg.civet_opts[0] ? srv->cfg.civet_opts : SERVER_OPTIONS,
 	};
 
+	server_show(srv);
+	LOG_ERR("%s", srv->svc.websocket_uri);
+	getchar();
 	struct mg_context *ctx = mg_start2(&init, NULL);
 	if (!ctx) {
-		printf("mg_start2()\n");
+		LOG_ERR("mg_start2(%p)\n", &init);
 		return NULL;
 	}
 

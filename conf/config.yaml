@@ -31,9 +31,9 @@ dpdk:
 
 injector:
   # ports
-  p: 0x6
+  p: 0x1
   # queues on each port
-  q: 2
+  q: 1
   # Promiscuous
   P:
   T: 1
@@ -108,7 +108,7 @@ bless:
             dst: 4789
             dst-range: 10
   erroneous:
-    ratio: 1
+    ratio: 0
     class:
       mac: [ vlan, multicast, ipv6 ] # 0, 1, 2
       arp: [ src ] # 3
@@ -132,10 +132,10 @@ system:
         - /api/stats
         - /metrics
     options:
-      listening_ports: 8000
-      num_threads: 4
-      enable_keep_alive: yes
-      request_timeout_ms: 2000
-      document_root: /root/src/bless/www
-      access_log_file: /root/src/bless/www/log/access.log
-      error_log_file: /root/src/bless/www/log/error.log
+    #   listening_ports: 8000
+    #   num_threads: 4
+    #   enable_keep_alive: yes
+    #   request_timeout_ms: 2000
+    #   # document_root: /root/src/bless/www
+    #   access_log_file: /root/src/bless/www/log/access.log
+    #   error_log_file: /root/src/bless/www/log/error.log

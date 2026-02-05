@@ -1,15 +1,17 @@
-#include "base.h"
 #include "bless.h"
 #include "cnode.h"
 #include "define.h"
 #include "worker.h"
 #include "metric.h"
 #include "log.h"
+#include "rte_per_lcore.h"
 #include "server.h"
 #include "log.h"
 
 #include <stdatomic.h>
 #include <stdint.h>
+
+RTE_DEFINE_PER_LCORE(struct worker, worker);
 
 static inline void swap_mac(struct rte_ether_hdr *eth_hdr)
 {
@@ -23,37 +25,73 @@ static inline void swap_mac(struct rte_ether_hdr *eth_hdr)
 
 void worker_loop(void *data)
 {
+
+	uint32_t lcore_id = rte_lcore_id();
+
+	struct rte_mbuf **mbufs = NULL;
+	struct rte_mbuf **rx_mbufs = NULL;
+	memset(&RTE_PER_LCORE(worker), 0, sizeof(struct worker));
+	struct bless_conf *bconf = (struct bless_conf*)data;
+	struct worker *worker = &RTE_PER_LCORE(worker);
+
+	/* set this worker(lcore or pthread) name */
+	snprintf(worker->name, sizeof(worker->name), "worker@%u", lcore_id);
+	pthread_setname_np(pthread_self(), worker->name);
+
+	struct bless_conf *conf = &worker->conf;
+	memcpy(conf, bconf, offsetof(struct bless_conf, dist_ratio));
+
+	struct base_core_view *cv = &RTE_PER_LCORE(worker).cv;
+	memcpy(cv, conf->base->topo.cv + lcore_id, sizeof(struct base_core_view));
+
+	conf->dist = rte_malloc(NULL, sizeof(struct distribution) + sizeof(uint8_t) * bconf->dist->size, 0);
+	if (unlikely(!conf->dist)) {
+		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(distribution)\n",
+				__func__, __LINE__);
+	}
+	memcpy(conf->dist, bconf->dist, sizeof(struct distribution) + sizeof(uint8_t) * bconf->dist->size);
+	LOG_ERR("check %u element", bconf->dist->size);
+	for (int i = 0; i < bconf->dist->size; i++) {
+		if (bconf->dist->data[i] != conf->dist->data[i]) {
+			LOG_ERR("i %d %u %u", i, bconf->dist->data[i], conf->dist->data[i]);
+			exit(0);
+		}
+	}
+	LOG_ERR("identical");
+	struct distribution *dist = conf->dist;
+	DISTRIBUTION_DUMP(dist);
+	// exit(0);
+	Cnode *cnode = rte_malloc(NULL, sizeof(Cnode), 0);
+	if (unlikely(!cnode)) {
+		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(Cnode)\n",
+				__func__, __LINE__);
+	}
+	if (unlikely(config_clone_cnode(cnode, cnode) < 0)) {
+		rte_exit(EXIT_FAILURE, "[%s %d] config_clone_cnode(%p)\n",
+				__func__, __LINE__, cnode);
+	}
+
+	uint16_t port = cv->port;
+
+#if 0
 	struct rte_mbuf **mbufs = NULL;
 	struct rte_mbuf **rx_mbufs = NULL;
 	unsigned lcore_id;
 	uint16_t portid = 0;
-
 	lcore_id = rte_lcore_id();
-
 	char name[256] = { 0 };
 	snprintf(name, sizeof(name), "worker@%u", lcore_id);
 	pthread_setname_np(pthread_self(), name);
 
 	struct bless_conf *bconf = (struct bless_conf*)data;
-
-	// LOG_INFO("wait barrier");
-	// pthread_barrier_wait(bconf->barrier);
-
-	/*
-	qconf = bconf->qconf + lcore_id;
-	LOG_DEBUG("lid %d pid %d qid %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
-	*/
-	// assert(1 == qconf->enabled);
+	uint16_t dsize = bconf->dist->size;
+	dsize = bconf->dist->capacity;
 
 	struct bless_conf *conf = rte_malloc(NULL, sizeof(struct bless_conf), 0);
 	if (!conf) {
 		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(bless_conf)\n",
 				__func__, __LINE__);
 	}
-	// DISTRIBUTION_DUMP(bconf->dist);
-
-	uint16_t dsize = bconf->dist->size;
-	dsize = bconf->dist->capacity;
 
 	conf->dist = rte_malloc(NULL, sizeof(struct distribution) + sizeof(uint8_t) * dsize, 0);
 	if (unlikely(!conf->dist)) {
@@ -64,21 +102,7 @@ void worker_loop(void *data)
 	memcpy(conf, bconf, offsetof(struct bless_conf, dist_ratio));
 	struct distribution *dist = conf->dist;
 
-	// XXX
-#if 0
-	conf->qconf = rte_malloc(NULL, sizeof(struct lcore_queue_conf), 0);
-	if (unlikely(!conf->qconf)) {
-		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(qconf)\n",
-				__func__, __LINE__);
-	}
-	memcpy(conf->qconf, &bconf->qconf[lcore_id], sizeof(struct lcore_queue_conf));
-#endif
-
-	struct base_core_view *cv = rte_malloc(NULL, sizeof(struct base_core_view), 0);
-	if (unlikely(!cv)) {
-		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(base core view)\n",
-				__func__, __LINE__);
-	}
+	struct base_core_view *cv = &RTE_PER_LCORE(worker).cv;
 	memcpy(cv, conf->base->topo.cv + lcore_id, sizeof(struct base_core_view));
 
 	Cnode *cnode = rte_malloc(NULL, sizeof(Cnode), 0);
@@ -90,64 +114,25 @@ void worker_loop(void *data)
 		rte_exit(EXIT_FAILURE, "[%s %d] config_clone_cnode(%p)\n",
 				__func__, __LINE__, conf->cnode);
 	}
+#endif
 
 	/* check if src mac address is provided */
 	if (!cnode->ether.n_src) {
-		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->ether.src);
+		rte_eth_macaddr_get(port, (struct rte_ether_addr*)cnode->ether.src);
 		LOG_META_NNL("injector will use local port mac address: ");
 		bless_print_mac((struct rte_ether_addr*)cnode->ether.src);
 		cnode->ether.n_src = 1;
 	}
 	/* check if vxlan src mac address is provided */
 	if (cnode->vxlan.enable && !cnode->vxlan.ether.n_src) {
-		rte_eth_macaddr_get(portid, (struct rte_ether_addr*)cnode->vxlan.ether.src);
+		rte_eth_macaddr_get(port, (struct rte_ether_addr*)cnode->vxlan.ether.src);
 		LOG_META_NNL("injector vxlan will use local port mac address: ");
 		bless_print_mac((struct rte_ether_addr*)cnode->vxlan.ether.src);
 		cnode->vxlan.ether.n_src = 1;
 	}
 
-	conf->cnode = cnode;
 	// cnode_show(conf->cnode, 0);
-	cnode_show_summary(conf->cnode);
-
-#if 0
-	/* FIXME */
-	/* only txq 0 malloc stats */
-	if (!qconf->txq_id) {
-		uint16_t pid = conf->qconf->txp_id;
-		conf->stats[pid] = rte_malloc(NULL, sizeof(struct port_statistics) * TYPE_MAX, 0);
-		if (!conf->stats[pid]) {
-			rte_exit(EXIT_FAILURE,
-					"[%s %d] Cannot rte_malloc(port_statistics)\n",
-					__func__, __LINE__);
-		}
-		printf("%d %p\n", lcore_id, conf->stats[pid]);
-	}
-#endif
-	/*
-	   for (int i = 0; i < qconf->n_rx_port; i++) {
-	   portid = l2fwd_dst_ports[qconf->rx_port_list[i]];
-	   conf->stats[portid] = rte_malloc(NULL, sizeof(struct port_statistics) * TYPE_MAX, 0);
-	   if (!conf->stats[portid]) {
-	   rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(port_statistics)\n", __func__, __LINE__);
-	   }
-	   printf("%d %p\n", lcore_id, conf->stats[portid]);
-	   }
-	   */
-
-	/*
-	   if (qconf->n_rx_port == 0) {
-	   RTE_LOG(INFO, BLESS, "lcore %u has nothing to do\n", lcore_id);
-	   return;
-	   }
-	   */
-
-	// XXX
-#if 0
-	RTE_LOG(INFO, BLESS, "entering worker loop %s: lid %d pid %d tid %d self %lu lcore %d port %d txq %d\n",
-			name, lcore_id, getpid(), rte_gettid(), (unsigned long)rte_thread_self().opaque_id,
-			qconf->txl_id, qconf->txp_id, qconf->txq_id);
-#endif
+	// cnode_show_summary(conf->cnode);
 
 	// 获取当前线程 CPU 亲和性
 	cpu_set_t cpuset;
@@ -170,6 +155,7 @@ void worker_loop(void *data)
 
 	uint8_t mode = conf->mode;
 	int64_t num = conf->num < 0 ? INT64_MAX : conf->num;
+	LOG_INFO("mode %u num %ld", mode, num);
 	atomic_int *state = conf->state;
 
 	uint16_t batch = conf->batch;
@@ -181,19 +167,18 @@ void worker_loop(void *data)
 	if (batch > num) {
 		batch = num;
 	}
-	portid = cv->port;
 	uint16_t qid = cv->rxq;
 	uint16_t nb_tx = batch;
 
 	/* XXX */
 	if (mode == BLESS_MODE_RX_ONLY || mode == BLESS_MODE_FWD) {
-		rx_mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
+		rx_mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *),
+				RTE_CACHE_LINE_SIZE);
 		if (unlikely(!rx_mbufs)) {
 			rte_exit(EXIT_FAILURE, "rx_mbufs alloc failed");
 		}
 	}
 
-#if 0
 	/* rx-only */
 	if (BLESS_MODE_RX_ONLY == mode) {
 		pthread_barrier_wait(bconf->barrier);
@@ -205,28 +190,28 @@ void worker_loop(void *data)
 				i = 0;
 				while (unlikely(val == STATE_STOPPED)) {
 					if (!i++) {
-						printf("Detect STOPPED %d\n", qconf->txl_id);
+						LOG_INFO("Detect STOPPED @ core %u", cv->core);
 					}
 					rte_delay_ms(1000);
 					val = atomic_load_explicit(state, memory_order_acquire);
 				}
 				while (unlikely(val == STATE_INIT)) {
 					if (!i++) {
-						printf("Detect INIT %d\n", qconf->txl_id);
+						LOG_INFO("Detect INIT @ core %u", cv->core);
 					}
 					rte_delay_ms(1000);
 					val = atomic_load_explicit(state, memory_order_acquire);
 				}
 				if (val == STATE_EXIT) {
-					printf("Detect EXIT %d\n", qconf->txl_id);
+					LOG_INFO("Detect EXIT @ core %u", cv->core);
 					goto EXIT;
 				}
 				if (val == STATE_RUNNING) {
-					printf("Detect START %d %d %d\n", qconf->txl_id, qconf->txp_id, qconf->txq_id);
+					LOG_INFO("Detect START @ core %u %u %u", cv->core, cv->port, cv->rxq);
 				}
 			}
 			while (val != STATE_EXIT) {
-				const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
+				const uint16_t nb_rx = rte_eth_rx_burst(port, qid, rx_mbufs, batch);
 				if (nb_rx) {
 					rte_pktmbuf_free_bulk(rx_mbufs, nb_rx);
 				}
@@ -236,7 +221,6 @@ void worker_loop(void *data)
 		printf("worker exit\n");
 		return;
 	}
-#endif
 
 	if (BLESS_MODE_TX_ONLY == mode) {
 		mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
@@ -244,7 +228,8 @@ void worker_loop(void *data)
 			rte_exit(EXIT_FAILURE, "mbufs alloc failed");
 		}
 
-		sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool", cv->core, cv->port, cv->rxq);
+		// sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool", cv->core, cv->port, cv->rxq);
+		char *name = worker->name;
 		struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
 
 		if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
@@ -300,7 +285,7 @@ void worker_loop(void *data)
 #if 1
 		/* fwd */
 		if (mode == BLESS_MODE_FWD) {
-			const uint16_t nb_rx = rte_eth_rx_burst(portid, qid, rx_mbufs, batch);
+			const uint16_t nb_rx = rte_eth_rx_burst(port, qid, rx_mbufs, batch);
 			if (nb_rx) {
 				int n = nb_rx - 1;
 				rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[0], struct rte_ether_hdr*));
@@ -309,7 +294,7 @@ void worker_loop(void *data)
 					swap_mac(rte_pktmbuf_mtod(rx_mbufs[j], struct rte_ether_hdr*));
 				}
 				swap_mac(rte_pktmbuf_mtod(rx_mbufs[n], struct rte_ether_hdr*));
-				uint16_t nb_tx = rte_eth_tx_burst(portid, qid, rx_mbufs, nb_rx);
+				uint16_t nb_tx = rte_eth_tx_burst(port, qid, rx_mbufs, nb_rx);
 				if (nb_tx != nb_rx) {
 					rte_pktmbuf_free_bulk(&mbufs[nb_tx], nb_rx - nb_tx);
 				}
@@ -339,7 +324,10 @@ void worker_loop(void *data)
 					// tx_bytes += r;
 				}
 			} else {
-				enum BLESS_TYPE type = dist->data[fast_rand_next() & dist->mask];
+				int index = fast_rand_next() & dist->mask;
+				enum BLESS_TYPE type = dist->data[index];
+				// LOG_ERR("type %u index %d", type, index);
+				// fflush(stdout);
 				int r = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
 				if (!r) {
 					rte_exit(EXIT_FAILURE, "Cannot bless_mbuf()\n");
@@ -352,7 +340,7 @@ void worker_loop(void *data)
 
 		/* FIXME stats of type */
 		// rte_pktmbuf_dump(stdout, mbufs[0], 2000);
-		uint16_t sent = rte_eth_tx_burst(portid, qid, mbufs, nb_tx);
+		uint16_t sent = rte_eth_tx_burst(port, qid, mbufs, nb_tx);
 		if (sent) {
 			num -= sent;
 			// printf("lcore %u port %u sent %d remain %ld\n", lcore_id, portid, sent, num);
@@ -438,6 +426,7 @@ void worker_main_loop(void *data)
 	uint64_t val = 0;
 
 	pthread_barrier_wait(conf->barrier);
+	_L();
 
 	while ((val = atomic_load_explicit(state, memory_order_acquire)) != STATE_EXIT) {
 		static uint64_t i = 0;

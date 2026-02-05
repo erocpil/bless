@@ -128,8 +128,10 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		tx_bytes += m->data_len;
 
 		eth = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &eth->src_addr);
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst, &eth->dst_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+				&eth->src_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst,
+				&eth->dst_addr);
 		eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
 
 		ip = (struct rte_ipv4_hdr *)(eth + 1);
@@ -181,7 +183,8 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 {
 	uint64_t tx_bytes = 0;
-	const uint16_t total_pkt_size = sizeof(struct rte_ether_hdr) + sizeof(struct rte_arp_hdr);
+	const uint16_t total_pkt_size = sizeof(struct rte_ether_hdr) +
+		sizeof(struct rte_arp_hdr);
 	Cnode *cnode = (Cnode*)data;
 
 	for (int i = 0; i < (int)n; i++) {
@@ -195,7 +198,8 @@ uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		}
 		tx_bytes += total_pkt_size;
 
-		struct rte_ether_hdr *eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+		struct rte_ether_hdr *eth_hdr =
+			rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
 		struct rte_arp_hdr *arp_hdr = (struct rte_arp_hdr *)(eth_hdr + 1);
 
 		static const struct rte_ether_addr dst_mac = {
@@ -203,7 +207,8 @@ uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		};
 		static uint64_t flag = 1;
 		if (flag++ & 1) {
-			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &eth_hdr->src_addr);
+			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+					&eth_hdr->src_addr);
 			rte_ether_addr_copy(&dst_mac, &eth_hdr->dst_addr);
 			eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP);
 
@@ -212,13 +217,16 @@ uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 			arp_hdr->arp_hlen = RTE_ETHER_ADDR_LEN;
 			arp_hdr->arp_plen = sizeof(uint32_t);
 			arp_hdr->arp_opcode = rte_cpu_to_be_16(RTE_ARP_OP_REQUEST);
-			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &arp_hdr->arp_data.arp_sha);
+			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+					&arp_hdr->arp_data.arp_sha);
 			arp_hdr->arp_data.arp_sip = RANDOM_IP_SRC(cnode);
 			rte_ether_addr_copy(&dst_mac, &arp_hdr->arp_data.arp_tha);
 			arp_hdr->arp_data.arp_tip = RANDOM_IP_DST(cnode);
 		} else {
-			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &eth_hdr->src_addr);
-			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst, &eth_hdr->dst_addr);
+			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+					&eth_hdr->src_addr);
+			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst,
+					&eth_hdr->dst_addr);
 			eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP);
 
 			arp_hdr->arp_hardware = rte_cpu_to_be_16(RTE_ARP_HRD_ETHER);
@@ -226,9 +234,11 @@ uint64_t bless_mbufs_arp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 			arp_hdr->arp_hlen = RTE_ETHER_ADDR_LEN;
 			arp_hdr->arp_plen = sizeof(uint32_t);
 			arp_hdr->arp_opcode = rte_cpu_to_be_16(RTE_ARP_OP_REPLY);
-			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst, &arp_hdr->arp_data.arp_sha);
+			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst,
+					&arp_hdr->arp_data.arp_sha);
 			arp_hdr->arp_data.arp_sip = RANDOM_IP_DST(cnode);
-			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &arp_hdr->arp_data.arp_tha);
+			rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+					&arp_hdr->arp_data.arp_tha);
 			arp_hdr->arp_data.arp_tip = RANDOM_IP_SRC(cnode);
 		}
 	}
@@ -264,9 +274,12 @@ uint64_t bless_mbufs_tcp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 			return -1;
 		}
 
-		struct rte_ether_hdr *eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &eth_hdr->src_addr);
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst, &eth_hdr->dst_addr);
+		struct rte_ether_hdr *eth_hdr =
+			rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+				&eth_hdr->src_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst,
+				&eth_hdr->dst_addr);
 		eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
 
 		struct rte_ipv4_hdr *ip = (struct rte_ipv4_hdr *)(eth_hdr + 1);
@@ -352,8 +365,10 @@ uint64_t bless_mbufs_icmp(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		tx_bytes += total_pkt_size;
 
 		eth = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &eth->src_addr);
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst, &eth->dst_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+				&eth->src_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst,
+				&eth->dst_addr);
 		eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
 
 		ip = (struct rte_ipv4_hdr *)(eth + 1);
@@ -443,14 +458,17 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 
 		/* 外层 L2 */
 		/* use inner's mac address */
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src, &eth->src_addr);
-		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst, &eth->dst_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.src,
+				&eth->src_addr);
+		rte_ether_addr_copy((struct rte_ether_addr*)cnode->ether.dst,
+				&eth->dst_addr);
 		eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
 
 		/* 外层 L3 */
 		ip->version_ihl = 0x45;
 		ip->type_of_service = 0;
-		ip->total_length = rte_cpu_to_be_16(m->pkt_len - sizeof(struct rte_ether_hdr));
+		ip->total_length = rte_cpu_to_be_16(m->pkt_len -
+				sizeof(struct rte_ether_hdr));
 		ip->packet_id = 0;
 		ip->fragment_offset = 0;
 		ip->time_to_live = 64;
@@ -465,7 +483,8 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 		udp->src_port = RANDOM_VXLAN_UDP_SRC(cnode);
 		// udp->dst_port = RANDOM_VXLAN_UDP_DST(cnode); // rte_cpu_to_be_16(RTE_VXLAN_DEFAULT_PORT);
 		udp->dst_port = rte_cpu_to_be_16(RTE_VXLAN_DEFAULT_PORT);
-		udp->dgram_len = rte_cpu_to_be_16(m->pkt_len - sizeof(struct rte_ether_hdr) - sizeof(struct rte_ipv4_hdr));
+		udp->dgram_len = rte_cpu_to_be_16(m->pkt_len -
+				sizeof(struct rte_ether_hdr) - sizeof(struct rte_ipv4_hdr));
 		udp->dgram_cksum = 0;
 
 		/* VXLAN header */
@@ -502,13 +521,16 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 
 		// inner rte_ipv4_phdr_cksum()
 		// struct rte_ether_hdr *ethh = rte_pktmbuf_mtod_offset(m, struct rte_ether_hdr*, SIZEOF_VXLAN);
-		struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr*, SIZEOF_VXLAN + sizeof(struct rte_ether_hdr));
+		struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(m,
+				struct rte_ipv4_hdr*, SIZEOF_VXLAN + sizeof(struct rte_ether_hdr));
 		if (IPPROTO_UDP == iph->type_of_service) {
 			struct rte_udp_hdr *udph = (struct rte_udp_hdr*)(iph + 1);
-			udph->dgram_cksum = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph, m->ol_flags);
+			udph->dgram_cksum = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph,
+					m->ol_flags);
 		} else if (IPPROTO_TCP == iph->type_of_service) {
 			struct rte_tcp_hdr *tcph = (struct rte_tcp_hdr*)(iph + 1);
-			tcph->cksum = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph, m->ol_flags);
+			tcph->cksum = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph,
+					m->ol_flags);
 		} else {
 		}
 
@@ -519,7 +541,8 @@ uint64_t bless_encap_vxlan(struct rte_mbuf **mbufs, unsigned int n, void *data)
 	return SIZEOF_VXLAN;
 }
 
-static uint64_t (*bless_get_funcs[])(struct rte_mbuf **mbufs, unsigned int n, void *data) = {
+static uint64_t (*bless_get_funcs[])(struct rte_mbuf **mbufs,
+		unsigned int n, void *data) = {
 	bless_mbufs_arp,
 	bless_mbufs_icmp,
 	bless_mbufs_tcp,
@@ -527,17 +550,20 @@ static uint64_t (*bless_get_funcs[])(struct rte_mbuf **mbufs, unsigned int n, vo
 	NULL
 };
 
-static uint64_t (*bless_encap_outer[])(struct rte_mbuf **mbufs, unsigned int n, void *data) = {
+static uint64_t (*bless_encap_outer[])(struct rte_mbuf **mbufs,
+		unsigned int n, void *data) = {
 	bless_encap_vxlan,
 	NULL
 };
 
-uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, void *data)
+uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type,
+		void *data)
 {
 	uint64_t r = 0;
 	uint64_t tx_bytes  = 0;
 
 	if (type < 0 || type >= TYPE_MAX) {
+		LOG_ERR("type %d", type);
 		return 0;
 	}
 
@@ -545,6 +571,7 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 	/* inner */
 	r = bless_get_funcs[type](mbufs, n, cnode);
 	if (!r) {
+		LOG_ERR("1");
 		return 0;
 	}
 	if (cnode->vxlan.enable) {
@@ -554,6 +581,7 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 		if (cnode->vxlan.ratio > 0 && (ra % 100) < cnode->vxlan.ratio) {
 			tx_bytes = bless_encap_outer[0](mbufs, n, cnode);
 			if (!tx_bytes) {
+				LOG_ERR("2");
 				return 0;
 			}
 			printf("vxlan\n");
@@ -566,10 +594,12 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type, 
 	return tx_bytes + r;
 }
 
-int bless_alloc_mbufs(struct rte_mempool *pktmbuf_pool, struct rte_mbuf **mbufs, int n)
+int bless_alloc_mbufs(struct rte_mempool *pktmbuf_pool,
+		struct rte_mbuf **mbufs, int n)
 {
 	if (rte_pktmbuf_alloc_bulk(pktmbuf_pool, mbufs, n) != 0) {
-		rte_exit(EXIT_FAILURE, "[%s %d] Cannot init mbuf(%d)\n", __func__, __LINE__, n);
+		rte_exit(EXIT_FAILURE, "[%s %d] Cannot init mbuf(%d)\n",
+				__func__, __LINE__, n);
 		return -1;
 	}
 	return n;
@@ -604,7 +634,8 @@ void dist_ratio_init(struct dist_ratio *dr)
 
 struct bless_conf *bless_init()
 {
-	struct bless_conf *bconf = (struct bless_conf*)malloc(sizeof(struct bless_conf));
+	struct bless_conf *bconf =
+		(struct bless_conf*)malloc(sizeof(struct bless_conf));
 	if (!bconf) {
 		return NULL;
 	}
@@ -614,7 +645,8 @@ struct bless_conf *bless_init()
 	return bconf;
 }
 
-static void distribute(uint32_t *weights, uint32_t n, uint64_t total, uint64_t *result)
+static void distribute(uint32_t *weights, uint32_t n, uint64_t total,
+		uint64_t *result)
 {
 	if (total < n) {
 		LOG_ERR("分布总数太小，无法保证每个变量至少为1");
@@ -736,7 +768,8 @@ int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio,
 		size = make_power_of_2(capacity);
 	}
 	struct distribution *dist =
-		rte_malloc(NULL, sizeof(struct distribution) + sizeof(int32_t) * size, 0);
+		rte_malloc(NULL, sizeof(struct distribution) +
+				sizeof(uint8_t) * size, 0);
 	if (!dist) {
 		rte_exit(EXIT_FAILURE, "Cannot rte_malloc(distribution)\n");
 	}

@@ -805,6 +805,7 @@ void init_system()
 	base.system = system;
 	LOG_INFO("Websocket Server Started");
 	system_show(system);
+	getchar();
 }
 
 void init_config()
@@ -1295,6 +1296,7 @@ int main(int argc, char **argv)
 	init_config();
 
 	init_system();
+	while (1);
 
 	init_eal();
 
