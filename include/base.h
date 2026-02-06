@@ -20,7 +20,6 @@
 
 struct base_core_view {
 	uint8_t enabled;
-	uint8_t socket;
 	uint8_t numa;
 	uint8_t role; /* core role */
 	uint16_t core; /* core */
@@ -29,7 +28,7 @@ struct base_core_view {
 	uint16_t txq; /* tx queue */
 	uint16_t rxq; /* rx queue */
 	uint16_t n_rx_port;
-	uint16_t rx_port_list[MAX_RX_QUEUE_PER_LCORE];
+	uint16_t rx_port_list[MAX_RX_QUEUE_PER_LCORE]; /* unused */
 } __attribute__((__aligned__(sizeof(char)))); /* DO NOT TOUCH ATTR!!! */
 
 /* base topology: socket, numa, role, core, port, queue 8< */
@@ -63,6 +62,7 @@ struct base {
 
 	int argc;
 	char **argv;
+	uint16_t args_jump;
 
 	struct system *system;
 	struct config *config;

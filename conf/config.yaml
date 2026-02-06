@@ -7,8 +7,8 @@
 # --erroneous=...
 
 dpdk:
-  main-lcore: 16
-  l: 0-16
+  main-lcore: 24
+  l: 19-26
   n: 4
   lcores: null
   socket-mem: null
@@ -31,9 +31,9 @@ dpdk:
 
 injector:
   # ports
-  p: 0x1
+  p: 0x3
   # queues on each port
-  q: 1
+  q: 2
   # Promiscuous
   P:
   T: 1
@@ -45,7 +45,7 @@ injector:
   batch: 32
   # delay us after each batch
   batch-delay-us: 0
-  # one of rx-only, rx-only, fwd
+  # one of rx-only, rx-only, fwd, none
   mode: tx-only
   # per-lcore
   num: -1
@@ -122,7 +122,8 @@ bless:
 
 system:
   daemonize: false
-  theme: default # Dark, Warm, Cool, Vibrant, Pastel, Accent-UI, Solarized, Nord, Dracula
+  # Dark, Warm, Cool, Vibrant, Pastel, Accent-UI, Solarized, Nord, Dracula
+  theme: default
   server:
     # civetweb service: websocket and http
     service:

@@ -1,6 +1,7 @@
 #include <string.h>
 #include "log.h"
 #include "color.h"
+#include "system.h"
 
 static const theme_config THEMES[] = {
 	{
@@ -139,7 +140,8 @@ void log_show_all_theme(void)
 {
 	LOG_TRACE("Theme %p", THEMES);
 	for (const theme_config *t = THEMES; t->name != NULL; t++) {
-		LOG_META(" %s\t: %sHINT%s %sPATH%s %sINFO%s %sWARNING%s %sERROR%s %sTRACE%s",
+		LOG_META("  %-*s : %sHINT%s %sPATH%s %sINFO%s %sWARNING%s %sERROR%s %sTRACE%s",
+				SYSTEM_THEME_LEN_MAX,
 				t->name,
 				t->green, ANSI_RESET,
 				t->purple, ANSI_RESET,

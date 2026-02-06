@@ -7,10 +7,9 @@
 
 #include "civetweb.h"
 #include "server.h"
-#include "server_index.h"
+#include "server_const.h"
 #include "log.h"
 
-unsigned int index_html_len = 31159;
 /* ================================================================ */
 /* Server options                                                    */
 /* ================================================================ */
@@ -150,15 +149,14 @@ static int ws_data_handler(struct mg_connection *conn, int opcode,
 		char *data, size_t datasize, void *ud)
 {
 	(void)conn;
-	(void)datasize;
 
 	if ((opcode & 0xf) == MG_WEBSOCKET_OPCODE_TEXT) {
 		LOG_TRACE("WS recv: %.*s\n", (int)datasize, data);
-	}
-
-	if (datasize) {
-		struct ws_user_data *wsud = (struct ws_user_data*)ud;
-		wsud->func(ud, data, datasize);
+		if (datasize) {
+			LOG_TRACE("data %s size %lu", datasize, (char*)data);
+			struct ws_user_data *wsud = (struct ws_user_data*)ud;
+			wsud->func(ud, data, datasize);
+		}
 	}
 
 	return 1;
@@ -352,25 +350,21 @@ void ws_broadcast_log(char *log, size_t len)
 
 static int root_handler(struct mg_connection *conn, void *cbdata)
 {
+	server_show_request_headers(mg_get_request_info(conn));
 	mg_printf(conn,
 			"HTTP/1.1 200 OK\r\n"
 			"Content-Type: text/html\r\n"
+			"Cache-Control: no-cache\r\n"
+			"Content-Length: %u\r\n"
 			"Connection: close\r\n\r\n"
-			"%s", index_html);
+			"%s", index_html_len, index_html);
 
 	return 1;
 }
 
-int universal_handler(struct mg_connection *conn, void *cbdata)
+int ws_universal_handler(struct mg_connection *conn, void *cbdata)
 {
 	LOG_HINT("=== Universal handler called! ===");
-	server_show_request_headers(mg_get_request_info(conn));
-
-	mg_printf(conn,
-			"HTTP/1.1 200 OK\r\n"
-			"Content-Type: text/html\r\n"
-			"Connection: close\r\n\r\n"
-			"%s", index_html);
 
 	return 0;  // 返回0继续处理，返回非0表示已处理
 }
@@ -422,14 +416,12 @@ struct mg_context * ws_server_start(void *data)
 			ws_close_handler,
 			data);
 
-	if (0) {
-		mg_set_request_handler(ctx, "/", root_handler, NULL);
-	}
+	mg_set_request_handler(ctx, "/", root_handler, NULL);
 	mg_set_request_handler(ctx, "/api/control", http_control_handler, NULL);
 	mg_set_request_handler(ctx, "/api/stats", http_stats_handler, NULL);
 	mg_set_request_handler(ctx, "/metrics", http_metrics_handler, NULL);
 	// 注册为捕获所有请求
-	mg_set_request_handler(ctx, "**", universal_handler, NULL);
+	mg_set_request_handler(ctx, "**", ws_universal_handler, NULL);
 
 	LOG_INFO("Websocket Server Started");
 
@@ -516,4 +508,9 @@ void server_show_format(struct server* srv, char *pref)
 void server_show(struct server* srv)
 {
 	server_show_format(srv, "");
+}
+
+void server_config_template()
+{
+	printf("%s\n", config_yaml);
 }

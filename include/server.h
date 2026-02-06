@@ -97,5 +97,6 @@ const struct stats_snapshot * stats_get_active(void);
 int stats_get_active_index(void);
 struct stats_snapshot * stats_get(int idx);
 void stats_set(int idx);
+void server_config_template();
 
 #endif

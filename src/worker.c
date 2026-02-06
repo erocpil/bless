@@ -9,6 +9,9 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
+#include <sched.h>
+#include <string.h>
+#include <unistd.h>
 
 /* DO NOT USE ANY RTE_DEFINE_PER_LCORE() !!! */
 
@@ -22,14 +25,338 @@ static inline void swap_mac(struct rte_ether_hdr *eth_hdr)
 	rte_ether_addr_copy(&addr, &eth_hdr->src_addr);
 }
 
+static void worker_show_cpuset(cpu_set_t *cpuset)
+{
+	for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+		if (CPU_ISSET(cpu, cpuset)) {
+			printf("%d ", cpu);
+		}
+	}
+	printf("\n");
+}
+
+void worker_show(struct worker *w)
+{
+	LOG_INFO("worker         %p", w);
+	LOG_SHOW("  mode         %d", w->mode);
+	LOG_SHOW("  numa         %u", w->cv.numa);
+	LOG_SHOW("  core         %u", w->cv.core);
+	LOG_SHOW("  port         %u", w->cv.port);
+	LOG_SHOW("  type         %u", w->cv.type);
+	LOG_SHOW("  txq          %u", w->cv.txq);
+	LOG_SHOW("  rxq          %u", w->cv.rxq);
+	LOG_META_NNL("  cpuset       ");
+	worker_show_cpuset(&w->cpuset);
+	LOG_SHOW("  name         %s", w->name);
+	LOG_SHOW("  mbufs        %p", w->mbufs);
+	LOG_SHOW("  rx_mbufs     %p", w->rx_mbufs);
+	LOG_SHOW("  conf         %p", &w->conf);
+	LOG_SHOW("  core view    %p", &w->cv);
+	LOG_SHOW("  cnode        %p", &w->cnode);
+}
+
+typedef enum {
+	CHECK_CONTINUE = 0,
+	CHECK_EXIT = 1,
+} check_state_result_t;
+
+static inline check_state_result_t worker_check_state(
+		atomic_int *state, struct base_core_view *cv, int64_t num)
+{
+	uint64_t val = atomic_load_explicit(state, memory_order_acquire);
+	uint64_t i = 0;
+
+	if (val == STATE_EXIT) {
+		return CHECK_EXIT;
+	}
+
+	if (unlikely(val != STATE_RUNNING)) {
+		i = 0;
+		while (unlikely(val == STATE_STOPPED)) {
+			if (!i++) {
+				LOG_INFO("Detect STOPPED @ core %u", cv->core);
+			}
+			rte_delay_ms(1000);
+			val = atomic_load_explicit(state, memory_order_acquire);
+		}
+		while (unlikely(val == STATE_INIT)) {
+			if (!i++) {
+				LOG_INFO("Detect INIT @ core %u", cv->core);
+			}
+			rte_delay_ms(1000);
+			val = atomic_load_explicit(state, memory_order_acquire);
+		}
+		if (val == STATE_EXIT) {
+			LOG_INFO("Detect EXIT @ core %u", cv->core);
+			return CHECK_EXIT;
+		}
+		if (val == STATE_RUNNING) {
+			LOG_INFO("Detect START @ core %u %u %u", cv->core, cv->port, cv->rxq);
+		}
+	}
+
+	if (unlikely(num <= 0)) {
+		sleep(1);
+		atomic_store(state, STATE_EXIT);
+		LOG_INFO("Finished: lcore_id %u @ core %u port %u rxq %u",
+				rte_lcore_id(), cv->core, cv->port, cv->rxq);
+		return CHECK_EXIT;
+	}
+
+	return CHECK_CONTINUE;
+}
+
+
+int worker_func_none(struct worker *w)
+{
+	LOG_WARN("core %u doing nothing", w->cv.core);
+
+	atomic_int *state = w->conf.state;
+
+	while (1) {
+		if (worker_check_state(state, &w->cv, 1) == CHECK_EXIT) {
+			goto EXIT;
+		}
+	}
+
+	LOG_INFO("core %u exit normally", w->cv.core);
+	return 0;
+
+EXIT:
+	LOG_INFO("core %u exit", w->cv.port);
+	return 0;
+}
+
+int worker_func_tx_only(struct worker *w)
+{
+	LOG_INFO("core %u tx only", w->cv.core);
+
+	if (!w) {
+		LOG_ERR("Not a worker");
+		return -1;
+	}
+
+	struct bless_conf *conf = &w->conf;
+	int64_t num = conf->num < 0 ? INT64_MAX : conf->num;
+	atomic_int *state = conf->state;
+
+	uint16_t batch = conf->batch;
+	uint64_t batch_delay_us = conf->batch_delay_us;
+	if (batch > 2048) {
+		batch = 2048;
+		LOG_INFO("batch -> 2048");
+	}
+	if (batch > num) {
+		batch = num;
+	}
+	struct base_core_view *cv = &w->cv;
+	uint16_t txq = cv->txq;
+	uint16_t nb_tx = batch;
+
+
+	w->mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
+	if (unlikely(!w->mbufs)) {
+		rte_exit(EXIT_FAILURE, "mbufs alloc failed");
+	}
+	struct rte_mbuf **mbufs = w->mbufs;
+
+	char *name = w->name;
+	struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
+
+	if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
+		LOG_ERR("bless_alloc_mbufs() failed");
+		rte_exit(EXIT_FAILURE, "bless_alloc_mbufs(%s)\n", name);
+	}
+
+	LOG_META("cpu %u lcore %u core %u port %u txq %u tid %lu",
+			sched_getcpu(), rte_lcore_id(), cv->core,
+			cv->port, cv->txq, pthread_self());
+	assert(cv->core == rte_lcore_id());
+
+	uint16_t port = cv->port;
+	Cnode *cnode = &w->cnode;
+
+	while (1) {
+		if (worker_check_state(state, cv, num) == CHECK_EXIT) {
+			goto EXIT;
+		}
+
+		for (int j = 0; j < nb_tx; j++) {
+			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation) {
+				/* should this mbuf be a mutation? */
+				uint64_t tsc = fast_rand_next();
+				tsc = tsc ^ (tsc >> 8);
+				if ((tsc & 1023) < cnode->erroneous.ratio) {
+					int n = tsc % cnode->erroneous.n_mutation;
+					mutation_func func = cnode->erroneous.func[n];
+					int r = func((void**)&mbufs[j], 1, (void*)cnode);
+					if (!r) {
+						rte_exit(EXIT_FAILURE, "Cannot mutate(%d)\n", n);
+					}
+					// tx_bytes += r;
+				}
+			} else {
+				int index = fast_rand_next() & conf->dist->mask;
+				enum BLESS_TYPE type = conf->dist->data[index];
+				int r = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
+				if (!r) {
+					rte_exit(EXIT_FAILURE, "Cannot bless_mbuf()\n");
+				}
+			}
+		}
+
+		uint16_t sent = rte_eth_tx_burst(port, txq, mbufs, nb_tx);
+		if (sent) {
+			num -= sent;
+		}
+		if (sent != nb_tx) {
+			rte_pktmbuf_free_bulk(&mbufs[sent], nb_tx - sent);
+		}
+
+		if (unlikely(batch_delay_us)) {
+			rte_delay_us(batch_delay_us);
+		}
+	}
+
+	LOG_INFO("core %u exit normally", cv->core);
+	return 0;
+
+EXIT:
+	LOG_INFO("core %u exit", cv->core);
+	return 0;
+}
+
+int worker_func_rx_only(struct worker *w)
+{
+	LOG_INFO("core %u rx only", w->cv.core);
+
+	struct base_core_view *cv = &w->cv;
+	atomic_int *state = w->conf.state;
+	uint16_t port = cv->port;
+	uint16_t batch = w->conf.batch;
+	uint16_t rxq = cv->rxq;
+	struct bless_conf *conf = &w->conf;
+	int64_t num = conf->num < 0 ? INT64_MAX : conf->num;
+
+	w->rx_mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *),
+			RTE_CACHE_LINE_SIZE);
+	if (unlikely(!w->rx_mbufs)) {
+		rte_exit(EXIT_FAILURE, "rx_mbufs alloc failed");
+	}
+
+	struct rte_mbuf **rx_mbufs = w->rx_mbufs;
+
+	while (1) {
+		if (worker_check_state(state, cv, num) == CHECK_EXIT) {
+			goto EXIT;
+		}
+		const uint16_t nb_rx = rte_eth_rx_burst(port, rxq, rx_mbufs, batch);
+		if (nb_rx) {
+			rte_pktmbuf_free_bulk(rx_mbufs, nb_rx);
+			num -= nb_rx;
+		}
+	}
+
+	LOG_INFO("core %u exit normally", cv->core);
+	return 0;
+
+EXIT:
+	LOG_INFO("core %u exit", cv->port);
+	return 0;
+}
+
+int worker_func_fwd(struct worker *w)
+{
+	LOG_INFO("core %u forward", w->cv.core);
+
+	if (!w) {
+		LOG_ERR("Not a worker");
+		return -1;
+	}
+
+	struct bless_conf *conf = &w->conf;
+	int64_t num = conf->num < 0 ? INT64_MAX : conf->num;
+	atomic_int *state = conf->state;
+
+	uint16_t batch = conf->batch;
+	uint64_t batch_delay_us = conf->batch_delay_us;
+	if (batch > 2048) {
+		batch = 2048;
+		LOG_INFO("batch -> 2048");
+	}
+	if (batch > num) {
+		batch = num;
+	}
+	struct base_core_view *cv = &w->cv;
+	uint16_t port = cv->port;
+	uint16_t rxq = cv->rxq;
+	uint16_t txq = cv->txq;
+
+	w->rx_mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *),
+			RTE_CACHE_LINE_SIZE);
+	if (unlikely(!w->rx_mbufs)) {
+		rte_exit(EXIT_FAILURE, "rx_mbufs alloc failed");
+	}
+	struct rte_mbuf **rx_mbufs = w->rx_mbufs;
+
+	while (1) {
+		if (worker_check_state(state, cv, num) == CHECK_EXIT) {
+			goto EXIT;
+		}
+		const uint16_t nb_rx = rte_eth_rx_burst(port, rxq, rx_mbufs, batch);
+		if (nb_rx) {
+			int n = nb_rx - 1;
+			rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[0], struct rte_ether_hdr*));
+			for (int i = 1, j = 0; i < n; i++, j++) {
+				rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[i], struct rte_ether_hdr*));
+				swap_mac(rte_pktmbuf_mtod(rx_mbufs[j], struct rte_ether_hdr*));
+			}
+			swap_mac(rte_pktmbuf_mtod(rx_mbufs[n], struct rte_ether_hdr*));
+			uint16_t nb_tx = rte_eth_tx_burst(port, txq, rx_mbufs, nb_rx);
+			if (nb_tx != nb_rx) {
+				rte_pktmbuf_free_bulk(&rx_mbufs[nb_tx], nb_rx - nb_tx);
+			}
+			num -= nb_tx;
+		} else {
+			if (unlikely(batch_delay_us)) {
+				rte_delay_us(batch_delay_us);
+			}
+		}
+	}
+
+	LOG_INFO("core %u exit normally", cv->core);
+	return 0;
+
+EXIT:
+	LOG_INFO("core %u exit", cv->core);
+	return 0;
+}
+
+int worker_func_flow(struct worker *w)
+{
+	LOG_INFO("core %u flow not implemented", w->cv.core);
+
+	return 0;
+}
+
+int (*worker_func[])(struct worker*) = {
+	worker_func_none,
+	worker_func_tx_only,
+	worker_func_rx_only,
+	worker_func_fwd,
+	worker_func_flow,
+};
+
+
+static char* BLESS_MODE_STR[] = {
+	"none", "tx_only", "rx_only",
+	"fwd", "flow", "max",
+};
+
 void worker_loop(void *data)
 {
-
 	uint32_t lcore_id = rte_lcore_id();
 
-	struct rte_mbuf **mbufs = NULL;
-	struct rte_mbuf **rx_mbufs = NULL;
-	struct bless_conf *bconf = (struct bless_conf*)data;
 	struct worker *worker = rte_malloc(NULL, sizeof(struct worker), 0);
 	if (!worker) {
 		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(worker)\n",
@@ -37,32 +364,44 @@ void worker_loop(void *data)
 	}
 	memset(worker, 0, sizeof(struct worker));
 
+	struct bless_conf *bconf = (struct bless_conf*)data;
+	uint8_t mode = bconf->mode;
+
+	if (BLESS_MODE_NONE == mode || mode >= BLESS_MODE_MAX) {
+		LOG_ERR("Unsupported bless mode %d", mode);
+		return;
+	}
+
 	/* set this worker(lcore or pthread) name */
-	snprintf(worker->name, sizeof(worker->name), "worker@%u", lcore_id);
-	pthread_setname_np(pthread_self(), worker->name);
+	snprintf(worker->name, sizeof(worker->name), "%s@%u",
+			BLESS_MODE_STR[mode], lcore_id);
+	int n = pthread_setname_np(pthread_self(), worker->name);
+	if (n) {
+		printf("pthread_setname_np(%s) %d %d %s", worker->name, n,
+				errno, strerror(errno));
+	}
 
 	struct bless_conf *conf = &worker->conf;
 	memcpy(conf, bconf, offsetof(struct bless_conf, dist_ratio));
 
-	struct base_core_view *cv = &worker->cv;
-	memcpy(cv, conf->base->topo.cv + lcore_id, sizeof(struct base_core_view));
-
-	conf->dist = rte_malloc(NULL, sizeof(struct distribution) + sizeof(uint8_t) * bconf->dist->size, 0);
+	conf->dist = rte_malloc(NULL, sizeof(struct distribution) +
+			sizeof(uint8_t) * bconf->dist->size, 0);
 	if (unlikely(!conf->dist)) {
 		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(distribution)\n",
 				__func__, __LINE__);
 	}
-	memcpy(conf->dist, bconf->dist, sizeof(struct distribution) + sizeof(uint8_t) * bconf->dist->size);
-	LOG_TRACE("check %u element", bconf->dist->size);
+	memcpy(conf->dist, bconf->dist, sizeof(struct distribution) +
+			sizeof(uint8_t) * bconf->dist->size);
 	for (int i = 0; i < bconf->dist->size; i++) {
 		if (bconf->dist->data[i] != conf->dist->data[i]) {
-			LOG_ERR("i %d %u %u", i, bconf->dist->data[i], conf->dist->data[i]);
+			LOG_ERR("distritution error: i %d %u %u",
+					i, bconf->dist->data[i], conf->dist->data[i]);
 			exit(0);
 		}
 	}
-	LOG_TRACE("identical");
 	struct distribution *dist = conf->dist;
 	bless_show_dist(dist);
+
 	Cnode *cnode = rte_malloc(NULL, sizeof(Cnode), 0);
 	if (unlikely(!cnode)) {
 		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(Cnode)\n",
@@ -73,50 +412,10 @@ void worker_loop(void *data)
 				__func__, __LINE__, cnode);
 	}
 
-	uint16_t port = cv->port;
-
-#if 0
-	struct rte_mbuf **mbufs = NULL;
-	struct rte_mbuf **rx_mbufs = NULL;
-	unsigned lcore_id;
-	uint16_t portid = 0;
-	lcore_id = rte_lcore_id();
-	char name[256] = { 0 };
-	snprintf(name, sizeof(name), "worker@%u", lcore_id);
-	pthread_setname_np(pthread_self(), name);
-
-	struct bless_conf *bconf = (struct bless_conf*)data;
-	uint16_t dsize = bconf->dist->size;
-	dsize = bconf->dist->capacity;
-
-	struct bless_conf *conf = rte_malloc(NULL, sizeof(struct bless_conf), 0);
-	if (!conf) {
-		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(bless_conf)\n",
-				__func__, __LINE__);
-	}
-
-	conf->dist = rte_malloc(NULL, sizeof(struct distribution) + sizeof(uint8_t) * dsize, 0);
-	if (unlikely(!conf->dist)) {
-		rte_exit(EXIT_FAILURE, "[%s %d] Cannot rte_malloc(distribution)\n",
-				__func__, __LINE__);
-	}
-
-	memcpy(conf, bconf, offsetof(struct bless_conf, dist_ratio));
-	struct distribution *dist = conf->dist;
-
-	struct base_core_view *cv = &RTE_PER_LCORE(worker).cv;
+	struct base_core_view *cv = &worker->cv;
 	memcpy(cv, conf->base->topo.cv + lcore_id, sizeof(struct base_core_view));
 
-	Cnode *cnode = rte_malloc(NULL, sizeof(Cnode), 0);
-	if (unlikely(!cnode)) {
-		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(Cnode)\n",
-				__func__, __LINE__);
-	}
-	if (unlikely(config_clone_cnode(conf->cnode, cnode) < 0)) {
-		rte_exit(EXIT_FAILURE, "[%s %d] config_clone_cnode(%p)\n",
-				__func__, __LINE__, conf->cnode);
-	}
-#endif
+	uint16_t port = cv->port;
 
 	/* check if src mac address is provided */
 	if (!cnode->ether.n_src) {
@@ -137,243 +436,20 @@ void worker_loop(void *data)
 	// cnode_show_summary(conf->cnode);
 
 	// 获取当前线程 CPU 亲和性
-	cpu_set_t cpuset;
-	CPU_ZERO(&cpuset);
-	int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	cpu_set_t *cpuset = &worker->cpuset;
+	CPU_ZERO(cpuset);
+	int s = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), cpuset);
 	if (s != 0) {
 		perror("pthread_getaffinity_np");
 		pthread_exit(NULL);
 	}
 
-	/*
-	printf("cpu set: ");
-	for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
-		if (CPU_ISSET(cpu, &cpuset)) {
-			printf("%d ", cpu);
-		}
-	}
-	printf("\n");
-	*/
+	pthread_barrier_wait(conf->barrier);
 
-	uint8_t mode = conf->mode;
-	int64_t num = conf->num < 0 ? INT64_MAX : conf->num;
-	LOG_INFO("mode %u num %ld", mode, num);
-	atomic_int *state = conf->state;
+	worker_show(worker);
 
-	uint16_t batch = conf->batch;
-	uint64_t batch_delay_us = bconf->batch_delay_us;
-	if (batch > 2048) {
-		batch = 2048;
-		LOG_INFO("batch -> 2048");
-	}
-	if (batch > num) {
-		batch = num;
-	}
-	uint16_t qid = cv->rxq;
-	uint16_t nb_tx = batch;
-
-	/* XXX */
-	if (mode == BLESS_MODE_RX_ONLY || mode == BLESS_MODE_FWD) {
-		rx_mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *),
-				RTE_CACHE_LINE_SIZE);
-		if (unlikely(!rx_mbufs)) {
-			rte_exit(EXIT_FAILURE, "rx_mbufs alloc failed");
-		}
-	}
-
-	/* rx-only */
-	if (BLESS_MODE_RX_ONLY == mode) {
-		pthread_barrier_wait(bconf->barrier);
-		printf("rx only\n");
-		uint64_t i = 0;
-		uint64_t val = atomic_load_explicit(state, memory_order_acquire);
-		while (val != STATE_EXIT) {
-			if (unlikely(val != STATE_RUNNING)) {
-				i = 0;
-				while (unlikely(val == STATE_STOPPED)) {
-					if (!i++) {
-						LOG_INFO("Detect STOPPED @ core %u", cv->core);
-					}
-					rte_delay_ms(1000);
-					val = atomic_load_explicit(state, memory_order_acquire);
-				}
-				while (unlikely(val == STATE_INIT)) {
-					if (!i++) {
-						LOG_INFO("Detect INIT @ core %u", cv->core);
-					}
-					rte_delay_ms(1000);
-					val = atomic_load_explicit(state, memory_order_acquire);
-				}
-				if (val == STATE_EXIT) {
-					LOG_INFO("Detect EXIT @ core %u", cv->core);
-					goto EXIT;
-				}
-				if (val == STATE_RUNNING) {
-					LOG_INFO("Detect START @ core %u %u %u", cv->core, cv->port, cv->rxq);
-				}
-			}
-			while (val != STATE_EXIT) {
-				const uint16_t nb_rx = rte_eth_rx_burst(port, qid, rx_mbufs, batch);
-				if (nb_rx) {
-					rte_pktmbuf_free_bulk(rx_mbufs, nb_rx);
-				}
-				val = atomic_load_explicit(state, memory_order_acquire);
-			}
-		}
-		printf("worker exit\n");
-		return;
-	}
-
-	if (BLESS_MODE_TX_ONLY == mode) {
-		mbufs = rte_malloc(NULL, batch * sizeof(struct rte_mbuf *), RTE_CACHE_LINE_SIZE);
-		if (unlikely(!mbufs)) {
-			rte_exit(EXIT_FAILURE, "mbufs alloc failed");
-		}
-
-		// sprintf(name, "%s-c%d-p%d-q%d", "tx_pkts_pool", cv->core, cv->port, cv->rxq);
-		char *name = worker->name;
-		struct rte_mempool *pktmbuf_pool = bless_create_pktmbuf_pool(conf->batch << 1, name);
-
-		if (-1 == bless_alloc_mbufs(pktmbuf_pool, mbufs, conf->batch)) {
-			LOG_ERR("bless_alloc_mbufs() failed");
-			rte_exit(EXIT_FAILURE, "bless_alloc_mbufs(%s)\n", name);
-		}
-
-		LOG_META("cpu %u lcore %u core %u port %u txq %u tid %lu",
-				sched_getcpu(), rte_lcore_id(), cv->core,
-				cv->port, cv->txq, pthread_self());
-		assert(cv->core == rte_lcore_id());
-	}
-
-	LOG_INFO("core %d pthread_barrier_wait(%p);", lcore_id, bconf->barrier);
-	pthread_barrier_wait(bconf->barrier);
-
-	uint64_t val = atomic_load_explicit(state, memory_order_acquire);
-	uint64_t i = 0;
-	while (val != STATE_EXIT) {
-		if (unlikely(val != STATE_RUNNING)) {
-			i = 0;
-			while (unlikely(val == STATE_STOPPED)) {
-				if (!i++) {
-					LOG_INFO("Detect STOPPED @ core %u", cv->core);
-				}
-				rte_delay_ms(1000);
-				val = atomic_load_explicit(state, memory_order_acquire);
-			}
-			while (unlikely(val == STATE_INIT)) {
-				if (!i++) {
-					LOG_INFO("Detect INIT @ core %u", cv->core);
-				}
-				rte_delay_ms(1000);
-				val = atomic_load_explicit(state, memory_order_acquire);
-			}
-			if (val == STATE_EXIT) {
-				LOG_INFO("Detect EXIT @ core %u", cv->core);
-				goto EXIT;
-			}
-			if (val == STATE_RUNNING) {
-				LOG_INFO("Detect START @ core %u %u %u", cv->core, cv->port, cv->rxq);
-			}
-		}
-
-		if (unlikely(num <= 0)) {
-			sleep(1);
-			atomic_store(state, STATE_EXIT);
-			LOG_INFO("Finished: lcore_id %u @ core %u port %u rxq %u", rte_lcore_id(),
-					cv->core, cv->port, cv->rxq);
-			goto EXIT;
-		}
-
-#if 1
-		/* fwd */
-		if (mode == BLESS_MODE_FWD) {
-			const uint16_t nb_rx = rte_eth_rx_burst(port, qid, rx_mbufs, batch);
-			if (nb_rx) {
-				int n = nb_rx - 1;
-				rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[0], struct rte_ether_hdr*));
-				for (int i = 1, j = 0; i < n; i++, j++) {
-					rte_prefetch0(rte_pktmbuf_mtod(rx_mbufs[i], struct rte_ether_hdr*));
-					swap_mac(rte_pktmbuf_mtod(rx_mbufs[j], struct rte_ether_hdr*));
-				}
-				swap_mac(rte_pktmbuf_mtod(rx_mbufs[n], struct rte_ether_hdr*));
-				uint16_t nb_tx = rte_eth_tx_burst(port, qid, rx_mbufs, nb_rx);
-				if (nb_tx != nb_rx) {
-					rte_pktmbuf_free_bulk(&mbufs[nb_tx], nb_rx - nb_tx);
-				}
-			} else {
-				if (unlikely(batch_delay_us)) {
-					rte_delay_us(batch_delay_us);
-				}
-			}
-			val = atomic_load_explicit(state, memory_order_acquire);
-			continue;
-		}
-#endif
-
-		/* tx-only */
-		for (int j = 0; j < nb_tx; j++) {
-			if (cnode->erroneous.ratio > 0 && cnode->erroneous.n_mutation) {
-				/* should this mbuf be a mutation? */
-				uint64_t tsc = fast_rand_next();
-				tsc = tsc ^ (tsc >> 8);
-				if ((tsc & 1023) < cnode->erroneous.ratio) {
-					int n = tsc % cnode->erroneous.n_mutation;
-					mutation_func func = cnode->erroneous.func[n];
-					int r = func((void**)&mbufs[j], 1, (void*)cnode);
-					if (!r) {
-						rte_exit(EXIT_FAILURE, "Cannot mutate(%d)\n", n);
-					}
-					// tx_bytes += r;
-				}
-			} else {
-				int index = fast_rand_next() & dist->mask;
-				enum BLESS_TYPE type = dist->data[index];
-				// LOG_ERR("type %u index %d", type, index);
-				// fflush(stdout);
-				int r = bless_mbufs(&mbufs[j], 1, type, (void*)cnode);
-				if (!r) {
-					rte_exit(EXIT_FAILURE, "Cannot bless_mbuf()\n");
-				}
-				// tx_bytes += r;
-			}
-			// rte_atomic64_inc(&(conf->stats[portid] + type)->tx_pkts);
-			// rte_atomic64_add(&(conf->stats[portid] + type)->tx_bytes, tx_bytes);
-		}
-
-		/* FIXME stats of type */
-		// rte_pktmbuf_dump(stdout, mbufs[0], 2000);
-		uint16_t sent = rte_eth_tx_burst(port, qid, mbufs, nb_tx);
-		if (sent) {
-			num -= sent;
-			// printf("lcore %u port %u sent %d remain %ld\n", lcore_id, portid, sent, num);
-		}
-		if (sent != nb_tx) {
-			// printf("lcore %u port %u unsent %d remain %lu\n", lcore_id, portid, nb_tx - sent, num);
-			/*
-			   uint64_t dropped_bytes = 0;
-			   for (int i = sent; i < nb_tx; i++) {
-			   dropped_bytes += mbufs[i]->pkt_len;
-			   }
-			   rte_atomic64_sub(&(conf->stats[portid] + type)->dropped_pkts, nb_tx - sent);
-			   rte_atomic64_add(&(conf->stats[portid] + type)->dropped_bytes, dropped_bytes);
-			// (conf->stats[portid] + type)->dropped_pkts += nb_tx - sent;
-			// (conf->stats[portid] + type)->dropped_bytes += dropped_bytes;
-			*/
-			rte_pktmbuf_free_bulk(&mbufs[sent], nb_tx - sent);
-		}
-
-		if (unlikely(batch_delay_us)) {
-			rte_delay_us(batch_delay_us);
-		}
-
-		val = atomic_load_explicit(state, memory_order_acquire);
-	}
-
-EXIT:
-	LOG_INFO("core %u %u exit", lcore_id, cv->core);
+	worker_func[mode](worker);
 }
-#if defined(XXX)
-#endif
 
 void dpdk_generate_cmdReply(const char *str)
 {
@@ -440,26 +516,23 @@ void worker_main_loop(void *data)
 		prev_tsc = cur_tsc;
 		/* if timer has reached its timeout */
 		if (unlikely(timer_tsc >= timer_period * 1)) {
-			/* do this only on main core */
-			if (lcore_id == rte_get_main_lcore()) {
-				timer_tsc = 0;
-				if (val == STATE_STOPPED) {
-					if (i) {
-						dpdk_generate_stats(conf->enabled_port_mask);
-					}
-					i = 0;
-				} else {
+			timer_tsc = 0;
+			if (unlikely(val == STATE_STOPPED)) {
+				if (i) {
 					dpdk_generate_stats(conf->enabled_port_mask);
-					i++;
 				}
+				i = 0;
+			} else {
+				dpdk_generate_stats(conf->enabled_port_mask);
+				i++;
 			}
 		}
 	}
 
-	LOG_INFO("main core %u %u exit", lcore_id, cv->core);
+	LOG_INFO("main core %u exit", cv->core);
 }
 
-const char *ws_json_get_string(cJSON *obj, const char *key)
+const static char *ws_json_get_string(cJSON *obj, const char *key)
 {
 	cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, key);
 	return cJSON_IsString(item) ? item->valuestring : NULL;

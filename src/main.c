@@ -111,10 +111,11 @@ static int launch_one_core(void *conf)
 
 	if (lcore_id == rte_get_main_lcore()) {
 		LOG_INFO("main core");
-		// base_show_core_view(base.topo.cv);
+		base_show_core_view(base.topo.cv);
 		worker_main_loop((void*)conf);
 	} else {
 		struct base_core_view *view = base.topo.cv + lcore_id;
+		assert(view->numa == rte_socket_id());
 		if (!view->enabled) {
 			LOG_TRACE("skip unused core %d", lcore_id);
 			return 1;
@@ -613,7 +614,6 @@ static void base_show_core_view_format(struct base_core_view *view, char *pref)
 		}
 		LOG_HINT("%s  [%d]        %p", pref, i, v);
 		LOG_SHOW("%s  enabled    %u", pref,v->enabled);
-		LOG_SHOW("%s  socket     %u", pref,v->socket);
 		LOG_SHOW("%s  numa       %u", pref,v->numa);
 		LOG_SHOW("%s  core       %u", pref,v->core);
 		LOG_SHOW("%s  role       %u", pref,v->role);
@@ -637,7 +637,6 @@ void base_show_topo(struct base_topo *topo)
 	// rte_lcore_dump(stdout);
 
 	LOG_HINT("base_topo           %p", topo);
-	LOG_SHOW("  n_socket          %u", topo->n_socket);
 	LOG_SHOW("  n_numa            %u", topo->n_numa);
 	LOG_SHOW("  n_core            %u", topo->n_core);
 	LOG_SHOW("  n_enabled_core    %u", topo->n_enabled_core);
@@ -690,6 +689,7 @@ int base_init_topo()
 	// maybe base.bconf->enabled_port_mask?
 	topo->port_mask = enabled_port_mask;
 	topo->n_enabled_port = rte_popcount32(topo->port_mask);
+	topo->n_numa = rte_socket_count();
 
 	topo->cv = malloc(sizeof(struct base_core_view) * RTE_MAX_LCORE);
 	if (!topo->cv) {
@@ -721,7 +721,7 @@ int base_init_topo()
 			/* queue view */
 			view = cv + core_id;
 			/* TODO socket/numa, etc... */
-			view->enabled = 1;
+			view->enabled = core_id + 1;
 			view->core = core_id;
 			view->port = port_id;
 			view->type = etype;
@@ -748,11 +748,12 @@ int base_init_topo()
 	view->rxq = -1;
 	view->txq = -1;
 
-	/* init worker core view */
+	/* init core view */
 	RTE_LCORE_FOREACH_WORKER(core_id) {
 		topo->n_core += ROLE_RTE == rte_eal_lcore_role(core_id);
 		view = cv + core_id;
 		view->role = rte_eal_lcore_role(core_id);
+		view->numa = rte_lcore_to_socket_id(core_id);
 	}
 	if (topo->n_enabled_core > topo->n_core) {
 		rte_exit(EXIT_FAILURE, "Not enough cores");
@@ -817,10 +818,13 @@ void init_config()
 		if (0 == strcmp(base.argv[1], "version")) {
 			base_show_version();
 			exit(0);
+		} else if (0 == strcmp(base.argv[1], "config")) {
+			server_config_template();
+			exit(0);
 		}
 		cfg->cfm.name = base.argv[1];
 	} else {
-		rte_exit(EXIT_FAILURE, "unacceptable params");
+		rte_exit(EXIT_FAILURE, "Unacceptable params");
 	}
 
 	if (config_check_file_map(&cfg->cfm)) {
@@ -849,8 +853,7 @@ void init_eal()
 		rte_exit(EXIT_FAILURE, "Invalid EAL arguments\n");
 	}
 
-	base.argc -= ret;
-	base.argv += ret;
+	base.args_jump = ret;
 
 	/* TODO rte_eth_dev_callback_register */
 
@@ -874,7 +877,7 @@ void init_args()
 	base.bconf = bconf;
 
 	/* parse application(bless) arguments from base.{argc, argv} */
-	if (parse_args(base.argc, base.argv) < 0) {
+	if (parse_args(base.argc - base.args_jump, base.argv + base.args_jump) < 0) {
 		rte_exit(EXIT_FAILURE, "Invalid BLESS arguments\n");
 	}
 	// FIXME
@@ -1245,7 +1248,6 @@ void run()
 
 	/* launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(launch_one_core, (void*)base.bconf, CALL_MAIN);
-	exit(0);
 }
 
 void stop()

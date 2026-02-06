@@ -8,10 +8,12 @@
 #include <unistd.h>
 #include "server.h"
 
+#define SYSTEM_THEME_LEN_MAX 10
+
 struct system_cfg {
 	uint8_t daemonize;
-	char theme[16];
 	struct server server;
+	char theme[SYSTEM_THEME_LEN_MAX];
 };
 
 struct system_status {

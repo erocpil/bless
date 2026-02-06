@@ -475,7 +475,7 @@ int config_parse_dpdk_internal(Node *node, int *targc, char ***targv, int i)
 
 			argv[i] = malloc(len);
 			if (!argv[i]) {
-				perror("malloc");
+				perror("malloc()");
 				exit(EXIT_FAILURE);
 			}
 
@@ -578,10 +578,10 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 	node = find_by_path(system_node, path);
 	if (node) {
 		if (NODE_SCALAR == node->type && node->value &&
-				strlen(node->value) < 16) {
-			strncpy(cfg->theme, node->value, 16);
+				strlen(node->value) < SYSTEM_THEME_LEN_MAX) {
+			strncpy(cfg->theme, node->value, SYSTEM_THEME_LEN_MAX);
 		} else {
-			rte_exit(EXIT_FAILURE, "Invalid server theme: %s\n", node->value);
+			rte_exit(EXIT_FAILURE, "Theme name too long: %s\n", node->value);
 		}
 	} else {
 		strncpy(cfg->theme, "default", strlen("default") + 1);
@@ -597,7 +597,7 @@ int config_parse_system(Node *root, struct system_cfg *cfg)
 int config_parse_server(Node *root, struct server *srv)
 {
 	if (!srv) {
-		printf("NULL server\n");
+		LOG_WARN("NULL server\n");
 		return -1;
 	}
 
@@ -609,12 +609,13 @@ int config_parse_server(Node *root, struct server *srv)
 	char *path = "server";
 	Node *node = find_by_path(root, path);
 	if (!node) {
-		printf("No server found\n");
+		LOG_WARN("No server found\n");
 		return -1;
 	}
+	root = node;
 
 	/* 2. YAML override */
-	path = "server.options";
+	path = "options";
 	node = find_by_path(root, path);
 	if (node) {
 		if (NODE_MAPPING == node->type) {
@@ -622,7 +623,7 @@ int config_parse_server(Node *root, struct server *srv)
 				const char *k = n->key, *v = n->value;
 				if (strlen(n->key) > SERVER_KV_MAX ||
 						strlen(n->value) > SERVER_KV_MAX) {
-					printf("String too long %s => %s\n, omit.",
+					printf("String too long %s => %s\n, omit",
 							n->key, n->value);
 					continue;
 				}
@@ -638,7 +639,7 @@ int config_parse_server(Node *root, struct server *srv)
 			}
 		} else {
 			cfg->civet_opts[0] = NULL;
-			printf("No valid server options found, use default\n");
+			LOG_WARN("No valid server options found, use default\n");
 		}
 	} else {
 		LOG_WARN("No server options found, use default");
@@ -656,10 +657,10 @@ int config_parse_server(Node *root, struct server *srv)
 	cfg->civet_opts[i * 2] = NULL;
 
 	struct server_service *svc = &srv->svc;
-	path = "server.service";
+	path = "service";
 	node = find_by_path(root, path);
 	if (node) {
-		path = "server.service.websocket";
+		path = "service.websocket";
 		node = find_by_path(root, path);
 		if (node && NODE_SCALAR == node->type) {
 			int len = strlen(node->value);
@@ -670,7 +671,7 @@ int config_parse_server(Node *root, struct server *srv)
 				svc->websocket_uri = NULL;
 			}
 		}
-		path = "server.service.http";
+		path = "service.http";
 		node = find_by_path(root, path);
 		if (node && NODE_SEQUENCE == node->type) {
 			int i = 0;
@@ -706,7 +707,7 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 	int argc = 1;
 	char **argv = malloc(sizeof(char*) * (MAX_EAL_PARAMS + 1));
 	if (!argv) {
-		perror("malloc");
+		perror("malloc()");
 		exit(EXIT_FAILURE);
 	}
 	memset(argv, 0, sizeof(char*) * (MAX_EAL_PARAMS + 1));
@@ -715,7 +716,7 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 	size_t len = strlen((*targv)[i]) + 1;
 	argv[i] = malloc(len);
 	if (!argv[i]) {
-		perror("malloc");
+		perror("malloc()");
 		exit(EXIT_FAILURE);
 	}
 	strcpy(argv[i], (*targv)[i]);
@@ -725,14 +726,14 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 	// 添加分隔符 --
 	argv[i] = strdup("--");
 	if (!argv[i]) {
-		perror("strdup");
+		perror("strdup()");
 		exit(EXIT_FAILURE);
 	}
 
 	path = "injector";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		rte_exit(EXIT_FAILURE, "no injector config found\n");
 	}
 
 	i = config_parse_dpdk_internal(node, &argc, &argv, ++i);
@@ -740,12 +741,12 @@ int config_parse_dpdk(Node *root, int *targc, char ***targv)
 	path = "bless";
 	node = find_by_path(root, path);
 	if (!node) {
-		return -1;
+		rte_exit(EXIT_FAILURE, "no bless config found\n");
 	}
 
 	*targc = argc;
 	*targv = argv;
-	(*targv)[*targc] = NULL;  // 正确设置 argv 结尾
+	(*targv)[*targc] = NULL;
 
 	return 0;
 }
@@ -773,7 +774,7 @@ int config_parse_generic(Node *node, int *targc, char ***targv, int i,
 			size_t len = 2 + strlen(fullkey) + 1 + strlen(n->value) + 1;
 			argv[i] = malloc(len);
 			if (!argv[i]) {
-				perror("malloc");
+				perror("malloc()");
 				exit(EXIT_FAILURE);
 			}
 			if (strlen(n->value)) {
@@ -794,7 +795,7 @@ int config_parse_generic(Node *node, int *targc, char ***targv, int i,
 
 			argv[i] = malloc(len);
 			if (!argv[i]) {
-				LOG_ERR("malloc(%s)", t->value);
+				perror("malloc()");
 				exit(EXIT_FAILURE);
 			}
 
@@ -810,7 +811,7 @@ int config_parse_generic(Node *node, int *targc, char ***targv, int i,
 			i++;
 
 		} else if (n->type == NODE_MAPPING) {
-			// 递归处理
+			// recursively
 			i = config_parse_generic(n, &i, &argv, i, fullkey);
 		}
 	}
@@ -833,13 +834,15 @@ static int parse_uint16(const char *s, uint16_t *out)
 	// base=0 自动识别 0x / 0 前缀
 	unsigned long val = strtoul(s, &endptr, 0);
 	if (errno != 0) {
-		return 0;  // 溢出或其他错误
+		// overflow or other errors
+		return 0;
 	}
 	if (*endptr != '\0') {
-		return 0;  // 存在无效字符
+		// invalid characters
+		return 0;
 	}
 	if (val > UINT16_MAX) {
-		return 0;  // 超出 uint16_t 范围
+		return 0;
 	}
 
 	*out = (uint16_t)val;
@@ -1831,14 +1834,14 @@ int config_clone_cnode(Cnode *src, Cnode *dst)
 
 void config_show(struct config *cfg)
 {
-	LOG_HINT("config %p", cfg);
-	LOG_HINT("  file map %p", &cfg->cfm);
-	LOG_PATH("    name   %s", cfg->cfm.name);
-	LOG_PATH("    fd     %d", cfg->cfm.fd);
-	LOG_PATH("    len    %lu", cfg->cfm.len);
-	LOG_PATH("    addr   %p", cfg->cfm.addr);
-	LOG_HINT("  root     %p", cfg->root);
-	LOG_HINT("  cnode    %p", cfg->cnode);
+	LOG_HINT("config       %p", cfg);
+	LOG_HINT("  file map   %p", &cfg->cfm);
+	LOG_PATH("    name     %s", cfg->cfm.name);
+	LOG_PATH("    fd       %d", cfg->cfm.fd);
+	LOG_PATH("    len      %lu", cfg->cfm.len);
+	LOG_PATH("    addr     %p", cfg->cfm.addr);
+	LOG_HINT("  root       %p", cfg->root);
+	LOG_HINT("  cnode      %p", cfg->cnode);
 }
 
 void config_show_root(struct config *cfg)

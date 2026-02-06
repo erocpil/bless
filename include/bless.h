@@ -72,9 +72,11 @@ enum BLESS_TYPE {
 };
 
 enum BLESS_MODE {
+	BLESS_MODE_NONE = 0,
 	BLESS_MODE_TX_ONLY,
 	BLESS_MODE_RX_ONLY,
 	BLESS_MODE_FWD,
+	BLESS_MODE_FLOW,
 	BLESS_MODE_MAX,
 };
 
@@ -204,7 +206,6 @@ uint64_t bless_mbufs_udp(struct rte_mbuf **mbufs, unsigned int n, void *data);
 uint64_t bless_mbufs_erroneous(struct rte_mbuf **mbufs, unsigned int n, void *data);
 struct bless_conf *bless_init();
 int bless_set_dist(struct bless_conf* bconf, struct dist_ratio *ratio, struct bless_encap_params *bep);
-// void bless_set_config_file(struct bless_conf* bconf, struct config_file_map *cfm);
 int32_t bless_parse_type(enum BLESS_TYPE type, char *optarg);
 void dist_ratio_init(struct dist_ratio *dr);
 int bless_parse_ip_range(char *data, uint32_t *ip, int64_t *range);
