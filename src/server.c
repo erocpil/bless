@@ -150,13 +150,10 @@ static int ws_data_handler(struct mg_connection *conn, int opcode,
 {
 	(void)conn;
 
-	if ((opcode & 0xf) == MG_WEBSOCKET_OPCODE_TEXT) {
-		LOG_TRACE("WS recv: %.*s\n", (int)datasize, data);
-		if (datasize) {
-			LOG_TRACE("data %s size %lu", datasize, (char*)data);
-			struct ws_user_data *wsud = (struct ws_user_data*)ud;
-			wsud->func(ud, data, datasize);
-		}
+	if ((opcode & 0xf) == MG_WEBSOCKET_OPCODE_TEXT && datasize) {
+		LOG_TRACE("data %lu size %s", datasize, data);
+		struct ws_user_data *wsud = (struct ws_user_data*)ud;
+		wsud->func(ud, data, datasize);
 	}
 
 	return 1;
