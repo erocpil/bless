@@ -36,10 +36,10 @@ typedef struct Cnode {
 				uint32_t dst[IP_ADDR_MAX];
 				/* TODO */
 				uint16_t proto[IP_PROTO_MAX];
-				uint16_t n_dst;
 				uint16_t n_src;
-				int64_t dst_range;
+				uint16_t n_dst;
 				int64_t src_range;
+				int64_t dst_range;
 				struct {
 					uint16_t ident[BLESS_CONFIG_MAX];
 					uint16_t n_ident;
@@ -49,10 +49,10 @@ typedef struct Cnode {
 				struct {
 					uint16_t src[PORT_MAX];
 					uint16_t dst[PORT_MAX];
-					uint16_t n_dst;
 					uint16_t n_src;
-					int32_t dst_range;
+					uint16_t n_dst;
 					int32_t src_range;
+					int32_t dst_range;
 					char *payload;
 					uint16_t payload_len;
 				} tcp, udp;

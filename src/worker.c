@@ -402,12 +402,9 @@ void worker_loop(void *data)
 	struct distribution *dist = conf->dist;
 	bless_show_dist(dist);
 
-	Cnode *cnode = rte_malloc(NULL, sizeof(Cnode), 0);
-	if (unlikely(!cnode)) {
-		rte_exit(EXIT_FAILURE, "[%s %d] rte_malloc(Cnode)\n",
-				__func__, __LINE__);
-	}
-	if (unlikely(config_clone_cnode(cnode, cnode) < 0)) {
+	Cnode *cnode = &worker->cnode;
+	memset(cnode, 0, sizeof(struct Cnode));
+	if (unlikely(config_clone_cnode(bconf->cnode, cnode) < 0)) {
 		rte_exit(EXIT_FAILURE, "[%s %d] config_clone_cnode(%p)\n",
 				__func__, __LINE__, cnode);
 	}
@@ -432,6 +429,7 @@ void worker_loop(void *data)
 		cnode->vxlan.ether.n_src = 1;
 	}
 
+	worker->conf.cnode = &worker->cnode;
 	// cnode_show(conf->cnode, 0);
 	// cnode_show_summary(conf->cnode);
 

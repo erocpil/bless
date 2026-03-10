@@ -584,7 +584,6 @@ uint64_t bless_mbufs(struct rte_mbuf **mbufs, uint32_t n, enum BLESS_TYPE type,
 				LOG_ERR("2");
 				return 0;
 			}
-			printf("vxlan\n");
 		} else {
 			// printf("no vxlan\n");
 			// rte_exit(EXIT_FAILURE, "[%s %d] no vxlan\n", __func__, __LINE__, n);
