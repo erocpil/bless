@@ -1,0 +1,104 @@
+/* POSIX / C runtime */
+#include <stdio.h>
+#include <stdint.h>
+// #include <stdlib.h>
+#include <string.h>
+
+/**
+ * @file device.c
+ * @brief NIC device-type detection (physical / PCAP / VirtIO).
+ *
+ * Reads the DPDK dev_info.driver_name to classify each port.
+ * Used by the startup path to pick queue setup and offload policies.
+ */
+#include <unistd.h>
+#include <sys/types.h>
+
+/* DPDK */
+#include <rte_eal.h>
+#include <rte_common.h>
+#include <rte_ethdev.h>
+#include <rte_mbuf.h>
+#include <rte_mempool.h>
+
+#include "device.h"
+#include "log.h"
+
+static char *ethdev_type_string[] = {
+	"physical",
+	"pcap",
+	"virtio",
+	"ring",
+	"not_supported",
+	"other",
+};
+
+/* Map ethdev type enum to human-readable string. */
+char *device_get_string(uint16_t type)
+{
+	if (type >= ETHDEV_MAX) {
+		return "other";
+	}
+	return ethdev_type_string[type];
+}
+
+inline uint16_t device_type_to_mask(enum ethdev_type type)
+{
+	return (1 << type);
+}
+
+/* Classify a DPDK port by driver name into the ethdev_type enum. */
+enum ethdev_type device_get_ethdev_type(uint16_t portid)
+{
+	struct rte_eth_dev_info info;
+	rte_eth_dev_info_get(portid, &info);
+
+	const char *drv = info.driver_name;
+
+	if (!drv) {
+		return ETHDEV_MAX;
+	}
+
+	if (strcmp(drv, "net_pcap") == 0) {
+		return ETHDEV_PCAP;
+	}
+
+	if (strcmp(drv, "net_virtio") == 0) {
+		return ETHDEV_VIRTIO;
+	}
+
+	if (strcmp(drv, "net_ring") == 0) {
+		return ETHDEV_RING;
+	}
+
+	if (strcmp(drv, "net_null") == 0) {
+		return ETHDEV_RING;
+	}
+
+	/* Common physical NICs */
+	if (strncmp(drv, "mlx5_pci", 8) == 0) {
+		return ETHDEV_PHYSICAL;
+	}
+
+	return ETHDEV_NOT_SUPPORTED;
+}
+
+void device_show_info(uint16_t portid)
+{
+	struct rte_eth_dev_info dev_info;
+	int ret = rte_eth_dev_info_get(portid, &dev_info);
+	if (ret) {
+		return;
+	}
+
+	LOG_HINT("device info       %p", &dev_info);
+	LOG_SHOW("  port id         %u", portid);
+	LOG_SHOW("  driver name     %s", dev_info.driver_name);
+	LOG_SHOW("  if index        %u", dev_info.if_index);
+	LOG_SHOW("  mtu             [%d, %d]", dev_info.min_mtu, dev_info.max_mtu);
+	LOG_SHOW("  max rx queues   %u", dev_info.max_rx_queues);
+	LOG_SHOW("  max tx queues   %u", dev_info.max_tx_queues);
+	LOG_SHOW("  nb rx queues    %u", dev_info.nb_rx_queues);
+	LOG_SHOW("  nb tx queues    %u", dev_info.nb_tx_queues);
+	LOG_SHOW("  tx offload capa %lx", dev_info.tx_offload_capa);
+}

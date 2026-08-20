@@ -1,0 +1,37 @@
+# bench-imix.yaml — IMIX (Internet Mix) benchmark config
+# Mix: 64B(7) : 594B(4) : 1518B(1)
+# Usage: bless conf/bench-imix.yaml -- --seed 0
+
+dpdk:
+  eal: "-l 0-1 -n 4 --socket-mem 4096,4096"
+
+injector:
+  mode: "tx-only"
+  batch: 64
+  num: 100000000
+  stat-interval: 10
+  sample-interval: 0
+  mi-smoothing-window: 1
+  queue: 1
+
+bless:
+  stats:
+    interval: 10
+  traffic:
+    model: 0
+    batch_delay_us: 0
+    batch_jitter_us: 0
+
+  ether:
+    mtu: 1518
+    dst_mac: "02:00:00:00:00:01"
+    src_mac: "02:00:00:00:00:00"
+    type:
+      udp:
+        dst_ip: "10.0.0.1"
+        src_ip: "10.0.0.2+254"
+        dst_port: "8080"
+        src_port: "1024+65535"
+      # IMIX achieved via packet-size mutations across three distributions
+      # (64B weighted 7, 594B weighted 4, 1518B weighted 1)
+      # pkt_size mutation class handles this

@@ -1,0 +1,91 @@
+{
+  "batch_delay_us": 0,
+  "log": "results/observability-cpu-revalidation/unlimited_sampler_off-r03.log",
+  "mem_rss_kb_p50": 23240.0,
+  "process_cpu_cores_used": 1.9994893914990688,
+  "process_cpu_seconds": 39.99,
+  "raw_samples": "results/observability-cpu-revalidation/unlimited_sampler_off-r03.jsonl",
+  "reported_cpu_busy_pct_p50": 19.992276718044845,
+  "restart": 3,
+  "sample_count": 20,
+  "sample_interval": 0,
+  "sampler_overwritten_window_max": 0.0,
+  "scenario": "unlimited_sampler_off",
+  "threads": [
+    {
+      "comm": "bless",
+      "cpu_cores_used": 0.9994946970759284,
+      "cpu_seconds": 19.99,
+      "tid": 725777
+    },
+    {
+      "comm": "civetweb-master",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725778
+    },
+    {
+      "comm": "bless",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725779
+    },
+    {
+      "comm": "dpdk-intr",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725780
+    },
+    {
+      "comm": "dpdk-mp-msg",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725781
+    },
+    {
+      "comm": "tx_only@1",
+      "cpu_cores_used": 0.9999946944231402,
+      "cpu_seconds": 20.0,
+      "tid": 725782
+    },
+    {
+      "comm": "dpdk-worker2",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725783
+    },
+    {
+      "comm": "dpdk-worker3",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725784
+    },
+    {
+      "comm": "dpdk-worker4",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725785
+    },
+    {
+      "comm": "civetweb-worker",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725786
+    },
+    {
+      "comm": "dpdk-telemet-v2",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725787
+    },
+    {
+      "comm": "civetweb-worker",
+      "cpu_cores_used": 0.0,
+      "cpu_seconds": 0.0,
+      "tid": 725788
+    }
+  ],
+  "tx_mpps_p50": 0.4350002292069709,
+  "tx_mpps_p95": 0.43554921709856,
+  "wall_seconds": 20.000106112100184
+}

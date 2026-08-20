@@ -1,0 +1,95 @@
+# Handshake mode: right side (mixed 60% handshake + 40% stateless).
+# Features:
+#   - TCP handshake establishment + CPS (handshake portion)
+#   - TCP flag diversity entropy (stateless portion via bless_mbufs_tcp)
+#   - Combined: conntrack pressure + throughput in one workload
+# Src IP = 192.168.1.1,  Dst IP range = 10.0.0.1+1024
+# Src port = 80,  Dst port range = 10000+100
+# hs-mix-ratio: 600 means 60% of each batch is handshake SYN,
+#   40% is stateless TCP with weighted random flags (PSH+ACK/SYN/SYN-ACK/etc.)
+#
+# -- PMD options for bidirectional handshake --------------------------
+# Handshake mode requires both TX and RX on the same device.
+# net_pcap0,iface=lo  is TX-only (max_rx_queues=0) and will cause
+# bless to abort with an error.  Choose one of the options below:
+#
+#   Option A: net_null0 (CPS-only, no real traffic)
+#     vdev: net_null0
+#     TX sends to nowhere, RX always returns 0 pkts.
+#     Pros:  zero setup, no root, single instance works alone
+#     Cons:  no real conntrack tracking (no SYN-ACKs ever arrive)
+#     Use:   unidirectional SYN flood / CPS ceiling test
+#
+#   Option B: PCAP rx_iface+tx_iface (bidirectional on lo)
+#     vdev: net_pcap0,rx_iface=lo,tx_iface=lo
+#     Both instances share lo: left TX → lo → right RX, right TX → lo → left RX.
+#     Pros:  real bidirectional handshake on lo
+#     Cons:  requires root + libpcap; libpcap captures may drop on heavy load
+#     Use:   small-scale conntrack validation (batch ≤ 256)
+#
+#   Option C: TAP device (bidirectional, dedicated interface)
+#     vdev: net_tap0,iface=bless-tap0
+#     Create TAP first: ip tuntap add dev bless-tap0 mode tap
+#     Both instances use the same TAP.
+#     Pros:  reliable bidirectional, no capture drops
+#     Cons:  requires root + TAP creation; may need bridge for multi-OS
+#     Use:   realistic conntrack / CPS test at scale
+#
+# -- Usage -----------------------------------------------------------
+#   build/release-static/bin/bless conf/config-hs-mix-left.yaml   (terminal 1)
+#   build/release-static/bin/bless conf/config-hs-mix-right.yaml  (terminal 2)
+#
+# Monitor:
+#   curl -s http://localhost:8001/metrics | grep -E "^bless_(hs|entropy)"
+#
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  vdev: net_pcap0,rx_iface=lo,tx_iface=lo
+  main-lcore: 0
+  l: 0-2
+  n: 2
+  proc-type: auto
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  mode: handshake
+  num: -1
+  batch: 64
+  batch-delay-us: 1000
+  sample-interval: 0
+  hs-rate: 38
+  hs-timeout-us: 10000000
+  hs-mix-ratio: 600
+
+bless:
+  hw-offload: [ ipv4, tcp ]
+  ether:
+    dst: 02:00:00:00:00:01
+    src:
+    type:
+      ipv4:
+        src: [ 192.168.1.1 ]
+        dst: 10.0.0.1+1024
+        tcp:
+          src: 80
+          dst: 10000+100
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: 127.0.0.1:8001
+      num_threads: 2
+      enable_keep_alive: yes

@@ -1,0 +1,25 @@
+{
+  "binary": "/root/src/bless/build/release-static/bin/bless",
+  "clock_ticks_per_second": 100,
+  "command": [
+    "tools/observability_cpu_validation.py",
+    "--bin",
+    "./build/release-static/bin/bless",
+    "--config",
+    "conf/config-test.yaml",
+    "--restarts",
+    "5",
+    "--warmup",
+    "5",
+    "--output",
+    "results/observability-cpu-revalidation"
+  ],
+  "config": "/root/src/bless/conf/config-test.yaml",
+  "cpu_count": 40,
+  "duration_seconds": 20.0,
+  "git_commit": "fd51158c2bedfae22b74ec9541c01952aaeb9cd7",
+  "interval_seconds": 1.0,
+  "restarts": 5,
+  "started_at": "2026-08-15T15:28:50.463395+00:00",
+  "warmup_seconds": 5.0
+}

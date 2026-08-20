@@ -1,0 +1,20 @@
+diff --git a/src/civetweb.c b/src/civetweb.c
+index f17f9da..96b87fa 100644
+--- a/src/civetweb.c
++++ b/src/civetweb.c
+@@ -13558,0 +13559,15 @@ read_websocket(struct mg_connection *conn,
++#if defined(MG_WEBSOCKET_MAX_INBOUND_PAYLOAD)
++		/*
++		 * Application callbacks run only after the payload buffer has been
++		 * allocated and filled.  Enforce the configured inbound limit as
++		 * soon as the frame header is available, before any allocation.
++		 */
++		if ((header_len > 0)
++		    && (data_len > (uint64_t)MG_WEBSOCKET_MAX_INBOUND_PAYLOAD)) {
++			mg_cry_internal(conn,
++			                "%s",
++			                "websocket payload exceeds configured limit");
++			break;
++		}
++#endif
++

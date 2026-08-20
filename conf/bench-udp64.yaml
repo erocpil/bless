@@ -1,0 +1,33 @@
+# bench-udp64.yaml — 64-byte UDP benchmark config
+# Usage: bless conf/bench-udp64.yaml -- --seed 0 --udp 100 --num 100000000
+
+dpdk:
+  eal: "-l 0-1 -n 4 --socket-mem 4096,4096"
+
+injector:
+  mode: "tx-only"
+  batch: 64
+  num: 100000000
+  stat-interval: 10
+  sample-interval: 0
+  mi-smoothing-window: 1
+  queue: 1
+
+bless:
+  stats:
+    interval: 10
+  traffic:
+    model: 0          # uniform (fixed interval)
+    batch_delay_us: 0  # as fast as possible
+    batch_jitter_us: 0
+
+  ether:
+    mtu: 1500
+    dst_mac: "02:00:00:00:00:01"
+    src_mac: "02:00:00:00:00:00"
+    type:
+      udp:
+        dst_ip: "10.0.0.1"
+        src_ip: "10.0.0.2+254"
+        dst_port: "8080"
+        src_port: "1024+65535"

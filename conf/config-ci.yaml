@@ -1,0 +1,108 @@
+# Local demo and CI smoke-test config. It uses the net_null PMD.
+# net_null drops TX silently — no traffic leaves the host.
+#
+# Usage:
+#   build/release-static/bin/bless conf/config-ci.yaml
+#   make demo
+
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  no-huge: ""
+  no-shconf: ""
+  vdev: net_null0
+  main-lcore: 0
+  l: 0-1
+  n: 2
+  proc-type: auto
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  batch: 64
+  batch-delay-us: 100000
+  batch-jitter-us: 50
+  traffic-model: 0
+  entropy-target: 0
+  entropy-dim: 0
+  entropy-adapt-gain: 0.1
+  sample-interval: 10
+  latency-hist-enable: true
+  mi-smoothing-window: 1   # 1 = disabled (EMA non-deterministic; breaks seed-replay)
+  mode: tx-only
+  num: -1
+  arp: 0
+  icmp: 0
+  tcp: 1
+  udp: 3
+  sctp: 1
+
+bless:
+  hw-offload: [ ipv4, udp, tcp ]
+  ether:
+    mtu: 0
+    copy-payload: true
+    dst: 02:00:00:00:00:01
+    type:
+      arp:
+        src: [ 10.0.0.1 ]
+        dst: [ 20.0.0.2 ]
+      ipv4:
+        src: 10.0.0.1+64
+        dst: [ 192.168.1.1, 192.168.1.2 ]
+        icmp:
+          ident: [ 0x1234, 0xface ]
+          payload: "icmp test."
+        tcp:
+          src: 10000+10
+          dst: 80+4
+          payload: "tcp test."
+        udp:
+          src: 20000+10
+          dst: [ 53, 123, 443 ]
+          payload: "udp test."
+        sctp:
+          src: 30000+10
+          dst: 3868+8
+  vxlan:
+    enable: true
+    ratio: 10
+    wire-mtu: 1500
+    ether:
+      dst: 02:00:00:00:00:02
+      src: 02:00:00:00:00:01
+      type:
+        ipv4:
+          src: [ 172.31.30.245:100+3, 172.31.30.246:100+3 ]
+          dst: [ 4.0.0.1, 4.0.0.2, 4.0.0.3 ]
+          udp:
+            src: [ 4000, 4001, 4002 ]
+            dst: 4789
+  erroneous:
+    ratio: 10
+    class:
+      mac: [ vlan ]
+      arp: [ src ]
+      ipv4: [ version, ihl, frag ]
+      sctp: [ cksum, port, vtag ]
+      icmp: [ type ]
+      tcp: [ syn_flood ]
+      udp: [ len ]
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      num_threads: 4
+      enable_keep_alive: yes

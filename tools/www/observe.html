@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Bless Observe Dashboard</title>
+<script src="/assets/chart.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: #0d1117;
+  color: #c9d1d9;
+  overflow-x: hidden;
+}
+.toolbar {
+  padding: 6px 12px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.toolbar h1 { font-size: 13px; font-weight: 600; color: #58a6ff; margin-right: 8px; }
+.toolbar a {
+  color: #8b949e; text-decoration: none; font-size: 11px; padding: 3px 8px;
+  border: 1px solid #30363d; border-radius: 4px;
+}
+.toolbar a:hover { background: #21262d; color: #c9d1d9; }
+.toolbar a.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+.toolbar .btn {
+  padding: 3px 8px; background: #21262d; color: #c9d1d9;
+  border: 1px solid #30363d; border-radius: 4px; cursor: pointer;
+  font-size: 11px; font-family: inherit;
+}
+.toolbar .btn:hover { background: #30363d; }
+.toolbar .btn.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+.toolbar .status {
+  margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 10px;
+}
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #f44; display: inline-block; }
+.status-dot.on { background: #3fb950; }
+.container { padding: 6px 12px; max-width: 1400px; margin: 0 auto; }
+.section-title {
+  font-size: 10px; font-weight: 600; color: #8b949e; text-transform: uppercase;
+  letter-spacing: 0.6px; margin: 6px 0 3px 0; padding-bottom: 3px; border-bottom: 1px solid #21262d;
+}
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.chart-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 6px; }
+.chart-card h3 { font-size: 10px; color: #8b949e; margin-bottom: 2px; }
+.gauge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.gauge-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 6px 4px; text-align: center; }
+.gauge-label { font-size: 8px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; }
+.gauge-value { font-size: 16px; font-weight: 700; margin: 1px 0; white-space: nowrap; }
+.gauge-value.green { color: #3fb950; }
+.gauge-value.yellow { color: #d29922; }
+.gauge-value.red { color: #f44; }
+.gauge-unit { font-size: 9px; color: #484f58; }
+canvas { width: 100% !important; height: 140px !important; }
+/* -- Console overlay -- */
+#observe-console {
+  position: fixed; right: 20px; bottom: 20px;
+  width: 600px; height: 400px;
+  background: rgba(22,27,34,0.85);
+  color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  display: flex; flex-direction: column;
+  z-index: 9999; font-size: 11px; line-height: 1.3;
+  resize: both; overflow: hidden;
+  min-width: 300px; min-height: 180px;
+  max-width: 90vw; max-height: 90vh;
+}
+#observe-console.hidden { display: none; }
+#observe-console-header {
+  background: transparent; padding: 4px 8px;
+  font-weight: 600; cursor: move;
+  display: flex; justify-content: space-between;
+  user-select: none; color: #8b949e; font-size: 11px;
+}
+#observe-console-header button {
+  padding: 0 6px; font-size: 12px;
+  background: transparent; border: none;
+  color: #484f58; cursor: pointer;
+}
+#observe-console-header button:hover { color: #c9d1d9; }
+#observe-console-tabs { display: flex; background: transparent; }
+#observe-console-tabs button {
+  flex: 1; padding: 4px; background: none; border: none;
+  color: #484f58; cursor: pointer; font-size: 11px; font-family: inherit;
+}
+#observe-console-tabs button.active {
+  color: #c9d1d9; box-shadow: inset 0 -1px 0 #58a6ff;
+}
+#observe-console-body { flex: 1; overflow: visible; display: flex; flex-direction: column; min-height: 0; }
+#observe-console-body .tab { flex: 1; display: none; flex-direction: column; min-height: 0; }
+#observe-console-body .tab.active { display: flex; }
+.ocmd-output {
+  flex: 1; padding: 6px; overflow-y: auto; overflow-x: hidden;
+  white-space: pre-wrap; font-family: inherit;
+  font-size: 11px; line-height: 1.3; min-height: 0;
+  background: transparent;
+}
+.ocmd-input { border-top: 1px solid #21262d; padding: 4px; }
+.ocmd-input textarea {
+  width: 100%; height: 48px; resize: none;
+  background: #0d1117; color: #c9d1d9;
+  border: 1px solid #30363d; font-family: inherit; font-size: 11px;
+}
+#observe-console-toggle {
+  position: fixed; right: 20px; bottom: 20px;
+  padding: 6px 10px; background: #21262d;
+  color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 4px; z-index: 9998;
+  font-family: inherit; font-size: 11px; cursor: pointer;
+}
+#observe-console-toggle:hover { background: #30363d; }
+body::after { content: ""; display: block; height: 200px; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <h1>⚠ Observe</h1>
+  <a href="/">DPDK Stats</a>
+  <a href="/entropy">Entropy</a>
+  <a href="/observe" class="active">Observe</a>
+  <span style="color:#484f58;font-size:10px">|</span>
+  <button class="btn active" id="btn-scale" onclick="toggleScale()">M (pps/bps)</button>
+  <div class="status">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">disconnected</span>
+    <span id="debug-msgs" style="font-size:10px;color:#484f58;margin-left:8px;"></span>
+  </div>
+</div>
+<div class="container">
+  <div class="section-title">Real-Time Gauges</div>
+  <div class="gauge-grid" id="gauge-grid">
+    <div class="gauge-card">
+      <div class="gauge-label">RX Throughput</div>
+      <div class="gauge-value green" id="g-rx-pps">—</div>
+      <div class="gauge-unit" id="u-rx-pps">Mpps</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">TX Throughput</div>
+      <div class="gauge-value green" id="g-tx-pps">—</div>
+      <div class="gauge-unit" id="u-tx-pps">Mpps</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">RX Bandwidth</div>
+      <div class="gauge-value green" id="g-rx-bps">—</div>
+      <div class="gauge-unit" id="u-rx-bps">Mbps</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">TX Bandwidth</div>
+      <div class="gauge-value green" id="g-tx-bps">—</div>
+      <div class="gauge-unit" id="u-tx-bps">Mbps</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">Packet Loss</div>
+      <div class="gauge-value green" id="g-loss">—</div>
+      <div class="gauge-unit">%</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">Process CPU / Enabled Lcores</div>
+      <div class="gauge-value green" id="g-cpu">—</div>
+      <div class="gauge-unit">%</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">Memory RSS</div>
+      <div class="gauge-value green" id="g-mem">—</div>
+      <div class="gauge-unit">MB</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">Send Cost</div>
+      <div class="gauge-value green" id="g-send-cycles">—</div>
+      <div class="gauge-unit">cycles/pkt</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">Pacing Idle</div>
+      <div class="gauge-value" id="g-wait-ratio">—</div>
+      <div class="gauge-unit">% busy-wait</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">Last Update</div>
+      <div class="gauge-value" id="g-time" style="font-size:11px;color:#8b949e;">—</div>
+      <div class="gauge-unit"></div>
+    </div>
+  </div>
+
+  <div class="section-title">Latency (µs) — last 60s <span id="latency-status" style="font-size:11px;font-weight:normal;color:#8b949e;margin-left:8px;">waiting for samples</span></div>
+  <div class="gauge-grid">
+    <div class="gauge-card">
+      <div class="gauge-label">p50 Latency</div>
+      <div class="gauge-value green" id="g-lat-p50">—</div>
+      <div class="gauge-unit">µs</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">p95 Latency</div>
+      <div class="gauge-value yellow" id="g-lat-p95">—</div>
+      <div class="gauge-unit">µs</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">p99 Latency</div>
+      <div class="gauge-value yellow" id="g-lat-p99">—</div>
+      <div class="gauge-unit">µs</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">p99.9 Latency</div>
+      <div class="gauge-value red" id="g-lat-p999">—</div>
+      <div class="gauge-unit">µs</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-label">Samples</div>
+      <div class="gauge-value" id="g-lat-samples" style="font-size:13px;color:#8b949e;">—</div>
+      <div class="gauge-unit">per window</div>
+    </div>
+  </div>
+
+  <div class="section-title">Throughput History (last 60s)</div>
+  <div class="chart-grid">
+    <div class="chart-card"><h3>Packets per Second</h3><canvas id="chart-mpps"></canvas></div>
+    <div class="chart-card"><h3 id="chart-title-bps">Bandwidth</h3><canvas id="chart-gbps"></canvas></div>
+  </div>
+  <div class="chart-grid">
+    <div class="chart-card"><h3>CPU &amp; Memory</h3><canvas id="chart-cpu-mem"></canvas></div>
+    <div class="chart-card"><h3>Packet Loss Rate</h3><canvas id="chart-loss"></canvas></div>
+  </div>
+  <div class="chart-grid">
+    <div class="chart-card"><h3>Latency (p50/p95/p99)</h3><canvas id="chart-latency"></canvas></div>
+    <div class="chart-card"><h3>Latency at p99.9</h3><canvas id="chart-latency-tail"></canvas></div>
+  </div>
+</div>
+
+<div id="observe-console" class="hidden">
+  <div id="observe-console-header">
+    <span>Console</span>
+    <div>
+      <button onclick="toggleOConsole()">✕</button>
+    </div>
+  </div>
+  <div id="observe-console-tabs">
+    <button class="active" onclick="switchOTab('cmd',event)">Cmd</button>
+    <button onclick="switchOTab('log',event)">Log</button>
+  </div>
+  <div id="observe-console-body">
+    <div id="otab-cmd" class="tab active">
+      <div id="ocmdOutput" class="ocmd-output"></div>
+      <div class="ocmd-input">
+        <textarea id="ocmdInput" placeholder="Enter command..."></textarea>
+        <div style="font-size:10px;color:#484f58;margin-top:2px;">Ctrl+Enter to send</div>
+      </div>
+    </div>
+    <div id="otab-log" class="tab">
+      <div id="ologArea" class="ocmd-output"></div>
+    </div>
+  </div>
+</div>
+<button id="observe-console-toggle" onclick="toggleOConsole()">Console</button>
+<script>
+(function() {
+'use strict';
+
+var unitScale = 'M';  // 'K', 'M', 'G'
+
+function getScale() {
+  switch (unitScale) {
+    case 'K': return { pps: 1000, bps: 1000000, ppsLabel: 'Kpps', bpsLabel: 'Kbps' };
+    case 'M': return { pps: 1,    bps: 1000,     ppsLabel: 'Mpps', bpsLabel: 'Mbps' };
+    case 'G': return { pps: 0.001,bps: 1,        ppsLabel: 'Gpps', bpsLabel: 'Gbps' };
+  }
+}
+
+window.toggleScale = function() {
+  var next = { 'K': 'M', 'M': 'G', 'G': 'K' };
+  unitScale = next[unitScale];
+  var s = getScale();
+  document.getElementById('btn-scale').textContent = unitScale + ' (pps/bps)';
+  // gauge unit labels
+  document.getElementById('u-rx-pps').textContent = s.ppsLabel;
+  document.getElementById('u-tx-pps').textContent = s.ppsLabel;
+  document.getElementById('u-rx-bps').textContent = s.bpsLabel;
+  document.getElementById('u-tx-bps').textContent = s.bpsLabel;
+  // chart labels
+  charts.mpps.data.datasets[0].label = 'RX ' + s.ppsLabel;
+  charts.mpps.data.datasets[1].label = 'TX ' + s.ppsLabel;
+  charts.gbps.data.datasets[0].label = 'RX ' + s.bpsLabel;
+  charts.gbps.data.datasets[1].label = 'TX ' + s.bpsLabel;
+  document.getElementById('chart-title-bps').textContent = 'Bandwidth (' + s.bpsLabel + ')';
+  redraw();
+};
+
+// ---- WebSocket ----
+function consumePageApiKey() {
+  var query = new URLSearchParams(location.search);
+  var fragment = new URLSearchParams(location.hash.replace(/^#/, ''));
+  var key = fragment.get('api_key') || query.get('api_key') || '';
+  if (key) {
+    query.delete('api_key');
+    fragment.delete('api_key');
+    var clean = location.pathname +
+      (query.toString() ? '?' + query.toString() : '') +
+      (fragment.toString() ? '#' + fragment.toString() : '');
+    history.replaceState(null, '', clean);
+  }
+  return key;
+}
+
+var apiKey = consumePageApiKey();
+var extra = apiKey ? '?api_key=' + encodeURIComponent(apiKey) : '';
+var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:')
+            + '//' + location.host + '/wsURL' + extra;
+var ows = null;
+var reconnectTimer = null;
+
+// ---- Data store ----
+var samples = [];
+var MAX_SAMPLES = 600;
+var msgCount = 0;
+
+function debugLog(txt) { /* removed */ }
+// ---- Charts ----
+var charts = {};
+
+function makeChart(id, cfg) {
+  var ctx = document.getElementById(id);
+  if (!ctx || typeof Chart === 'undefined') {
+    debugLog('Chart.js not loaded');
+    return null;
+  }
+  var chartCtx = ctx.getContext('2d');
+  return new Chart(chartCtx, {
+    type: 'line',
+    data: { labels: [], datasets: cfg.datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 0 },
+      scales: {
+        x: { display: true, ticks: { color: '#484f58', maxTicksLimit: 6, font: { size: 8 } }, grid: { color: '#21262d' } },
+        y: { beginAtZero: true, grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 9 } } }
+      },
+      plugins: {
+        legend: { labels: { color: '#8b949e', boxWidth: 8, padding: 4, font: { size: 9 } } }
+      },
+      elements: { point: { radius: 0 }, line: { borderWidth: 1 } }
+    }
+  });
+}
+
+function initCharts() {
+  charts.mpps = makeChart('chart-mpps', {
+    datasets: [
+      { label: 'RX ' + unitScale, data: [], borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)', fill: true, tension: 0.3 },
+      { label: 'TX ' + unitScale, data: [], borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.1)', fill: true, tension: 0.3 }
+    ]
+  });
+  charts.gbps = makeChart('chart-gbps', {
+    datasets: [
+      { label: 'RX Gbps', data: [], borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.1)', fill: true, tension: 0.3 },
+      { label: 'TX Gbps', data: [], borderColor: '#f0883e', backgroundColor: 'rgba(240,136,62,0.1)', fill: true, tension: 0.3 }
+    ]
+  });
+  charts.cpuMem = makeChart('chart-cpu-mem', {
+    datasets: [
+      { label: 'Enabled-lcore utilization %', data: [], borderColor: '#f44', backgroundColor: 'rgba(255,68,68,0.1)', fill: true, tension: 0.3, yAxisID: 'y' },
+      { label: 'Memory MB', data: [], borderColor: '#bc8cff', backgroundColor: 'rgba(188,140,255,0.1)', fill: true, tension: 0.3, yAxisID: 'y1' }
+    ]
+  });
+  charts.cpuMem.options.scales.y1 = {
+    beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#8b949e', font: { size: 9 } }
+  };
+  charts.loss = makeChart('chart-loss', {
+    datasets: [
+      { label: 'Loss Rate', data: [], borderColor: '#f44', backgroundColor: 'rgba(255,68,68,0.1)', fill: true, tension: 0.3 }
+    ]
+  });
+  charts.loss.options.scales.y = {
+    beginAtZero: true, grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 9 },
+      callback: function(v) { return (v*100).toFixed(2) + '%'; } }
+  };
+  charts.latency = makeChart('chart-latency', {
+    datasets: [
+      { label: 'p50 µs', data: [], borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.1)', fill: true, tension: 0.3 },
+      { label: 'p95 µs', data: [], borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.1)', fill: true, tension: 0.3 },
+      { label: 'p99 µs', data: [], borderColor: '#f44', backgroundColor: 'rgba(255,68,68,0.1)', fill: true, tension: 0.3 }
+    ]
+  });
+  charts.latTail = makeChart('chart-latency-tail', {
+    datasets: [
+      { label: 'p99.9 µs', data: [], borderColor: '#bc8cff', backgroundColor: 'rgba(188,140,255,0.1)', fill: true, tension: 0.3 }
+    ]
+  });
+}
+
+function redraw() {
+  if (samples.length === 0) return;
+  var s = getScale();
+  var labels = samples.map(function(s) { return new Date(s.ts).toLocaleTimeString(); });
+  function get(series) { return samples.map(function(s) { return s.o ? (s.o[series] || 0) : 0; }); }
+  function getLatency(series) {
+    return samples.map(function(s) {
+      return s.o && Number(s.o.lat_samples) > 0 && isFinite(s.o[series])
+        ? Number(s.o[series]) : null;
+    });
+  }
+
+  if (charts.mpps) {
+    charts.mpps.data.labels = labels;
+    charts.mpps.data.datasets[0].data = get('rx_mpps').map(function(v) { return v * s.pps; });
+    charts.mpps.data.datasets[1].data = get('tx_mpps').map(function(v) { return v * s.pps; });
+    charts.mpps.update('none');
+  }
+
+  if (charts.gbps) {
+    charts.gbps.data.labels = labels;
+    charts.gbps.data.datasets[0].data = get('rx_gbps').map(function(v) { return v * s.bps; });
+    charts.gbps.data.datasets[1].data = get('tx_gbps').map(function(v) { return v * s.bps; });
+    charts.gbps.update('none');
+  }
+
+  if (charts.cpuMem) {
+    charts.cpuMem.data.labels = labels;
+    charts.cpuMem.data.datasets[0].data = get('enabled_lcore_utilization_ratio').map(function(v) { return v * 100; });
+    charts.cpuMem.data.datasets[1].data = get('mem_rss_kb').map(function(v) { return v / 1024; });
+    charts.cpuMem.update('none');
+  }
+
+  if (charts.loss) {
+    charts.loss.data.labels = labels;
+    charts.loss.data.datasets[0].data = get('rx_loss_rate');
+    charts.loss.update('none');
+  }
+
+  if (charts.latency) {
+    charts.latency.data.labels = labels;
+    charts.latency.data.datasets[0].data = getLatency('lat_p50_us');
+    charts.latency.data.datasets[1].data = getLatency('lat_p95_us');
+    charts.latency.data.datasets[2].data = getLatency('lat_p99_us');
+    charts.latency.update('none');
+  }
+  if (charts.latTail) {
+    charts.latTail.data.labels = labels;
+    charts.latTail.data.datasets[0].data = getLatency('lat_p999_us');
+    charts.latTail.update('none');
+  }
+}
+
+// ---- Gauges ----
+function fmtPps(v) {
+  // v is already in the display unit (Mpps or Kpps after scaling)
+  if (v < 0.0001) return (v * 1000000).toFixed(0) + ' pps';
+  if (v < 0.1)    return v.toFixed(4);
+  if (v < 1)      return v.toFixed(3);
+  if (v < 100)    return v.toFixed(1);
+  return v.toFixed(0);
+}
+
+function fmtBps(v) {
+  if (v < 0.001) return (v * 1000).toFixed(1) + 'm';
+  if (v < 0.01)  return v.toFixed(4);
+  if (v < 1)     return v.toFixed(3);
+  if (v < 100)   return v.toFixed(1);
+  return v.toFixed(0);
+}
+
+function updateGauges(o) {
+  if (!o) return;
+  function setEl(id, val, cls) {
+    var el = document.getElementById(id);
+    if (el) { var num = typeof val === 'number' ? val : parseFloat(val); el.textContent = val != null && isFinite(num) ? val : '\u2014'; if (cls) el.className = 'gauge-value ' + cls; }
+  }
+  var s = getScale();
+  var rxPps = o.rx_mpps != null ? (o.rx_mpps * s.pps) : null;
+  var txPps = o.tx_mpps != null ? (o.tx_mpps * s.pps) : null;
+  setEl('g-rx-pps', rxPps != null ? fmtPps(rxPps) : '—');
+  setEl('g-tx-pps', txPps != null ? fmtPps(txPps) : '—');
+  setEl('g-rx-bps', o.rx_gbps != null ? fmtBps(o.rx_gbps * s.bps) : '—');
+  setEl('g-tx-bps', o.tx_gbps != null ? fmtBps(o.tx_gbps * s.bps) : '—');
+  var loss = o.rx_loss_rate;
+  if (loss != null && isFinite(loss)) {
+    var pct = (loss * 100);
+    setEl('g-loss', pct.toFixed(3) + '%', pct > 1 ? 'red' : pct > 0.1 ? 'yellow' : 'green');
+  } else { setEl('g-loss', '—'); }
+  var cpu = o.process_cpu_cores;
+  var cpuRatio = o.enabled_lcore_utilization_ratio;
+  if (cpu != null && isFinite(cpu) && cpuRatio != null && isFinite(cpuRatio)) {
+    var cpuPct = cpuRatio * 100;
+    setEl('g-cpu', cpu.toFixed(2) + ' cores / ' + Number(o.enabled_lcores).toFixed(0) + ' (' + cpuPct.toFixed(1) + '%)', cpuPct > 80 ? 'red' : cpuPct > 50 ? 'yellow' : 'green');
+  } else { setEl('g-cpu', '—'); }
+  var memKb = o.mem_rss_kb;
+  setEl('g-mem', memKb ? (memKb / 1024).toFixed(1) : '—');
+  var sendCyc = o.tx_cycles_per_pkt;
+  if (sendCyc != null && isFinite(sendCyc)) {
+    setEl('g-send-cycles', sendCyc >= 1000 ? (sendCyc / 1000).toFixed(1) + 'K' : sendCyc.toFixed(0), 'green');
+  } else { setEl('g-send-cycles', '—'); }
+  var waitRatio = o.tx_wait_ratio;
+  if (waitRatio != null && isFinite(waitRatio)) {
+    setEl('g-wait-ratio', (waitRatio * 100).toFixed(1) + '%', waitRatio > 0.7 ? 'yellow' : 'green');
+  } else { setEl('g-wait-ratio', '—'); }
+  /* latency gauges */
+  var hasLatency = Number(o.lat_samples) > 0;
+  var lat = function(k) { return hasLatency && o[k] != null && isFinite(o[k]) ? Number(o[k]).toFixed(1) : '—'; };
+  setEl('g-lat-p50',    lat('lat_p50_us'), 'green');
+  setEl('g-lat-p95',    lat('lat_p95_us'), 'yellow');
+  setEl('g-lat-p99',    lat('lat_p99_us'), o.lat_p99_us > 1000 ? 'red' : 'yellow');
+  setEl('g-lat-p999',   lat('lat_p999_us'), o.lat_p999_us > 2000 ? 'red' : 'yellow');
+  setEl('g-lat-samples', o.lat_samples != null ? o.lat_samples.toFixed(0) : '—', null);
+  var latencyStatus = document.getElementById('latency-status');
+  if (latencyStatus) {
+    if (hasLatency) {
+      latencyStatus.textContent = Number(o.lat_samples).toFixed(0) + ' samples in current window';
+      latencyStatus.style.color = '#3fb950';
+    } else if (Number(o.rx_mpps) > 0) {
+      latencyStatus.textContent = 'RX is active but no latency samples; verify protocol parsing and response matching';
+      latencyStatus.style.color = '#d29922';
+    } else {
+      latencyStatus.textContent = 'no samples; RX is idle — check the DUT return path and RX queue';
+      latencyStatus.style.color = '#f0883e';
+    }
+  }
+  var _t=document.getElementById('g-time');if(_t)_t.textContent=new Date().toLocaleTimeString();
+}
+
+// ---- WebSocket handlers ----
+function onWsMessage(ev) {
+  msgCount++;
+  try {
+    var d = JSON.parse(ev.data);
+    /* handle cmdReply in Console */
+    if (d.cmdReply) {
+      var co = document.getElementById('ocmdOutput');
+      if (co) co.innerHTML += '% ' + d.cmdReply + '\n\n';
+      return;
+    }
+    if (d.log) {
+      var la = document.getElementById('ologArea');
+      if (la) {
+        var line = document.createElement('div');
+        line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + (typeof d.log === 'string' ? d.log : d.log.text || JSON.stringify(d.log));
+        la.insertBefore(line, la.firstChild);
+        while (la.children.length > 100) la.removeChild(la.lastChild);
+      }
+    }
+    if (!d || !d.observe) return;
+    var now = Date.now();
+    samples.push({ ts: now, o: d.observe });
+    var cutoff = now - 60000;
+    while (samples.length > 0 && samples[0].ts < cutoff) { samples.shift(); }
+    if (samples.length > MAX_SAMPLES) { samples.splice(0, samples.length - MAX_SAMPLES); }
+    updateGauges(d.observe);
+    redraw();
+  } catch(e) { console.warn('observe parse err', e); }
+}
+
+function connect() {
+  if (ows && ows.readyState === WebSocket.OPEN) return;
+  try {
+    ows = new WebSocket(wsUrl);
+  } catch(e) { console.error('WS create err', e); setTimeout(connect, 3000); return; }
+  ows.onopen = function() {
+    document.getElementById('status-dot').className = 'status-dot on';
+    document.getElementById('status-text').textContent = 'connected';
+  };
+  ows.onmessage = onWsMessage;
+  ows.onclose = function() {
+    document.getElementById('status-dot').className = 'status-dot';
+    document.getElementById('status-text').textContent = 'reconnecting…';
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+  ows.onerror = function() { ows.close(); };
+}
+
+// ---- Console functions ----
+var ocmdOutput = document.getElementById('ocmdOutput');
+var ocmdInput = document.getElementById('ocmdInput');
+var oconsoleEl = document.getElementById('observe-console');
+function sendOCmd() {
+  if (!ows || ows.readyState !== WebSocket.OPEN) return;
+  var t = ocmdInput.value.trim();
+  if (!t) return;
+  ows.send(JSON.stringify({ cmd: t }));
+  ocmdOutput.textContent += '> ' + t + '\n';
+  ocmdOutput.scrollTop = ocmdOutput.scrollHeight;
+  ocmdInput.value = '';
+}
+window.toggleOConsole = function() {
+  oconsoleEl.classList.toggle('hidden');
+  var btn = document.getElementById('observe-console-toggle');
+  if (btn) btn.style.display = oconsoleEl.classList.contains('hidden') ? '' : 'none';
+  var lastTab = localStorage.getItem('obs_console_tab') || 'cmd';
+  switchOTab(lastTab);
+}
+window.switchOTab = function(name, ev) {
+  localStorage.setItem('obs_console_tab', name);
+  document.querySelectorAll('#observe-console-tabs button').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('#observe-console-body .tab').forEach(function(t) { t.classList.remove('active'); });
+  var tb = document.getElementById('otab-' + name);
+  if (tb) tb.classList.add('active');
+  if (ev && ev.target) ev.target.classList.add('active');
+  else {
+    document.querySelectorAll('#observe-console-tabs button').forEach(function(btn) {
+      var oa = btn.getAttribute('onclick');
+      if (oa && oa.includes("'" + name + "'")) btn.classList.add('active');
+    });
+  }
+}
+if (ocmdInput) {
+  ocmdInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); sendOCmd(); }
+  });
+}
+/* drag support */
+(function() {
+  var hdr = document.getElementById('observe-console-header');
+  if (!hdr || !oconsoleEl) return;
+  var dragging = false, ox = 0, oy = 0;
+  hdr.onmousedown = function(e) {
+    dragging = true;
+    ox = e.clientX - oconsoleEl.offsetLeft;
+    oy = e.clientY - oconsoleEl.offsetTop;
+  };
+  document.onmousemove = function(e) {
+    if (!dragging) return;
+    oconsoleEl.style.left = (e.clientX - ox) + 'px';
+    oconsoleEl.style.top = (e.clientY - oy) + 'px';
+    oconsoleEl.style.right = 'auto';
+    oconsoleEl.style.bottom = 'auto';
+  };
+  document.onmouseup = function() { dragging = false; };
+})();
+// ---- Init ----
+initCharts();
+connect();
+})();
+</script>
+</body>
+</html>

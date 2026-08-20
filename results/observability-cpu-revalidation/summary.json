@@ -1,0 +1,34 @@
+[
+  {
+    "process_cpu_cores_between_run_p50": 1.9994883345843197,
+    "process_cpu_cores_max": 1.9999892809537105,
+    "process_cpu_cores_min": 1.9994846841565743,
+    "restarts": 5,
+    "scenario": "paced_sampler_off",
+    "tx_mpps_between_run_p50": 0.06397844433026932
+  },
+  {
+    "process_cpu_cores_between_run_p50": 1.9994878224445132,
+    "process_cpu_cores_max": 2.0004899406961165,
+    "process_cpu_cores_min": 1.997987999792667,
+    "restarts": 5,
+    "scenario": "paced_sampler_10",
+    "tx_mpps_between_run_p50": 0.06389870784812601
+  },
+  {
+    "process_cpu_cores_between_run_p50": 1.9994850879640917,
+    "process_cpu_cores_max": 1.9999888803496795,
+    "process_cpu_cores_min": 1.9989883772019876,
+    "restarts": 5,
+    "scenario": "unlimited_sampler_off",
+    "tx_mpps_between_run_p50": 0.42964830299591245
+  },
+  {
+    "process_cpu_cores_between_run_p50": 1.999489636745535,
+    "process_cpu_cores_max": 1.9999882610738116,
+    "process_cpu_cores_min": 1.9989880645308353,
+    "restarts": 5,
+    "scenario": "unlimited_sampler_10",
+    "tx_mpps_between_run_p50": 0.4284773001249157
+  }
+]

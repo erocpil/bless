@@ -1,0 +1,131 @@
+# Test config -- no physical NICs, no traffic leaves the host.
+# Uses net_null0 PMD: TX packets are silently dropped.
+#
+# Usage:
+#   build/release-static/bin/bless conf/config-test.yaml
+#
+# Verify no DPDK-bound NICs:
+#   dpdk-devbind.py -s | grep -c "drv=.*"
+#   -> output 0 means no NICs bound to DPDK drivers
+
+dpdk:
+  # Allow only a non-existent PCI device so real NICs are skipped.
+  # The net_null0 vdev is created regardless of allow filters.
+  a: null
+  b: null
+  no-pci: ""
+  vdev: net_pcap0,iface=lo
+  main-lcore: 0
+  l: 0-4
+  n: 2
+  proc-type: auto
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 3
+  auto-start: true
+  # interleave: true — Fisher-Yates shuffle mbufs before TX burst to break
+  # spatial locality (worst-case conntrack/session-table cache-miss test)
+  interleave: true
+  interleave-depth: 70
+  batch: 64
+  batch-delay-us: 1000
+  batch-jitter-us: 5
+  # sample every packet for demo (100 = default, 0 = disable)
+  # traffic shape: 0=uniform, 1=Poisson (exponential inter-arrival)
+  traffic-model: 0
+  # entropy-adaptive rate limiting target (bits, 0=disable)
+  entropy-target: 0
+  # dimension index for entropy target (0=src_ip,1=dst_ip,2=src_port,3=dst_port,…)
+  entropy-dim: 0
+  # proportional gain for entropy-adaptive rate adjustment
+  entropy-adapt-gain: 0.1
+  sample-interval: 10
+  latency-hist-enable: true
+  mi-smoothing-window: 5
+  mode: tx-only
+  num: -1
+  arp: 0
+  icmp: 0
+  tcp: 1
+  udp: 3
+  sctp: 1
+
+bless:
+  hw-offload: [ ipv4, udp, tcp ]
+  ether:
+    mtu: 0
+    copy-payload: true
+    dst: 02:00:00:00:00:01
+    src:
+    type:
+      arp:
+        src: [ 10.0.0.1 ]
+        dst: [ 20.0.0.2 ]
+      ipv4:
+        src: 10.0.0.1+1024
+        dst: [ 192.168.1.1, 192.168.1.2, 192.168.1.3, 192.168.1.4, 192.168.1.5, 192.168.1.6, 192.168.1.7, 192.168.1.8, 192.168.1.9 ]
+        icmp:
+          ident: [ 0x1234, 0xface ]
+          payload: "icmp test."
+        tcp:
+          src: 10000+100
+          dst: 80+80
+          payload: "tcp test."
+        udp:
+          src: 20000+10000
+          dst: [ 53, 443 ]
+          payload: "udp test."
+        sctp:
+          src: 30000+50
+          dst: 3868+16
+  vxlan:
+    enable: true
+    ratio: 40
+    wire-mtu: 1500
+    ether:
+      dst: 02:00:00:00:00:02
+      src: 02:00:00:00:00:01
+      type:
+        ipv4:
+          # VNI range: IP:VNI_BASE+COUNT — expands to COUNT entries (same IP, consecutive VNIs)
+          # Here: (172.31.30.246, VNI=100)..(172.31.30.246, VNI=104)
+          src: [ 172.31.30.245:100+5, 172.31.30.246:100+5  ]
+          # Multiple tunnel endpoints for outer dst entropy
+          dst: [ 4.0.0.1, 4.0.0.2, 4.0.0.3 ]
+          udp:
+            src: [ 4000, 4001, 4002 ]
+            dst: 4789
+  erroneous:
+    ratio: 10
+    class:
+      mac: [ vlan ]
+      arp: [ src ]
+      ipv4: [ version, ihl, frag ]
+      sctp: [ cksum, port, vtag ]
+      icmp: [ type ]
+      tcp: [ syn_flood ]
+      udp: [ len ]
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    # Enable the local control-plane integration test.  Keep the listener
+    # loopback-only so remote_control_enable is not required.
+    enable: true
+    control_enable: true
+    remote_control_enable: true
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      # listening_ports: "127.0.0.1:8000"
+      listening_ports: "0.0.0.0:8000"
+      ssl_certificate: /root/src/bless/conf/ssl/ssl.pem
+      num_threads: 8
+      enable_keep_alive: yes

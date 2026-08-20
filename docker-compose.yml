@@ -1,0 +1,41 @@
+# Dual-instance handshake test: bless-left sends TCP SYN, bless-right
+# responds.  Use with DPDK PCAP PMD on a veth pair.
+#
+# Usage:
+#   docker compose up --build
+#   docker compose logs -f bless-left
+#   docker compose down
+#
+# Requires --cap-add=NET_ADMIN for DPDK to configure the veth.
+# For hugepage-backed testing, add:
+#   volumes:
+#     - /dev/hugepages:/dev/hugepages
+
+services:
+  bless-left:
+    build: .
+    image: bless:latest
+    cap_add:
+      - NET_ADMIN
+    command: conf/config-hs-left.yaml
+    volumes:
+      - ./conf:/opt/bless/conf:ro
+    networks:
+      - bless-net
+    restart: "no"
+
+  bless-right:
+    build: .
+    image: bless:latest
+    cap_add:
+      - NET_ADMIN
+    command: conf/config-hs-right.yaml
+    volumes:
+      - ./conf:/opt/bless/conf:ro
+    networks:
+      - bless-net
+    restart: "no"
+
+networks:
+  bless-net:
+    driver: bridge

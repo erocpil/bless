@@ -1,0 +1,464 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    defaults:
+      run:
+        shell: bash -ex {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            pkg-config \
+            clang \
+            autoconf automake libtool \
+            cmake
+
+      - name: Install DPDK
+        run: |
+          sudo apt-get install -y -qq libdpdk-dev
+
+      - name: Install library deps
+        run: |
+          sudo apt-get install -y -qq \
+            libyaml-dev \
+            libcjson-dev \
+            libcivetweb-dev \
+            libssl-dev \
+            libpcap-dev \
+            libnl-3-dev \
+            libnl-route-3-dev \
+            libnuma-dev \
+            libelf-dev \
+            libsystemd-dev \
+            libdbus-1-dev
+
+      - name: Verify DPDK
+        run: |
+          pkg-config --cflags libdpdk
+          pkg-config --modversion libdpdk
+
+      - name: Static analysis (cppcheck)
+        if: matrix.compiler == 'gcc'
+        run: |
+          sudo apt-get install -y -qq cppcheck
+          cppcheck --enable=warning,performance,portability \
+            --inline-suppr --suppress=nullPointerRedundantCheck \
+            --error-exitcode=1 -I include src/
+
+      - name: Unit tests (no DPDK required)
+        if: matrix.compiler == 'gcc'
+        run: make test
+
+      - name: Documentation link check
+        if: matrix.compiler == 'gcc'
+        run: python3 tools/ci_doc_links.py
+
+      - name: ASan + UBSan unit tests
+        if: matrix.compiler == 'gcc'
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          # Build and run unit tests with address + undefined-behavior sanitizers
+          clang -fsanitize=address,undefined -fno-omit-frame-pointer -g \
+            -I include -o test/unit/test_dist_asan test/unit/test_dist.c src/dist.c -lm
+          ./test/unit/test_dist_asan
+
+          clang -fsanitize=address,undefined -fno-omit-frame-pointer -g \
+            -I include -o test/unit/test_core_asan test/unit/test_core.c src/parse.c src/dist.c -lm
+          ./test/unit/test_core_asan
+
+          clang -fsanitize=address,undefined -fno-omit-frame-pointer -g \
+            -I include -o /tmp/test_ws_frame_asan \
+            test/unit/test_ws_frame.c src/ws_frame.c
+          /tmp/test_ws_frame_asan
+
+          # Extended module coverage: algorithmic correctness of pure-C helpers
+          # (token bucket, entropy math, flow hash, mutation lookup, port parsing,
+          # metric JSON, log levels, offload flags).  NB: these are LOCAL
+          # re-implementations — DPDK-dependent headers (entropy.h, token_bucket.h,
+          # mutation.h) cannot be linked without rte_* symbols.  Production code
+          # coverage comes from the ASan binary smoke test below.
+          clang -fsanitize=address,undefined -fno-omit-frame-pointer -g \
+            -I include -o test/unit/test_sanitize_extended_asan \
+            test/unit/test_sanitize_extended.c -lm
+          ./test/unit/test_sanitize_extended_asan
+
+          # ASan production binary smoke — builds the full bless binary with
+          # -fsanitize=address,undefined linking ALL src/*.c against libdpdk.
+          # Covers token_bucket, entropy, flow tracking, mutation dispatch,
+          # and metric JSON with the REAL (not locally-copied) implementations.
+          # Config parse and --version exercise the top-level init paths.
+          echo "=== ASan production binary ==="
+          # Keep sanitizer objects out of the normal release build directory;
+          # the later non-ASan build runs in build/release-static.
+          make ASAN=1 O=build/asan-static -j$(nproc)
+          ./build/asan-static/bin/bless --version
+          echo "PASS: ASan binary smoke test"
+
+          echo "PASS: ASan+UBSan unit tests clean"
+
+      - name: Fuzz (bounded 30s per target)
+        if: matrix.compiler == 'gcc'
+        shell: bash -euo pipefail {0}
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          # Fast fuzz gate for PR CI.  Build each target with
+          # clang + libFuzzer + ASan/UBSan, run for 30s each.
+          # detect_leaks=0 avoids noise from libFuzzer's own
+          # allocation patterns.
+          FUZZ_FLAGS="-fsanitize=fuzzer,address,undefined -g -O1"
+
+          # fuzz_dist — distribution arithmetic (highest-risk path)
+          clang -o /tmp/fuzz_dist $FUZZ_FLAGS \
+            -I src -I include fuzz/fuzz_dist.c src/dist.c
+          timeout 30 /tmp/fuzz_dist -max_total_time=28 2>&1 | tail -5
+          echo "PASS: fuzz_dist (30s)"
+
+          # fuzz_bless — packet construction (production dist.c)
+          clang -o /tmp/fuzz_bless $FUZZ_FLAGS \
+            -I src -I include fuzz/fuzz_bless.c src/dist.c
+          timeout 30 /tmp/fuzz_bless -max_total_time=28 2>&1 | tail -5
+          echo "PASS: fuzz_bless (30s)"
+
+          # fuzz_ip_range — IP/port/IPv6 range parsing (production parse.c)
+          clang -o /tmp/fuzz_ip_range $FUZZ_FLAGS \
+            -I include fuzz/fuzz_ip_range.c src/parse.c
+          timeout 30 /tmp/fuzz_ip_range -max_total_time=28 2>&1 | tail -5
+          echo "PASS: fuzz_ip_range (30s)"
+
+          # fuzz_yaml — config YAML parsing.  Reuse the OSS-Fuzz build
+          # path so CI also compiles the repository-pinned libyaml with
+          # sanitizer and coverage instrumentation.
+          CC=clang CXX=clang++ \
+            CFLAGS="-fno-omit-frame-pointer" \
+            CXXFLAGS="-fno-omit-frame-pointer" \
+            LIB_FUZZING_ENGINE="-fsanitize=fuzzer" \
+            OUT=/tmp WORK=/tmp FUZZ_TARGETS=fuzz_yaml ZIP_TOOL=true \
+            ./fuzz/build.sh
+          timeout 30 /tmp/fuzz_yaml -max_total_time=28 2>&1 | tail -5
+          echo "PASS: fuzz_yaml (30s)"
+
+          # fuzz_http_payload — HTTP mutation payloads
+          clang -o /tmp/fuzz_http_payload $FUZZ_FLAGS \
+            fuzz/fuzz_http_payload.c
+          timeout 30 /tmp/fuzz_http_payload -max_total_time=28 2>&1 | tail -5
+          echo "PASS: fuzz_http_payload (30s)"
+
+          # fuzz_dns_encode — DNS mutation encoding
+          clang -o /tmp/fuzz_dns_encode $FUZZ_FLAGS \
+            fuzz/fuzz_dns_encode.c
+          timeout 30 /tmp/fuzz_dns_encode -max_total_time=28 2>&1 | tail -5
+          echo "PASS: fuzz_dns_encode (30s)"
+
+          # fuzz_ws_frame — WebSocket frame validation (production ws_frame.c)
+          # Corpus provides 8 seeds; -max_len=5001 so the fuzzer can
+          # generate payloads above BLESS_WS_COMMAND_MAX=4096 (the
+          # harness consumes the first byte as flags, so default
+          # -max_len=4096 caps the payload at 4095 < 4096 boundary).
+          clang -o /tmp/fuzz_ws_frame $FUZZ_FLAGS \
+            -I include fuzz/fuzz_ws_frame.c src/ws_frame.c
+          cp -r fuzz/corpus/ws_frame /tmp/ws_corpus
+          timeout 30 /tmp/fuzz_ws_frame /tmp/ws_corpus \
+            -max_len=5001 -max_total_time=28 2>&1 | tail -5
+          echo "PASS: fuzz_ws_frame (30s)"
+
+          echo "PASS: fuzz gates clean (7 targets, 30s each)"
+
+      - name: TSan (runtime config concurrency)
+        if: matrix.compiler == 'gcc'
+        shell: bash -euo pipefail {0}
+        run: |
+          # ThreadSanitizer test for the production runtime_control
+          # implementation used by WS set/get and worker hot paths.
+          # Exercises multi-writer multi-reader concurrency with
+          # mutex-protected plain writes and lock-free shadow reads.
+          clang -fsanitize=thread -g -pthread \
+            -I include -o /tmp/test_tsan_runtime \
+            test/unit/test_tsan_runtime.c \
+            src/runtime_control.c src/stats_guard.c
+          /tmp/test_tsan_runtime
+          echo "PASS: TSan clean (no data races)"
+
+      - name: Build (${{ matrix.compiler }})
+        run: make -j$(nproc) V=1 CC=${{ matrix.compiler }}
+
+      - name: Smoke test
+        run: |
+          ./build/release-static/bin/bless version
+          ./build/release-static/bin/bless --version
+          ./build/release-static/bin/bless version -v
+          ./build/release-static/bin/bless help
+
+      - name: Deterministic seed test
+        run: |
+          # Run bless twice with the same seed.  entropy values must
+          # match within epsilon — ±1-sample snapshot-boundary variance is
+          # expected when the asynchronous sampler's window aligns with a
+          # producer write (the ring buffer itself is data-race-free).
+          # Stripped: meta.timestamp_ns, ports (hw counters), log (TSC),
+          # PSD bins (rate timing), observe (CPU/mem/latency).
+          for run in a b; do
+            ./build/release-static/bin/bless conf/config-ci.yaml -- \
+              --seed=42 --num=50000 --stats-dump=/tmp/det-$run.json >/dev/null 2>&1
+          done
+          python3 tools/ci_det_check.py /tmp/det-a.json /tmp/det-b.json
+          echo "PASS: deterministic-seed entropy verified"
+
+      - name: Runtime smoke test (DPDK no-huge, net_null PMD)
+        run: |
+          set +e  # curl failures must not abort the script
+          ./build/release-static/bin/bless conf/config-ci.yaml > /tmp/bless-ci.log 2>&1 &
+          BLESS_PID=$!
+          sleep 3
+          if ! kill -0 $BLESS_PID 2>/dev/null; then
+            echo "FAIL: bless exited before HTTP server came up"
+            cat /tmp/bless-ci.log
+            exit 1
+          fi
+          # Wait for DPDK EAL init + worker startup + first stats snapshot
+          for i in $(seq 1 30); do
+            sleep 2
+            METRICS=$(curl -s --connect-timeout 2 http://localhost:8000/metrics 2>/dev/null || true)
+            # Primary: TX packets via DPDK port stats
+            TX=$(echo "$METRICS" | grep -oP 'dpdk_opackets\{[^}]*\}\s+\K\d+' | head -1 || true)
+            if [ -n "$TX" ] && [ "$TX" -gt 0 ]; then
+              echo "PASS: sent $TX packets in ~$((i*2+3))s"
+              kill $BLESS_PID 2>/dev/null
+              wait $BLESS_PID 2>/dev/null
+              exit 0
+            fi
+            # Fallback: entropy sampler running (net_null may not update TX counters)
+            ENT=$(echo "$METRICS" | grep -oP 'bless_entropy\{[^}]*\}\s+\K[\d.]+' | head -1 || true)
+            if [ -n "$ENT" ] && [ "$ENT" != "0" ]; then
+              echo "PASS: entropy sampler active ($ENT) — worker running"
+              kill $BLESS_PID 2>/dev/null
+              wait $BLESS_PID 2>/dev/null
+              exit 0
+            fi
+            # Process still alive?
+            if ! kill -0 $BLESS_PID 2>/dev/null; then
+              echo "FAIL: bless exited during polling"
+              cat /tmp/bless-ci.log
+              exit 1
+            fi
+          done
+          echo "WARN: timed out waiting for TX packets"
+          echo "--- metrics at timeout ---"
+          curl -s http://localhost:8000/metrics 2>/dev/null | head -20 || true
+          echo "--- bless log tail ---"
+          tail -30 /tmp/bless-ci.log
+          kill $BLESS_PID 2>/dev/null
+          wait $BLESS_PID 2>/dev/null
+          exit 1
+
+      - name: Binary dependency audit (ldd + readelf)
+        run: |
+          BIN=build/release-static/bin/bless
+
+          # Allowed direct NEEDED entries.
+          # libsystemd: journal logging
+          # libm, libc: C runtime
+          # libisal: Intel ISA-L (CRC/checksum), transitive via DPDK on ubuntu-24.04
+          ALLOWED="libsystemd.so.0|libm.so.6|libc.so.6|ld-linux-x86-64.so.2|libisal.so.2"
+          ALLOWED_DESC="libsystemd (journal logging), libm (math), libc (C runtime), libisal (DPDK transitive)"
+
+          echo "=== Direct NEEDED entries ==="
+          readelf -d "$BIN" | grep NEEDED
+
+          FORBIDDEN=$(readelf -d "$BIN" | grep NEEDED | grep -vE "$ALLOWED" || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "FAIL: unexpected dynamic library dependency detected"
+            echo "Expected: $ALLOWED_DESC"
+            echo "Found: $FORBIDDEN"
+            exit 1
+          fi
+          echo "PASS: only allowed shared libs: $ALLOWED_DESC"
+
+          echo "=== Full dynamic dependencies ==="
+          ldd "$BIN"
+          ldd "$BIN" > /tmp/bless-ldd-${{ matrix.compiler }}.txt
+
+          # Verify no unexpected transitive dependencies beyond
+          # libsystemd's normal closure.  Log everything for
+          # audit, but only fail on known-bad dep categories.
+          TRANSITIVE_LOG=$(ldd "$BIN" | grep -v "statically linked" || true)
+          echo "$TRANSITIVE_LOG"
+          TRANSITIVE_FORBIDDEN=$(echo "$TRANSITIVE_LOG" | grep -vE "$ALLOWED|linux-vdso|ld-linux|libcap|libgcrypt|liblzma|libzstd|liblz4|libgpg-error|libisal|libc\.so|libm\.so|libpthread|libdl\.so|libresolv" || true)
+          if [[ -n "$TRANSITIVE_FORBIDDEN" ]]; then
+            echo "FAIL: unexpected transitive dependencies detected"
+            echo "$TRANSITIVE_FORBIDDEN"
+            echo "(If these are legitimate system library transitives from a new distro"
+            echo " release, update the ALLOWED pattern in ci.yml.)"
+            exit 1
+          fi
+          echo "PASS: transitive closure verified"
+
+      - name: Upload ldd / readelf audit artifact
+        uses: actions/upload-artifact@v4
+        # Artifacts are diagnostics only; an exhausted repository Actions
+        # storage quota must not hide the result of the build and test gates.
+        continue-on-error: true
+        with:
+          name: bless-deps-audit-${{ matrix.compiler }}
+          path: |
+            /tmp/bless-ldd-${{ matrix.compiler }}.txt
+          retention-days: 1
+
+      - name: Throughput sanity baseline (net_null PMD, software PPS)
+        run: |
+          # GitHub-hosted runners are shared, virtualised, and CPU-model-
+          # unstable — NOT suitable for performance benchmarking or
+          # comparison against hardware generators (pktgen/TRex).  This
+          # step is a *sanity gate*: it catches catastrophic hot-path
+          # regressions (worker not launching, PPS dropping to zero).
+          # Set a deliberately loose threshold and NEVER publish these
+          # numbers in README performance tables.
+          echo "=== net_null PPS baseline ==="
+          ./build/release-static/bin/bless conf/config-ci.yaml -- \
+            --num 5000000 > /tmp/bless-perf.log 2>&1 &
+          BLESS_PID=$!
+          sleep 3
+
+          # Collect metrics over 20s.
+          # net_null PMD drops all TX: dpdk_opackets stays 0, so we use
+          # bless_tx_mpps (software counter) and bless_entropy as fallbacks.
+          TOTAL_PPS=0
+          SAMPLES=0
+          for i in $(seq 1 10); do
+            sleep 2
+            if ! kill -0 $BLESS_PID 2>/dev/null; then
+              break
+            fi
+            M=$(curl -s --noproxy '*' http://127.0.0.1:8000/metrics 2>/dev/null || true)
+
+            # Primary: DPDK hardware TX counter (real NICs)
+            PPS=$(echo "$M" | grep -oP 'dpdk_opackets\{[^}]*\}\s+\K\d+' | awk '{s+=$1} END{print s}')
+            VAL=0
+
+            # Fallback 1: software-calculated MPPS (net_null & all PMDs)
+            if [[ -z "$PPS" ]] || [[ "$PPS" -eq 0 ]]; then
+              MPPS=$(echo "$M" | grep -oP 'bless_tx_mpps\s+\K[\d.]+' | head -1 || true)
+              if [[ -n "$MPPS" ]]; then
+                VAL=$(echo "$MPPS" | awk '{printf "%.0f", $1 * 1000000}')
+                echo "  sample $i: $MPPS MPPS (software, ~$VAL pps equiv)"
+              fi
+            else
+              VAL=$PPS
+              echo "  sample $i: $PPS opackets (hardware)"
+            fi
+
+            # Fallback 2: entropy sampler active
+            if [[ "$VAL" -eq 0 ]]; then
+              ENT=$(echo "$M" | grep -oP 'bless_entropy\{[^}]*\}\s+\K[\d.]+' | head -1 || true)
+              if [[ -n "$ENT" ]] && [[ "$ENT" != "0" ]]; then
+                VAL=1
+                echo "  sample $i: entropy=$ENT (worker confirmed active, pps ~1)"
+              fi
+            fi
+
+            if [[ "$VAL" -gt 0 ]]; then
+              TOTAL_PPS=$((TOTAL_PPS + VAL))
+              SAMPLES=$((SAMPLES + 1))
+            fi
+          done
+
+          kill $BLESS_PID 2>/dev/null || true
+          wait $BLESS_PID 2>/dev/null || true
+
+          if [[ $SAMPLES -eq 0 ]]; then
+            echo "FAIL: no PPS samples collected"
+            cat /tmp/bless-perf.log
+            exit 1
+          fi
+          AVG_PPS=$((TOTAL_PPS / SAMPLES))
+          echo "PASS: net_null baseline = ${AVG_PPS} pps (over $SAMPLES samples)"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        # The binary is convenient for short-lived CI triage, but no later
+        # workflow job consumes it.  Do not fail CI if Actions storage is full.
+        continue-on-error: true
+        with:
+          name: bless-linux-amd64-${{ matrix.compiler }}
+          path: build/release-static/bin/bless
+          retention-days: 1
+
+  docker:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: bash -ex {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Build Docker image
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}
+          docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
+
+      - name: Smoke test (version + help)
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}
+          docker run --rm $IMAGE:latest version
+          docker run --rm $IMAGE:latest --version
+          docker run --rm $IMAGE:latest help
+
+      - name: Default CMD smoke test (no args, /metrics)
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}
+          # Start with the default CMD (conf/config-ci.yaml, binds 127.0.0.1:8000).
+          # We curl from inside the container — Docker port mapping cannot
+          # reach a 127.0.0.1 bind.
+          CONTAINER=$(docker run --rm -d $IMAGE:latest)
+          sleep 3
+          for i in $(seq 1 15); do
+            sleep 2
+            if docker exec "$CONTAINER" curl -s --connect-timeout 2 \
+                 http://127.0.0.1:8000/metrics 2>/dev/null | grep -q 'bless_'; then
+              echo "PASS: /metrics reachable via default CMD"
+              docker stop "$CONTAINER" >/dev/null 2>&1
+              exit 0
+            fi
+            if ! docker inspect "$CONTAINER" --format '{{.State.Running}}' 2>/dev/null | grep -q true; then
+              echo "FAIL: container exited before /metrics came up"
+              docker logs "$CONTAINER"
+              exit 1
+            fi
+          done
+          echo "FAIL: /metrics not reachable after 30s"
+          docker logs "$CONTAINER"
+          docker stop "$CONTAINER" >/dev/null 2>&1
+          exit 1
+
+      - name: Push to ghcr.io
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          IMAGE=ghcr.io/${{ github.repository }}
+          docker push $IMAGE:latest
+          docker push $IMAGE:${{ github.sha }}

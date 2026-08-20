@@ -1,0 +1,92 @@
+# ignore hidden files
+.*
+# except .github (CI workflows must be tracked)
+!.github/
+
+# editor swap / undo files
+*.swp
+*.swo
+*.un~
+*~
+
+# logs / core dumps
+*.log
+core
+
+# generated build artifacts
+build
+build-*
+*-gcc*
+*-clang*
+compile_commands.json
+lib/*.a
+tools/old
+
+# generated headers / docs
+include/version.h
+src/buildinfo.c
+THIRD_PARTY_VERSIONS.md
+
+# generated ctags / cscope / GNU GLOBAL
+cscope.*
+tags
+TAGS
+GTAGS
+GPATH
+GRTAGS
+
+# ignore all test scratch files (but keep tracked source)
+test/*
+!test/unit/
+# compiled test binaries (including sanitizer builds)
+test/unit/test_dist
+test/unit/test_core
+test/unit/test_ipv6
+test/unit/test_device
+test/unit/test_ws_frame
+test/unit/test_config_yaml
+test/unit/test_control_policy
+test/unit/test_stats_publication
+test/unit/test_stats_socket
+test/unit/test_entropy_diag
+test/unit/test_timing_policy
+test/unit/test_rate_psd_ring
+test/unit/test_entropy_sampler_policy
+test/unit/test_entropy_math
+test/unit/test_cpu_usage
+test/unit/test_config_value
+test/unit/test_config_node
+test/unit/test_config_file
+test/unit/test_config_array
+test/unit/test_config_bless_domains
+test/unit/*_asan
+
+# fuzz binaries
+fuzz/*_bless
+
+# object / preprocessor output
+*.o
+*.E
+
+# python bytecode
+*.pyc
+
+# BPF programs (legacy path)
+drivers/net/tap/bpf/tap_bpf_program.o
+
+# DTS output
+dts/output
+
+# clangd
+.cache/
+
+# auto-generated third-party config (has absolute paths)
+third_party/third_party.mk
+*.bak
+src/chartjs.inc
+
+# Chinese docs — local reference only, not tracked
+docs/*_zh.md
+*.stamp
+*.un~
+bless-environment.json

@@ -1,0 +1,89 @@
+# Test configuration — validates all parser code paths with a VXLAN+erroneous
+# stress profile (not intended for real hardware — use config-hw-pf.yaml for that).
+#
+# Usage:
+#   ./build/release-static/bin/bless conf/config.yaml.test \
+#     -- --auto-start=true --num=100 --batch=32 -T 1
+
+dpdk:
+  main-lcore: 0
+  l: 0,1-4
+  n: 2
+  allow: "0000:00:04.0"   # ConnectX-6 PF — for config validation; use config-hw-pf.yaml for real tests
+  proc-type: primary
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 4
+  T: 1
+  auto-start: true
+  mode: tx-only
+  batch: 512
+  num: -1
+  arp: 0
+  icmp: 0
+  tcp: 1
+  udp: 1
+
+bless:
+  hw-offload: [ ipv4, udp, tcp ]
+  ether:
+    mtu: 0
+    dst: 10:70:fd:af:21:10
+    src: 10:70:fd:af:21:02
+    type:
+      arp:
+        src: [ 10.0.0.1 ]
+        dst: [ 20.0.0.2, 30.0.0.3, 40.0.0.4 ]
+      ipv4:
+        src: 172.16.1.1
+        dst: [ 192.168.0.1, 192.168.1.1, 192.168.2.1 ]
+        icmp:
+          ident: [ 0x1234, 0xface ]
+          payload: "icmp payload"
+        tcp:
+          src: [ 80, 808, 8080, 8888 ]
+          dst: 9000+1000
+          payload: "tcp payload"
+        udp:
+          src: 8000+-2000
+          dst: [ 10000, 10001, 10003 ]
+          payload: "udp payload"
+  vxlan:
+    enable: false
+    ratio: 1
+    ether:
+      dst: 10:70:fd:af:21:10
+      src: 10:70:fd:af:21:02
+      type:
+        ipv4:
+          src: [ 172.31.30.246:2619682 ]
+          dst: [ 4.0.0.4, 5.0.0.5, 6.0.0.6 ]
+          udp:
+            src: [ 4000, 4001, 4002 ]
+            dst: [ 4789 ]
+  erroneous:
+    ratio: 0
+    class:
+      mac: [ vlan, multicast, ipv6 ]
+      arp: [ src ]
+      ipv4: [ version, ihl, dscp, ecn, total_length, id, flags, fragment_offset, ttl, protocol, cksum, ipsec ]
+      icmp: [ type ]
+      tcp: [ syn_flood, data_off, flags, window, cksum ]
+      udp: [ len, cksum, vxlan ]
+
+system:
+  daemonize: true
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "0.0.0.0:8000"
+      num_threads: 2
+      enable_keep_alive: yes

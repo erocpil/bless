@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Bless Entropy Dashboard</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: #0d1117;
+  color: #c9d1d9;
+  overflow-x: hidden;
+}
+.toolbar {
+  padding: 10px 20px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.toolbar h1 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #58a6ff;
+  margin-right: 12px;
+}
+.toolbar a {
+  color: #8b949e;
+  text-decoration: none;
+  font-size: 14px;
+  padding: 4px 10px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+}
+.toolbar a:hover { background: #21262d; color: #c9d1d9; }
+.toolbar .status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #f44; display: inline-block; }
+.status-dot.on { background: #3fb950; }
+.container {
+  padding: 10px 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 10px 0 4px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #21262d;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-title .desc {
+  font-weight: 400;
+  color: #484f58;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.collapse-toggle {
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: #8b949e;
+  display: inline-flex;
+  align-items: center;
+  width: 16px;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+  transform: rotate(90deg);
+}
+.collapse-toggle:hover { color: #58a6ff; }
+.collapse-toggle.folded { transform: rotate(0deg); }
+.section-title .flex-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  flex: 1;
+}
+.section-body { overflow: visible; max-height: 9999px; transition: max-height 0.25s ease; }
+.section-body.folded {
+  max-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+.interpretation-content {
+  margin: 6px 0 10px 10px;
+  width: calc(100% - 10px);
+}
+.psd-assessment-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 4px;
+  margin: 3px 0 9px;
+}
+.psd-assessment-item {
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 5px 7px;
+  color: #6e7681;
+  background: #0d1117;
+}
+.psd-assessment-item.active {
+  border-color: #2ea043;
+  background: rgba(46,160,67,0.14);
+  color: #c9d1d9;
+  box-shadow: inset 3px 0 #3fb950;
+}
+.psd-assessment-item b { color: inherit; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 8px 10px;
+  position: relative;
+}
+.card-label {
+  font-size: 11px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-value {
+  font-size: 17px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+.card-value .unit {
+  font-size: 12px;
+  color: #8b949e;
+  font-weight: 400;
+}
+.card-value .sub {
+  font-size: 12px;
+  color: #484f58;
+  font-weight: 400;
+}
+.bar-track {
+  background: #21262d;
+  border-radius: 3px;
+  height: 6px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.bar-fill.l1 { background: linear-gradient(90deg, #238636, #2ea043); }
+.bar-fill.l2 { background: linear-gradient(90deg, #1f6feb, #58a6ff); }
+.bar-fill.l3 { background: linear-gradient(90deg, #d29922, #e3b341); }
+.card.diag-good { border-color: #238636; }
+.card.diag-degraded { border-color: #d29922; }
+.card.diag-poor { border-color: #f85149; }
+.card.diag-inactive, .card.diag-insufficient-samples { opacity: 0.65; }
+.diag-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 10px; }
+.diag-table th, .diag-table td { padding: 6px 8px; border-bottom: 1px solid #21262d; text-align: right; }
+.diag-table th:first-child, .diag-table td:first-child,
+.diag-table th:last-child, .diag-table td:last-child { text-align: left; }
+.diag-table th { color: #8b949e; font-weight: 600; }
+.diag-state { font-weight: 600; text-transform: uppercase; }
+.diag-state.good { color: #3fb950; }
+.diag-state.degraded { color: #d29922; }
+.diag-state.poor { color: #f85149; }
+.diag-state.inactive, .diag-state.insufficient-samples { color: #8b949e; }
+
+/* -- Tooltip -- */
+.tip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #30363d;
+  color: #8b949e;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
+  position: relative;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.tip-icon:hover {
+  background: #58a6ff;
+  color: #fff;
+}
+.tip-icon .tip-box {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: -6px;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #c9d1d9;
+  white-space: normal;
+  width: 200px;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  pointer-events: none;
+}
+.tip-icon:hover .tip-box {
+  display: block;
+}
+.tip-icon .tip-box::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 9px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 5px solid #1c2128;
+}
+
+/* -- MI Matrix Heatmap -- */
+.matrix-wrap {
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+.matrix-grid {
+  display: grid;
+  grid-template-columns: 110px repeat(12, minmax(36px, 1fr));
+  gap: 2px;
+}
+.matrix-lbl {
+  font-size: 14px;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 22px;
+}
+.matrix-lbl.col {
+  justify-content: center;
+  font-size: 11px;
+  padding: 4px 2px;
+}
+.matrix-cell {
+  border-radius: 3px;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f0f6fc;
+  position: relative;
+  cursor: default;
+}
+.matrix-cell .tip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: #c9d1d9;
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  pointer-events: none;
+  line-height: 1.4;
+}
+.matrix-cell:hover .tip {
+  display: block;
+}
+.matrix-cell.nodata {
+  background: #161b22;
+  color: #30363d;
+}
+/* Tooltip horizontal anchor: rightmost columns extend leftward */
+.matrix-cell .tip.tip-right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+/* Leftmost column extends rightward */
+.matrix-cell .tip.tip-left {
+  left: 0;
+  transform: none;
+}
+.matrix-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #8b949e;
+  margin: 4px 0 10px 0;
+  flex-wrap: wrap;
+}
+.matrix-legend .swatch {
+  width: 16px;
+  height: 10px;
+  border-radius: 2px;
+}
+.matrix-legend .sep {
+  margin: 0 2px;
+  color: #484f58;
+}
+
+/* Handshake section */
+.hs-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.hs-stat {
+  text-align: center;
+  padding: 8px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+}
+.hs-stat .val {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f0f6fc;
+}
+.hs-stat .lbl {
+  font-size: 11px;
+  color: #8b949e;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+.hs-stat.highlight {
+  border-color: #1f6feb;
+  background: #0d2230;
+}
+.info {
+  font-size: 13px;
+  color: #484f58;
+  text-align: center;
+  padding: 20px;
+}
+.unit .cfg-max { color: #8b949e; font-size: 12px; margin-left: 4px; }
+
+/* -- Runtime Control Panel -- */
+.ctrl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.ctrl-group {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.ctrl-group .head {
+  font-size: 11px;
+  color: #58a6ff;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #21262d;
+}
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.ctrl-row .lbl {
+  color: #8b949e;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+.ctrl-row .cur {
+  color: #f0f6fc;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+  font-size: 12px;
+}
+.ctrl-row input {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  color: #c9d1d9;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  padding: 2px 4px;
+  width: 80px;
+  flex-shrink: 0;
+}
+.ctrl-row input:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+.ctrl-row .btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  color: #c9d1d9;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.ctrl-row .btn:hover {
+  background: #30363d;
+  border-color: #58a6ff;
+}
+.ctrl-row .btn:active {
+  background: #1f6feb;
+}
+.ctrl-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.ctrl-toolbar .btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  color: #c9d1d9;
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ctrl-toolbar .btn:hover {
+  background: #30363d;
+  border-color: #58a6ff;
+}
+.ctrl-toolbar .status {
+  font-size: 12px;
+  color: #484f58;
+  margin-left: auto;
+}
+
+/* bottom padding for F12 console */
+body::after { content: ''; display: block; height: 200px; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <h1>🔥 Entropy</h1>
+  <a href="/">DPDK Stats</a>
+  <a href="/entropy" class="active">Entropy</a>
+  <a href="/observe">Observe</a>
+  <span id="conntxt">Connecting...</span>
+  <div class="status">
+    <span class="status-dot" id="dot"></span>
+    <span id="statusText">Disconnected</span>
+    <span id="ts-last" style="font-size: 12px;color:#484f58;margin-left:8px;"></span>
+  </div>
+</div>
+<div class="container">
+  <div id="toast" style="display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);
+    background:#da3633;color:#fff;padding:6px 16px;border-radius:4px;font-size: 14px;z-index:999;
+    transition:opacity 0.5s;opacity:0;"></div>
+  <div id="content">
+    <div class="info" id="waitmsg">Waiting for data — start bless with handshake or mixed mode.</div>
+  </div>
+</div>
+
+<script>
+let ws = null;
+let reconnectTimer = null;
+let lastDataTime = '';
+let latestStats = null;
+let renderPending = false;
+let psdSmoothedBins = null;
+let psdAssessmentState = '';
+
+function scheduleRender(data) {
+  latestStats = data || latestStats;
+  if (renderPending || !latestStats) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    renderPending = false;
+    if (latestStats) render(latestStats);
+  });
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.opacity = 1;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.opacity = 0; }, 3000);
+}
+
+function updateReconnectCountdown(secs) {
+  const txt = document.getElementById('conntxt');
+  if (txt) txt.textContent = secs > 0 ? 'Reconnecting in ' + secs + 's…' : 'Disconnected';
+}
+
+function scheduleReconnect(delayMs) {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  const dot = document.getElementById('dot');
+  const st  = document.getElementById('statusText');
+  if (dot) dot.className = 'status-dot';
+  if (st) st.textContent = 'Reconnecting…';
+  let remaining = Math.round(delayMs / 1000);
+  updateReconnectCountdown(remaining);
+  const interval = setInterval(() => {
+    remaining--;
+    if (remaining > 0) updateReconnectCountdown(remaining);
+    else clearInterval(interval);
+  }, 1000);
+  reconnectTimer = setTimeout(() => {
+    clearInterval(interval);
+    updateReconnectCountdown(0);
+    connect();
+  }, delayMs);
+}
+
+function consumePageApiKey() {
+  const query = new URLSearchParams(location.search);
+  const fragment = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const apiKey = fragment.get('api_key') || query.get('api_key') || '';
+  if (apiKey) {
+    query.delete('api_key');
+    fragment.delete('api_key');
+    const clean = location.pathname +
+      (query.toString() ? '?' + query.toString() : '') +
+      (fragment.toString() ? '#' + fragment.toString() : '');
+    history.replaceState(null, '', clean);
+  }
+  return apiKey;
+}
+
+const pageApiKey = consumePageApiKey();
+
+function connect() {
+  const protocol = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+  let extra = '';
+  if (pageApiKey) extra = "?api_key=" + encodeURIComponent(pageApiKey);
+  const url = protocol + location.host + '/wsURL' + extra;
+  try {
+    ws = new WebSocket(url);
+    ws.onopen = () => {
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      document.getElementById('conntxt').style.display = 'none';
+      document.getElementById('dot').className = 'status-dot on';
+      document.getElementById('statusText').textContent = 'Connected';
+      ws.send(JSON.stringify({ cmd: 'get' }));
+    };
+    ws.onmessage = e => {
+      try {
+        const data = JSON.parse(e.data);
+        lastDataTime = new Date().toLocaleTimeString();
+        if (document.getElementById('ts-last'))
+          document.getElementById('ts-last').textContent = lastDataTime;
+        if (data.entropy || data.handshake)
+          scheduleRender(data);
+        if (data.cmd === 'config')
+          updateControlPanel(data);
+      } catch (err) {
+        console.error('Parse:', err);
+      }
+    };
+    ws.onclose = () => {
+      document.getElementById('dot').className = 'status-dot';
+      scheduleReconnect(3000);
+    };
+    ws.onerror = () => {
+      showToast('WebSocket connection error — retrying…');
+    };
+  } catch (err) {
+    scheduleReconnect(3000);
+  }
+}
+
+// -- Dimension descriptions --
+
+const DESCS = {
+  protocol:     'Distribution of IP protocol types (TCP, UDP, ICMP, etc.)',
+  src_ip:       'Diversity of source IP addresses in generated traffic',
+  dst_ip:       'Diversity of destination IP addresses in generated traffic',
+  src_port:     'Variety of source port numbers used across flows',
+  dst_port:     'Variety of destination port numbers targeted',
+  joint_5tuple: 'Combined Shannon entropy across 5-tuple (proto + IPs + ports)',
+  pkt_size:     'Variation in packet sizes across the traffic stream',
+  tcp_flags:    'Diversity of TCP flag combinations (SYN, ACK, PSH, RST, etc.)',
+  delta_tsc:    'Inter-packet timing variation measured in TSC ticks',
+  vxlan_encap:  'Entropy of VXLAN encapsulation presence (on/off)',
+  outer_src_ip: 'Diversity of outer tunnel (VXLAN) source IPs',
+  outer_dst_ip: 'Diversity of outer tunnel (VXLAN) destination IPs',
+  vni:          'VXLAN Network Identifier entropy across encapsulated flows',
+  flow_5tuple:  'Entropy of distinct 5-tuple flow keys observed in the connection table',
+  flow_lifetime:'Variation in flow lifetimes — higher means more diverse durations',
+  min_src_ip:   'Worst-case (minimum) source IP entropy over the observation window',
+  min_dst_ip:   'Worst-case (minimum) destination IP entropy over the observation window',
+  min_src_port: 'Worst-case (minimum) source port entropy over the observation window',
+  min_dst_port: 'Worst-case (minimum) destination port entropy over the observation window',
+  min_protocol: 'Worst-case (minimum) protocol entropy over the observation window',
+  min_pkt_size: 'Worst-case (minimum) packet size entropy over the observation window',
+  min_tcp_flags: 'Worst-case (minimum) TCP flags entropy over the observation window',
+  min_delta_tsc: 'Worst-case (minimum) inter-packet timing entropy over the observation window',
+  min_outer_src_ip: 'Worst-case (minimum) outer VXLAN source IP entropy over the observation window',
+  min_outer_dst_ip: 'Worst-case (minimum) outer VXLAN destination IP entropy over the observation window',
+  min_vni: 'Worst-case (minimum) VXLAN Network Identifier entropy over the observation window',
+  min_total_5tuple: 'Aggregate sum of min-entropy for protocol, source/destination IP and port, packet size, and TCP flags; this is not joint 5-tuple entropy',
+  distinct:     'Number of unique 5-tuple flows currently tracked in the connection table',
+  ratio:        'Ratio of distinct flows to total packets — indicator of flow reuse vs churn',
+  mi_sip_dip:   'I(Src IP; Dst IP) — correlation between source and destination selection',
+  mi_spt_dpt:   'I(Src Port; Dst Port) — port-pair correlation; high = asymmetric services',
+  mi_proto_spt: 'I(Protocol; Src Port) — protocol-port affinity; high = known service mapping',
+  mi_size_dpt:  'I(Pkt Size; Dst Port) — service-specific payload sizes; high = each service uses distinct sizes',
+  mi_size_proto:'I(Pkt Size; Protocol) — protocol-specific frame sizes; high = TCP vs UDP vs ICMP use different sizes',
+  mi_dtsc_proto:'I(ΔTSC; Protocol) — per-protocol timing patterns; high = different protocols have distinct inter-arrival times',
+  mi_dtsc_flow: 'I(ΔTSC; Flow Key) — temporal flow locality; high = packets of the same flow cluster in time (interleave=off); low = flows are temporally interleaved (interleave=on)',
+  mi_tcpf_sz:  'I(TCP Flags; Pkt Size) — handshake vs data; high = SYN small, DATA large (normal TCP)',
+  mi_tcpf_spt: 'I(TCP Flags; Src Port) — per-flow flag usage; high = different source ports use different flag patterns',
+  mi_tcpf_dpt: 'I(TCP Flags; Dst Port) — service-specific flag patterns; high = port 80 all SYN, port 443 has FIN',
+  mi_osip_odip:'I(Outer Src IP; Outer Dst IP) — VTEP pair affinity; high = tunnel endpoints are fixed pairs',
+  psd_dominant: 'Lowest significant spectral peak supported by a harmonic series; falls back to the strongest peak',
+  psd_flatness:  'Spectral flatness after removing mean TX rate, over non-DC bins -- 0 = tonal/periodic, 1 = noise-like variation',
+  psd_resolution: 'Frequency resolution = Fs / N = 10000 Hz / 256 = 39.0625 Hz per bin; each bin index maps to index * 39.0625 Hz',
+  mi_vni_osip: 'I(VNI; Outer Src IP) — VNI-to-VTEP mapping; high = each VNI is tied to one tunnel source',
+};
+
+const CATEGORIES = [
+  {
+    id: 'comp',
+    title: 'Composition',
+    desc: '5-tuple & protocol',
+    dims: [
+      { id: 'protocol', label: 'Protocol', max: 8 },
+      { id: 'src_ip', label: 'Src IP', max: 32, maxKey: 'max_src_ip' },
+      { id: 'dst_ip', label: 'Dst IP', max: 32, maxKey: 'max_dst_ip' },
+      { id: 'src_port', label: 'Src Port', max: 16, maxKey: 'max_src_port' },
+      { id: 'dst_port', label: 'Dst Port', max: 16, maxKey: 'max_dst_port' },
+      { id: 'joint_5tuple', label: 'Joint 5-tuple', max: 64 },
+    ]
+  },
+  {
+    id: 'behav',
+    title: 'Behavioral',
+    desc: 'size, flags, timing',
+    dims: [
+      { id: 'pkt_size', label: 'Pkt Size', max: 16 },
+      { id: 'tcp_flags', label: 'TCP Flags', max: 8 },
+      { id: 'delta_tsc', label: 'Timing', max: 64 },
+    ]
+  },
+  {
+    id: 'tunnel',
+    title: 'Tunnel',
+    desc: 'VXLAN outer header',
+    dims: [
+      { id: 'vxlan_encap', label: 'VXLAN Encap', max: 1 },
+      { id: 'outer_src_ip', label: 'Outer Src IP', max: 32, maxKey: 'max_outer_src_ip' },
+      { id: 'outer_dst_ip', label: 'Outer Dst IP', max: 32, maxKey: 'max_outer_dst_ip' },
+      { id: 'vni', label: 'VNI', max: 24, maxKey: 'max_vni' },
+    ]
+  },
+  {
+    id: 'flow',
+    title: 'Flow-Level',
+    desc: 'connection tracking',
+    dims: [
+      { id: 'flow_5tuple', label: 'Flow 5-tuple', max: 64, key: 'flow_entropy_5tuple' },
+      { id: 'flow_lifetime', label: 'Flow Lifetime', max: 64, key: 'flow_entropy_lifetime' },
+    ]
+  },
+];
+
+const MIN_DIMS = [
+  { id: 'min_total_5tuple', label: 'Aggregate (7 dimensions)' },
+  { id: 'min_src_ip', label: 'Src IP' },
+  { id: 'min_dst_ip', label: 'Dst IP' },
+  { id: 'min_src_port', label: 'Src Port' },
+  { id: 'min_dst_port', label: 'Dst Port' },
+  { id: 'min_protocol', label: 'Protocol' },
+  { id: 'min_pkt_size', label: 'Pkt Size' },
+  { id: 'min_tcp_flags', label: 'TCP Flags' },
+  { id: 'min_delta_tsc', label: 'Timing' },
+  { id: 'min_outer_src_ip', label: 'Outer Src IP' },
+  { id: 'min_outer_dst_ip', label: 'Outer Dst IP' },
+  { id: 'min_vni', label: 'VNI' },
+];
+
+function tip(dimId) {
+  const d = DESCS[dimId] || '';
+  if (!d) return '';
+  return '<span class="tip-icon">?<span class="tip-box">' + d + '</span></span>';
+}
+
+function buildSection(section) {
+  let h = '<div class="section-title" id="title-' + section.id + '"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">▶</span>' + section.title + ' <span class="desc">' + section.desc + '</span></span></div>';
+  h += '<div class="section-body" id="body-' + section.id + '"><div class="grid">';
+  section.dims.forEach(d => {
+    h += '<div class="card" id="sec-' + section.id + '-' + d.id + '">';
+    h += '<div class="card-label">' + d.label + tip(d.id) + '</div>';
+    h += '<div class="card-value"><span id="v-' + section.id + '-' + d.id + '">--</span> <span class="unit">/ <span id="max-' + section.id + '-' + d.id + '">' + (d.max || '?') + '</span> bits</span></div>';
+    h += '<div class="bar-track"><div class="bar-fill l1" id="b-' + section.id + '-' + d.id + '" style="width:0%"></div></div>';
+    h += '</div>';
+  });
+  h += '</div></div>';
+  return h;
+}
+
+function buildMinSection() {
+  let h = '<div class="grid">';
+  MIN_DIMS.forEach(d => {
+    h += '<div class="card" id="min-' + d.id + '">';
+    h += '<div class="card-label">' + d.label + ' (min)' + tip(d.id) + '</div>';
+    h += '<div class="card-value"><span id="mv-' + d.id + '">--</span> <span class="unit">bits</span></div>';
+    h += '<div class="card-value"><span class="sub" id="md-' + d.id + '">waiting for evidence</span></div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function minAction(id, state, surplusBits) {
+  if (state === 'inactive') return 'Enable the corresponding traffic population.';
+  if (state === 'insufficient-samples') return 'Collect at least 64 samples before acting.';
+  if (state === 'good') return surplusBits > 0.0005
+    ? 'Target exceeded by ' + surplusBits.toFixed(3) + ' bits; no action required.'
+    : 'Target met; no action required.';
+  if (id.includes('ip')) return 'Check address pool, worker coverage and interleave.';
+  if (id.includes('port')) return 'Check port range, protocol mix and rotation.';
+  if (id === 'protocol') return 'Check configured protocol weights and generation failures.';
+  if (id === 'pkt_size') return 'Check IMIX entries, duplicates and packet construction failures.';
+  if (id === 'tcp_flags') return 'Check TCP mode and handshake/data flag mix.';
+  if (id === 'delta_tsc') return 'Check traffic model, pacing lateness and host noise.';
+  if (id === 'vni') return 'Check VXLAN VNI pool and encapsulation ratio.';
+  return 'Inspect the component dimensions with the largest gaps.';
+}
+
+function renderMinInterpretation(diags) {
+  const body = document.getElementById('min-interpretation-body');
+  if (!body || !diags) return;
+  const labels = Object.fromEntries(MIN_DIMS.map(d => [d.id.replace(/^min_/, ''), d.label]));
+  const rows = Object.entries(diags).map(([id, d]) => ({ id, label: labels[id] || id, ...d }));
+  const severity = { poor: 4, degraded: 3, 'insufficient-samples': 2, good: 1, inactive: 0 };
+  rows.sort((a, b) => (severity[b.state] || 0) - (severity[a.state] || 0) ||
+    (b.gap_bits || 0) - (a.gap_bits || 0));
+  let h = '<table class="diag-table"><thead><tr><th>Dimension</th><th>Measured</th><th>Window target</th>';
+  h += '<th>Target comparison</th><th>Excess concentration</th><th>Evidence</th><th>State / Action</th></tr></thead><tbody>';
+  rows.forEach(d => {
+    const active = d.state !== 'inactive';
+    const source = d.baseline_source === 'configured' ? 'cfg' : d.baseline_source;
+    const measured = Number(d.measured);
+    const target = Number(d.target);
+    const populationTarget = Number(d.population_target);
+    const shortfall = Number(d.gap_bits);
+    const surplus = Math.max(0, measured - target);
+    const comparison = shortfall > 0.0005
+      ? 'Shortfall ' + shortfall.toFixed(3) + ' bits'
+      : surplus > 0.0005 ? 'Met (+' + surplus.toFixed(3) + ' bits)' : 'Met';
+    h += '<tr><td>' + d.label + '</td>';
+    h += '<td>' + (active ? measured.toFixed(3) : '—') + '</td>';
+    h += '<td>' + (active ? target.toFixed(3) + ' (' + source +
+      (Number.isFinite(populationTarget) ? ', population ' + populationTarget.toFixed(3) : '') + ')' : '—') + '</td>';
+    h += '<td>' + (active ? comparison : '—') + '</td>';
+    h += '<td>' + (active ? (shortfall > 0.0005
+      ? Number(d.dominance_ratio).toFixed(2) + '×'
+      : '1.00× (none)') : '—') + '</td>';
+    h += '<td>' + Number(d.samples || 0).toLocaleString() + ' samples';
+    if (d.distinct) h += ', ' + Number(d.distinct).toLocaleString() + ' distinct';
+    h += '</td><td><span class="diag-state ' + d.state + '">' + d.state + '</span><br>';
+    h += minAction(d.id, d.state, surplus) + '</td></tr>';
+  });
+  body.innerHTML = h + '</tbody></table>';
+}
+
+function buildFlowExtra() {
+  let h = '<div class="grid">';
+  h += '<div class="card" id="flow-distinct">';
+  h += '<div class="card-label">Distinct Flows' + tip('distinct') + '</div>';
+  h += '<div class="card-value"><span id="fv-distinct">--</span> <span class="sub" id="fv-distinct-total"></span></div>';
+  h += '</div>';
+  h += '<div class="card" id="flow-ratio">';
+  h += '<div class="card-label">Flow Ratio' + tip('ratio') + '</div>';
+  h += '<div class="card-value"><span id="fv-ratio">--</span><span class="unit">%</span></div>';
+  h += '<div class="bar-track"><div class="bar-fill l3" id="fb-ratio" style="width:0%"></div></div>';
+  h += '</div>';
+  h += '<div class="card"><div class="card-label">Entropy Samples</div>';
+  h += '<div class="card-value"><span id="fv-sampler-samples">--</span> <span class="unit">window</span></div></div>';
+  h += '<div class="card"><div class="card-label">Sampler Overwritten</div>';
+  h += '<div class="card-value"><span id="fv-sampler-overwritten">--</span> <span class="sub" id="fv-sampler-overwritten-total"></span></div></div>';
+  h += '</div>';
+  return h;
+}
+
+/* -- MI Matrix Heatmap -- */
+
+// 12 dimensions in display order
+const MI_DIMS = [
+  { id: 'protocol',     label: 'Protocol',   max: 8,   maxKey: '' },
+  { id: 'src_ip',       label: 'Src IP',     max: 32,  maxKey: 'max_src_ip' },
+  { id: 'dst_ip',       label: 'Dst IP',     max: 32,  maxKey: 'max_dst_ip' },
+  { id: 'src_port',     label: 'Src Port',   max: 16,  maxKey: 'max_src_port' },
+  { id: 'dst_port',     label: 'Dst Port',   max: 16,  maxKey: 'max_dst_port' },
+  { id: 'pkt_size',     label: 'Pkt Size',   max: 16,  maxKey: '' },
+  { id: 'tcp_flags',    label: 'TCP Flags',  max: 8,   maxKey: '' },
+  { id: 'delta_tsc',    label: 'ΔTSC',       max: 64,  maxKey: '' },
+  { id: 'outer_src_ip', label: 'O Src IP',   max: 32,  maxKey: 'max_outer_src_ip' },
+  { id: 'outer_dst_ip', label: 'O Dst IP',   max: 32,  maxKey: 'max_outer_dst_ip' },
+  { id: 'vni',          label: 'VNI',        max: 24,  maxKey: 'max_vni' },
+  { id: 'flow_key',     label: 'Flow Key',  max: 32,  maxKey: '' },
+];
+
+// MI pair lookup: matrix[row][col] = { miKey, miMaxKey, label } or null
+const MI_MAP = {};
+function miKey(r, c) {
+  // Ensure lookup is symmetric: use canonical order (r < c)
+  const a = r < c ? r : c;
+  const b = r < c ? c : r;
+  return a + '-' + b;
+}
+function setMI(r, c, miKeyName, miMaxKey, label) {
+  const k = miKey(r, c);
+  MI_MAP[k] = { miKey: miKeyName, miMaxKey: miMaxKey, label: label };
+}
+
+setMI(0, 3, 'mi_proto_spt',  'mi_max_proto_spt',  'I(Protocol; Src Port)');
+setMI(1, 2, 'mi_sip_dip',    'mi_max_sip_dip',    'I(Src IP; Dst IP)');
+setMI(3, 4, 'mi_spt_dpt',    'mi_max_spt_dpt',    'I(Src Port; Dst Port)');
+setMI(0, 5, 'mi_size_proto', 'mi_max_size_proto', 'I(Pkt Size; Protocol)');
+setMI(4, 5, 'mi_size_dpt',   'mi_max_size_dpt',   'I(Pkt Size; Dst Port)');
+setMI(0, 7, 'mi_dtsc_proto', 'mi_max_dtsc_proto', 'I(ΔTSC; Protocol)');
+setMI(7, 11,'mi_dtsc_flow', 'mi_max_dtsc_flow',  'I(ΔTSC; Flow Key) — temporal flow locality');
+setMI(5, 6, 'mi_tcpf_sz',    'mi_max_tcpf_sz',    'I(TCP Flags; Pkt Size)');
+setMI(3, 6, 'mi_tcpf_spt',   'mi_max_tcpf_spt',   'I(TCP Flags; Src Port)');
+setMI(4, 6, 'mi_tcpf_dpt',   'mi_max_tcpf_dpt',   'I(TCP Flags; Dst Port)');
+setMI(8, 9, 'mi_osip_odip',  'mi_max_osip_odip',  'I(Outer Src; Outer Dst)');
+setMI(8, 10,'mi_vni_osip',   'mi_max_vni_osip',   'I(VNI; Outer Src IP)');
+
+function heatBg(val, max, isDiag) {
+  const ratio = Math.min(1, max > 0 ? val / max : 0);
+  if (ratio <= 0.001) return isDiag ? 'background:#0d1117' : 'background:#0d1f1d';
+  const l = 10 + ratio * 38;
+  if (isDiag) {
+    // Blue gradient for diagonal (entropy)
+    const s = 70 + ratio * 20;
+    return 'background:hsl(210,' + s.toFixed(0) + '%,' + l.toFixed(0) + '%)';
+  } else {
+    // Green gradient for off-diagonal (MI)
+    const s = 45 + ratio * 35;
+    return 'background:hsl(155,' + s.toFixed(0) + '%,' + l.toFixed(0) + '%)';
+  }
+}
+
+function buildMIMatrix() {
+  const N = MI_DIMS.length;
+  let h = '<div class="section-title"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">▶</span>MI Correlation Matrix <span class="desc">12×12 heatmap — hover for values</span></span></div>';
+  h += '<div class="section-body" id="body-mi"><div class="matrix-wrap"><div class="matrix-grid" id="mi-grid">';
+
+  // Corner + column headers
+  h += '<div class="matrix-lbl" style="color:#484f58;font-size: 9px;justify-content:center;">X\\Y</div>';
+  for (let c = 0; c < N; c++) {
+    h += '<div class="matrix-lbl col" style="grid-row:1;grid-column:' + (c + 2) + ';">' + MI_DIMS[c].label + '</div>';
+  }
+
+  // Rows
+  for (let r = 0; r < N; r++) {
+    // Row label
+    h += '<div class="matrix-lbl" style="grid-row:' + (r + 2) + ';grid-column:1;">' + MI_DIMS[r].label + '</div>';
+    for (let c = 0; c < N; c++) {
+      const cellId = 'mc-' + r + '-' + c;
+      if (r === c) {
+        // Diagonal: placeholder entropy value
+        h += '<div class="matrix-cell" id="' + cellId + '" style="grid-row:' + (r + 2) + ';grid-column:' + (c + 2) + ';background:#161b22;"><span id="' + cellId + '-v">-</span></div>';
+      } else {
+        const entry = MI_MAP[miKey(r, c)];
+        if (entry) {
+          // MI pair cell - choose tooltip direction based on column
+          let tipClass = '';
+          if (c >= N - 3) tipClass = ' tip-right';
+          else if (c <= 0) tipClass = ' tip-left';
+          h += '<div class="matrix-cell" id="' + cellId + '" style="grid-row:' + (r + 2) + ';grid-column:' + (c + 2) + ';background:#0d1f1d;"><span id="' + cellId + '-v">-</span><div class="tip' + tipClass + '" id="' + cellId + '-tip"></div></div>';
+        } else {
+          // No MI computed
+          h += '<div class="matrix-cell nodata" id="' + cellId + '" style="grid-row:' + (r + 2) + ';grid-column:' + (c + 2) + ';">-</div>';
+        }
+      }
+    }
+  }
+  h += '</div></div>';
+
+  // Legend
+  h += '<div class="matrix-legend">';
+  h += '<span style="color:#f0f6fc;">■</span> 0.0';
+  for (let i = 1; i <= 10; i++) {
+    const pct = (i / 10) * 100;
+    const l = 10 + (i / 10) * 38;
+    h += '<div class="swatch" style="background:hsl(155,65%,' + l.toFixed(0) + '%);"></div>';
+  }
+  h += ' max&nbsp;&nbsp;<span style="color:#58a6ff;">■</span> diag (entropy)';
+  h += '<div class="swatch" style="background:hsl(210,80%,48%);"></div>';
+  h += '<span class="sep">|</span><span style="color:#30363d;">■</span> no data';
+  h += '</div>';
+
+  h += '</div>'; // close section-body
+  return h;
+}
+
+/* -- MI Card Details (collapsed by default) -- */
+
+function buildMICards() {
+  const pairs = [
+    { id: 'mi_sip_dip',   label: 'I(Src IP; Dst IP)',       max: 16 },
+    { id: 'mi_spt_dpt',   label: 'I(Src Port; Dst Port)',   max: 8 },
+    { id: 'mi_proto_spt', label: 'I(Protocol; Src Port)',   max: 6 },
+    { id: 'mi_size_dpt',  label: 'I(Pkt Size; Dst Port)',   max: 16 },
+    { id: 'mi_size_proto',label: 'I(Pkt Size; Protocol)',   max: 8 },
+    { id: 'mi_dtsc_proto',label: 'I(ΔTSC; Protocol)',       max: 8 },
+    { id: 'mi_dtsc_flow', label: 'I(ΔTSC; Flow Key)',      max: 16 },
+    { id: 'mi_tcpf_sz',   label: 'I(TCP Flags; Pkt Size)',  max: 8 },
+    { id: 'mi_tcpf_spt',  label: 'I(TCP Flags; Src Port)',  max: 8 },
+    { id: 'mi_tcpf_dpt',  label: 'I(TCP Flags; Dst Port)',  max: 8 },
+    { id: 'mi_osip_odip', label: 'I(Outer Src; Outer Dst)', max: 16 },
+    { id: 'mi_vni_osip',  label: 'I(VNI; Outer Src IP)',    max: 16 },
+  ];
+  let h = '<div class="section-title"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle folded">▶</span>MI Details <span class="desc">per-pair values with tooltip & theoretical max</span></span></div>';
+  h += '<div class="section-body folded" id="body-mi-cards"><div class="grid">';
+  pairs.forEach(p => {
+    h += '<div class="card" id="mic-' + p.id + '">';
+    h += '<div class="card-label">' + p.label + tip(p.id) + '</div>';
+    h += '<div class="card-value"><span id="mcv-' + p.id + '">--</span> <span class="unit">/ ' + p.max + ' bits<span id="mcc-' + p.id + '" class="cfg-max"></span></span></div>';
+    h += '<div class="bar-track"><div class="bar-fill l2" id="mcb-' + p.id + '" style="width:0%"></div></div>';
+    h += '</div>';
+  });
+  h += '</div></div>';
+  return h;
+}
+
+/* -- Runtime Control Panel -- */
+
+const CTRL_PARAMS = [
+  {
+    title: 'Rate Limiting',
+    items: [
+      { key: 'pps_rate',     label: 'PPS Rate',   unit: 'pkt/s', fmt: 'int', suffix: true },
+      { key: 'pps_burst',    label: 'PPS Burst',  unit: 'pkt',   fmt: 'int', suffix: true },
+      { key: 'bps_rate',     label: 'BPS Rate',   unit: 'bit/s', fmt: 'int', suffix: true },
+      { key: 'bps_burst',    label: 'BPS Burst',  unit: 'bit',   fmt: 'int', suffix: true },
+    ]
+  },
+  {
+    title: 'Traffic',
+    items: [
+      { key: 'batch',           label: 'Batch',          unit: 'pkt',   fmt: 'int' },
+      { key: 'batch_delay_us',  label: 'Delay',          unit: 'µs',    fmt: 'int' },
+      { key: 'batch_jitter_us', label: 'Jitter',         unit: 'µs',    fmt: 'int' },
+      { key: 'num',             label: 'Pkt Count',      unit: '-1=inf',fmt: 'int' },
+      { key: 'traffic_model',   label: 'Traffic Model',  unit: '0=fixed,1=poisson', fmt: 'int' },
+      { key: 'sample_interval', label: 'Sample Interval',unit: 'pkt',   fmt: 'int' },
+    ]
+  },
+  {
+    title: 'Entropy',
+    items: [
+      { key: 'entropy_target',      label: 'Target',     unit: 'bit',   fmt: 'float' },
+      { key: 'entropy_dim',         label: 'Dimension',  unit: '',      fmt: 'int' },
+      { key: 'entropy_adapt_gain',  label: 'Adapt Gain', unit: '',      fmt: 'float' },
+    ]
+  },
+  {
+    title: 'Handshake',
+    items: [
+      { key: 'hs_rate',        label: 'HS Rate',        unit: 'conn/s', fmt: 'int', suffix: true },
+      { key: 'hs_timeout_us',  label: 'HS Timeout',     unit: 'µs',     fmt: 'int' },
+      { key: 'hs_mix_ratio',   label: 'HS Mix Ratio',   unit: '0-1000', fmt: 'int' },
+    ]
+  },
+];
+
+function buildControlPanel() {
+  let h = '<div class="section-title"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle folded">▶</span>Runtime Control <span class="desc">adjust parameters via WebSocket</span></span></div>';
+  h += '<div class="section-body folded" id="body-ctrl">';
+  h += '<div class="ctrl-toolbar">';
+  h += '<button class="btn" onclick="sendGet()">⟳ Refresh All</button>';
+  h += '<span class="status" id="ctrl-status"></span>';
+  h += '</div>';
+  h += '<div class="ctrl-grid">';
+  CTRL_PARAMS.forEach(group => {
+    h += '<div class="ctrl-group">';
+    h += '<div class="head">' + group.title + '</div>';
+    group.items.forEach(item => {
+      const id = 'ctrl-' + item.key;
+      h += '<div class="ctrl-row">';
+      h += '<span class="lbl">' + item.label + '</span>';
+      h += '<span class="cur" id="cv-' + item.key + '">--</span>';
+      h += '<span class="unit" style="font-size: 10px;color:#484f58;min-width:40px;">' + item.unit + '</span>';
+      h += '<input type="text" id="ci-' + item.key + '" placeholder="e.g. 100K">';
+      h += '<button class="btn" onclick="sendSet(\'' + item.key + '\')">Set</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  });
+  h += '</div></div>';
+  return h;
+}
+
+function parseRateValue(key, raw) {
+  /* Check if this key accepts rate suffixes */
+  const item = CTRL_PARAMS.flatMap(g => g.items).find(i => i.key === key);
+  if (!item || !item.suffix) return Number(raw);
+  /* Parse suffixes: 100K, 1.5M, 10G */
+  const m = raw.match(/^([\d.]+)\s*([kKmMgG]?)([bB]?)$/);
+  if (!m) return Number(raw);
+  const num = parseFloat(m[1]);
+  const suf = m[2].toUpperCase();
+  const mult = suf === 'K' ? 1000 : suf === 'M' ? 1000000 : suf === 'G' ? 1000000000 : 1;
+  return Math.round(num * mult);
+}
+
+function sendSet(key) {
+  const el = document.getElementById('ci-' + key);
+  if (!el || !ws) return;
+  const raw = el.value.trim();
+  if (!raw) return;
+  const numVal = parseRateValue(key, raw);
+  ws.send(JSON.stringify({ cmd: 'set', key: key, value: numVal }));
+  document.getElementById('ctrl-status').textContent = 'set ' + key + '=' + numVal;
+}
+
+function sendGet() {
+  if (!ws) return;
+  ws.send(JSON.stringify({ cmd: 'get' }));
+  document.getElementById('ctrl-status').textContent = 'querying...';
+}
+
+function updateControlPanel(config) {
+  if (!config || config.cmd !== 'config') return;
+  CTRL_PARAMS.forEach(group => {
+    group.items.forEach(item => {
+      const val = config[item.key];
+      if (val === undefined) return;
+      const el = document.getElementById('cv-' + item.key);
+      if (el) el.textContent = item.fmt === 'float' ? Number(val).toFixed(3) : val;
+    });
+  });
+  document.getElementById('ctrl-status').textContent = 'updated at ' + new Date().toLocaleTimeString();
+}
+
+function buildHandshake() {
+  const items = [
+    { id: 'cps', label: 'CPS', cls: 'highlight', fmt: v => (v || 0).toFixed(0) },
+    { id: 'syn_sent', label: 'SYN Sent', fmt: v => (v || 0).toLocaleString() },
+    { id: 'established', label: 'Established', fmt: v => (v || 0).toLocaleString() },
+    { id: 'conn_current', label: 'Active Conn', fmt: v => (v || 0).toLocaleString() },
+    { id: 'conn_max', label: 'Max Conn', fmt: v => (v || 0).toLocaleString() },
+    { id: 'timed_out', label: 'Timed Out', fmt: v => (v || 0).toLocaleString() },
+    { id: 'success_rate', label: 'Success Rate', fmt: v => ((v || 0) * 100).toFixed(1) + '%' },
+    { id: 'rst_sent', label: 'RST Sent', fmt: v => (v || 0).toLocaleString() },
+  ];
+  let h = '<div class="hs-row" id="hs-row">';
+  items.forEach(item => {
+    h += '<div class="hs-stat ' + (item.cls || '') + '" id="hs-' + item.id + '">';
+    h += '<div class="val" id="hv-' + item.id + '">--</div>';
+    h += '<div class="lbl">' + item.label + '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// -- Build all sections once, then update incrementally --
+
+function initDOM() {
+  const container = document.getElementById('content');
+  let h = '<div id="hs-section" style="display:none">';
+  h += '<div class="section-title"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">▶</span>TCP Handshake</span></div>';
+  h += '<div class="section-body" id="body-handshake">' + buildHandshake() + '</div>';
+  h += '</div>';
+
+  h += '<div class="section-title"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">▶</span>Min-Entropy <span class="desc">worst-case</span></span></div>';
+  h += '<div class="section-body" id="body-min">' + buildMinSection();
+  h += '<div class="section-title" id="title-min-interpretation"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">▶</span>Interpretation <span class="desc">configuration-aware min-entropy gaps, ranked by severity</span></span></div>';
+  h += '<div class="section-body interpretation-content" id="min-interpretation-body"></div>';
+  h += '</div>';
+
+  h += buildMIMatrix();
+
+  h += buildMICards();
+
+  CATEGORIES.forEach(cat => { h += buildSection(cat); });
+
+  h += '<div class="section-title" id="title-flow-extra"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">▶</span>Flow Details <span class="desc">tracking stats</span></span></div>';
+  h += '<div class="section-body" id="body-flow-extra"><div id="flow-extra-section">' + buildFlowExtra() + '</div></div>';
+
+  h += buildControlPanel();
+
+  // -- Rate PSD section (256-point FFT spectrum) --
+
+  h += '<div class="section-title"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">\u25b6</span>Rate PSD <span class="desc">frequency-domain TX rate analysis, 256-pt FFT, 39.06 Hz/bin</span></span></div>';
+  h += '<div class="section-body" id="body-psd">';
+  h += '<div class="grid">';
+  h += '<div class="card"><div class="card-label">Fundamental Freq';
+  h += tip('psd_dominant') + '</div><div class="card-value"><span id="psd-fundamental">--</span> <span class="unit">Hz</span></div></div>';
+  h += '<div class="card"><div class="card-label">Strongest Peak</div><div class="card-value"><span id="psd-strongest">--</span> <span class="unit">Hz</span></div></div>';
+  h += '<div class="card"><div class="card-label">Spectral Flatness';
+  h += tip('psd_flatness') + '</div><div class="card-value"><span id="psd-flatness">--</span></div></div>';
+  h += '<div class="card"><div class="card-label">Resolution';
+  h += tip('psd_resolution') + '</div><div class="card-value">39.06 <span class="unit">Hz/bin</span></div></div>';
+  h += '<div class="card"><div class="card-label">Pacing Freq</div><div class="card-value"><span id="psd-pacing-freq">--</span> <span class="unit">Hz</span></div></div>';
+  h += '<div class="card"><div class="card-label">Submit Overshoot P99</div><div class="card-value"><span id="psd-submit-p99">--</span> <span class="unit">&micro;s</span></div></div>';
+  h += '<div class="card"><div class="card-label">TX Burst P99</div><div class="card-value"><span id="psd-burst-p99">--</span> <span class="unit">&micro;s</span></div></div>';
+  h += '<div class="card"><div class="card-label">Mean TX Rate</div><div class="card-value"><span id="psd-mean-rate">--</span> <span class="unit">Kpps</span></div></div>';
+  h += '<div class="card"><div class="card-label">Rate Variation (RMS)</div><div class="card-value"><span id="psd-variation-rms">--</span> <span class="unit">Kpps</span></div></div>';
+  h += '</div>';
+  h += '<div class="section-title"><span class="flex-title" onclick="toggleSection(this)">';
+  h += '<span class="collapse-toggle">\u25b6</span>Interpretation <span class="desc">how to read the PSD spectrum</span></span></div>';
+  h += '<div class="section-body interpretation-content">';
+  h += '<div style="font-size:12px;color:#8b949e;line-height:1.55;">';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Assessment states</b> &mdash; the current state is highlighted.</p>';
+  h += '<div class="psd-assessment-list">';
+  h += '<div class="psd-assessment-item" id="psd-assessment-idle"><b>No samples</b> &mdash; TX is idle or no TX worker is available.</div>';
+  h += '<div class="psd-assessment-item" id="psd-assessment-stable"><b>Stable TX</b> &mdash; mean rate only; no non-DC variation is detected.</div>';
+  h += '<div class="psd-assessment-item" id="psd-assessment-strong-periodic"><b>Strong periodic</b> &mdash; flatness &lt; 0.1; compare peaks with pacing and shaping cycles.</div>';
+  h += '<div class="psd-assessment-item" id="psd-assessment-structured"><b>Structured</b> &mdash; flatness 0.1&ndash;0.4; inspect pacing, batching, and policers.</div>';
+  h += '<div class="psd-assessment-item" id="psd-assessment-mixed"><b>Mixed</b> &mdash; flatness 0.4&ndash;0.7; check whether peaks persist across windows.</div>';
+  h += '<div class="psd-assessment-item" id="psd-assessment-broadband"><b>Broadband</b> &mdash; flatness &ge; 0.7; no strong periodic structure is evident.</div>';
+  h += '</div>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Sampling</b> &mdash; TX rate sampled at 10 kHz (100 &micro;s bins) over a 256-point Hann-windowed FFT.</p>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Chart</b> &mdash; mean TX rate is removed before the FFT; bars show bins 1&ndash;127 on a 0 to &minus;80 dB scale. DC (bin 0) is excluded from all PSD diagnostics.</p>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Pacing Freq</b> &mdash; reciprocal of the effective TX submit interval. Orange lines mark the fundamental and its harmonics within the chart range. A peak cut off near 5 kHz reaches the 100 &micro;s sampler\'s Nyquist limit. Displayed bins use light temporal smoothing; numeric diagnostics use the unsmoothed spectrum.</p>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Pacing Timing</b> &mdash; Submit Overshoot measures how late software reaches a deadline, before calling the PMD. TX Burst measures time spent inside rte_eth_tx_burst(). Neither is wire-departure latency.</p>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Fundamental Freq</b> &mdash; lowest significant peak supported by a harmonic-series peak. If no series is found, it falls back to the strongest peak.</p>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Strongest Peak</b> &mdash; highest-power non-DC bin; for narrow TX pulses this can be a harmonic rather than the repetition rate.</p>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Spectral Flatness</b> &mdash; Wiener entropy: geometric mean / arithmetic mean of bin magnitudes. 0 = pure periodic tone (single bin dominates), 1 = uniform white noise (all bins equal).</p>';
+  h += '<p style="margin:3px 0;"><b style="color:#c9d1d9;">Diagnosis</b> &mdash; broad, flat spectra signal high TX entropy (ideal for hash/ECMP stress testing). Sharp peaks reveal periodic structure from DUT token-bucket or policer cycles (indicates rate-limit saturation).</p>';
+  h += '</div>';
+  h += '</div>';
+  h += '<div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;position:relative;">';
+  h += '<canvas id="psd-canvas" style="width:100%;height:230px;"></canvas>';
+  h += '</div>';
+  h += '</div>';
+
+  container.innerHTML = h;
+}
+
+function toggleSection(el) {
+  const body = el.parentElement.nextElementSibling;
+  if (!body || !body.classList) return;
+  const toggle = el.querySelector('.collapse-toggle');
+  body.classList.toggle('folded');
+  toggle.classList.toggle('folded');
+  if (!body.classList.contains('folded')) scheduleRender();
+}
+
+function sectionExpanded(id) {
+  const el = document.getElementById(id);
+  return !!el && !el.classList.contains('folded') && el.style.display !== 'none';
+}
+
+function updateValue(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function updateBar(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = Math.min(100, pct) + '%';
+}
+
+// -- Update values incrementally (no DOM rebuild) --
+
+function render(data) {
+  const e = data.entropy || {};
+  const hs = data.handshake || {};
+
+  const container = document.getElementById('content');
+  if (!container._init) {
+    initDOM();
+    container._init = true;
+  }
+
+  // Handshake section
+  const hsSection = document.getElementById('hs-section');
+  if (hs.syn_sent !== undefined) {
+    hsSection.style.display = '';
+    if (sectionExpanded('body-handshake')) {
+      const updates = ['cps', 'syn_sent', 'established', 'conn_current', 'conn_max', 'timed_out', 'rst_sent'];
+      updates.forEach(k => {
+        updateValue('hv-' + k, (hs[k] || 0).toLocaleString());
+      });
+      updateValue('hv-success_rate', ((hs.success_rate || 0) * 100).toFixed(1) + '%');
+    }
+  } else {
+    hsSection.style.display = 'none';
+  }
+
+  // Entropy dimensions
+  const allDims = [];
+  CATEGORIES.forEach(cat => {
+    if (!sectionExpanded('body-' + cat.id)) return;
+    cat.dims.forEach(d => {
+      allDims.push({ id: d.id, max: d.max, maxKey: d.maxKey, cat: cat.id, key: d.key || d.id });
+    });
+  });
+  allDims.forEach(d => {
+    const val = e[d.key];
+    if (val === undefined) return;
+    updateValue('v-' + d.cat + '-' + d.id, val.toFixed(3));
+    const configuredMax = d.maxKey && e[d.maxKey] > 0 ? e[d.maxKey] : d.max;
+    updateValue('max-' + d.cat + '-' + d.id, Number(configuredMax).toFixed(2));
+    const pct = configuredMax > 0 ? (val / configuredMax) * 100 : 0;
+    updateBar('b-' + d.cat + '-' + d.id, pct);
+  });
+
+  // Min entropy
+  if (sectionExpanded('body-min')) {
+    MIN_DIMS.forEach(d => {
+      const val = e[d.id];
+      if (val === undefined) return;
+      updateValue('mv-' + d.id, val.toFixed(3));
+    });
+  }
+
+  if (e.min_diagnostics && sectionExpanded('body-min')) {
+    Object.entries(e.min_diagnostics).forEach(([id, d]) => {
+      const key = 'min_' + id;
+      const card = document.getElementById('min-' + key);
+      if (card) {
+        card.className = 'card diag-' + d.state;
+        const measured = Number(d.measured);
+        const target = Number(d.target);
+        const shortfall = Number(d.gap_bits);
+        const surplus = Math.max(0, measured - target);
+        const comparison = shortfall > 0.0005
+          ? 'shortfall ' + shortfall.toFixed(3) + ' bits'
+          : surplus > 0.0005 ? 'met, +' + surplus.toFixed(3) + ' bits' : 'met';
+        const detail = d.state === 'inactive' ? 'inactive' :
+          'window target ' + target.toFixed(3) + ', ' + comparison;
+        updateValue('md-' + key, detail);
+      }
+    });
+  }
+  if (e.min_diagnostics && sectionExpanded('min-interpretation-body'))
+    renderMinInterpretation(e.min_diagnostics);
+
+  // Flow extra
+  const flowActive = hs.syn_sent !== undefined;
+  const flowTitle = document.getElementById('title-flow');
+  const flowBody = document.getElementById('body-flow');
+  [flowTitle, flowBody].forEach(el => {
+    if (el) el.style.display = flowActive ? '' : 'none';
+  });
+  if (flowActive && sectionExpanded('body-flow') && e.flow_entropy_5tuple !== undefined) {
+    updateValue('v-flow-flow_5tuple', e.flow_entropy_5tuple.toFixed(3));
+    updateBar('b-flow-flow_5tuple', (e.flow_entropy_5tuple / 64) * 100);
+  }
+  if (flowActive && sectionExpanded('body-flow') && e.flow_entropy_lifetime !== undefined) {
+    updateValue('v-flow-flow_lifetime', e.flow_entropy_lifetime.toFixed(3));
+    updateBar('b-flow-flow_lifetime', (e.flow_entropy_lifetime / 64) * 100);
+  }
+  if (sectionExpanded('body-flow-extra') && e.flow_distinct !== undefined) {
+    updateValue('fv-distinct', (e.flow_distinct || 0).toLocaleString());
+    updateValue('fv-distinct-total', 'of ' + (e.flow_total || 0).toLocaleString() + ' total');
+  }
+  if (sectionExpanded('body-flow-extra') && e.flow_ratio !== undefined) {
+    updateValue('fv-ratio', (e.flow_ratio * 100).toFixed(1));
+    updateBar('fb-ratio', e.flow_ratio * 100);
+  }
+  if (sectionExpanded('body-flow-extra') && e.sampler_samples !== undefined)
+    updateValue('fv-sampler-samples', Number(e.sampler_samples).toLocaleString());
+  if (sectionExpanded('body-flow-extra') && e.sampler_overwritten_window !== undefined) {
+    updateValue('fv-sampler-overwritten', Number(e.sampler_overwritten_window).toLocaleString());
+    updateValue('fv-sampler-overwritten-total',
+      'of ' + Number(e.sampler_overwritten || 0).toLocaleString() + ' total');
+  }
+
+  // -- Rate PSD Update --
+
+  const psd = data.psd || {};
+  const observe = data.observe || {};
+
+  if (sectionExpanded('body-psd') && psd.bins && psd.bins.length) {
+    updateValue('psd-fundamental', (psd.fundamental_hz || psd.dominant_hz || 0).toFixed(1));
+    updateValue('psd-strongest', (psd.strongest_peak_hz || psd.dominant_hz || 0).toFixed(1));
+    updateValue('psd-flatness', (psd.spectral_flatness || 0).toFixed(4));
+    updateValue('psd-mean-rate', (Number(psd.mean_ppms) || 0).toFixed(2));
+    updateValue('psd-variation-rms', (Number(psd.variation_rms_ppms) || 0).toFixed(3));
+    const targetUs = Number(observe.tx_submit_target_us) || 0;
+    const pacingHz = targetUs > 0 ? 1000000 / targetUs : 0;
+    updateValue('psd-pacing-freq', pacingHz > 0 ? pacingHz.toFixed(1) : '--');
+    updateValue('psd-submit-p99',
+      (Number(observe.tx_submit_overshoot_p99_us) || 0).toFixed(2));
+    updateValue('psd-burst-p99',
+      (Number(observe.tx_burst_duration_p99_us) || 0).toFixed(2));
+
+    const signalPower = psd.bins.slice(1, 128).reduce((sum, v) =>
+      sum + (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0), 0);
+    const signalValid = psd.signal_valid !== undefined
+      ? Boolean(psd.signal_valid) : signalPower > 1e-15;
+    const flatness = Number(psd.spectral_flatness) || 0;
+    let assessmentState;
+    if (!signalValid && (Number(psd.mean_ppms) || 0) > 0) {
+      assessmentState = 'stable';
+    } else if (!signalValid) {
+      assessmentState = 'idle';
+    } else if (flatness < 0.1) {
+      assessmentState = 'strong-periodic';
+    } else if (flatness < 0.4) {
+      assessmentState = 'structured';
+    } else if (flatness < 0.7) {
+      assessmentState = 'mixed';
+    } else {
+      assessmentState = 'broadband';
+    }
+    if (assessmentState !== psdAssessmentState) {
+      document.querySelectorAll('.psd-assessment-item.active').forEach(el =>
+        el.classList.remove('active'));
+      const current = document.getElementById('psd-assessment-' + assessmentState);
+      if (current) current.classList.add('active');
+      psdAssessmentState = assessmentState;
+    }
+
+    const canvas = document.getElementById('psd-canvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.parentElement.clientWidth - 20;
+      const H = 230;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.scale(dpr, dpr);
+
+      const rawBins = psd.bins.slice(1, 128).map(v =>
+        Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+      if (!signalValid || !psdSmoothedBins ||
+          psdSmoothedBins.length !== rawBins.length) {
+        psdSmoothedBins = rawBins.slice();
+      } else {
+        const alpha = 0.25;
+        for (let i = 0; i < rawBins.length; i++)
+          psdSmoothedBins[i] += alpha * (rawBins[i] - psdSmoothedBins[i]);
+      }
+      const bins = psdSmoothedBins;
+      let maxVal = 0;
+      for (let i = 0; i < bins.length; i++) { if (bins[i] > maxVal) maxVal = bins[i]; }
+      const barW = W / bins.length;
+      const chartH = H - 25;
+      ctx.clearRect(0, 0, W, H);
+
+      if (maxVal === 0) {
+        ctx.fillStyle = '#8b949e';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText((Number(psd.mean_ppms) || 0) > 0
+          ? 'Stable rate: no non-DC spectral components'
+          : 'No PSD samples', W / 2, chartH / 2);
+      }
+
+      ctx.fillStyle = '#484f58';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      for (let i = 0; i < bins.length; i += 25) {
+		const hz = ((i + 1) * 39.0625).toFixed(0);
+        ctx.fillText(hz + 'Hz', i * barW + barW / 2, H - 3);
+      }
+
+      for (let i = 0; i < bins.length; i++) {
+        const db = maxVal > 0 && bins[i] > 0
+          ? Math.max(-80, 10 * Math.log10(bins[i] / maxVal)) : -80;
+        const ratio = (db + 80) / 80;
+        const h = ratio * (chartH - 5);
+        const x = i * barW;
+        const y = chartH - h;
+        const r = Math.floor(35 + ratio * 90);
+        const g = Math.floor(130 + ratio * 80);
+        const b = Math.floor(200 + ratio * 40);
+        ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + (b > 255 ? 255 : b) + ')';
+        ctx.fillRect(x, y, barW - 1, h);
+      }
+
+      for (let multiple = 1; pacingHz > 0 && multiple * pacingHz < 5000;
+           multiple++) {
+        const markerHz = multiple * pacingHz;
+        if (markerHz < 39.0625) continue;
+        const markerBin = markerHz / 39.0625 - 1;
+        const x = (markerBin + 0.5) * barW;
+        ctx.strokeStyle = '#f0883e';
+        ctx.lineWidth = 1;
+        ctx.setLineDash(multiple === 1 ? [] : [3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, chartH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#f0883e';
+        ctx.font = '9px monospace';
+        ctx.textAlign = x > W - 30 ? 'right' : 'left';
+        ctx.fillText(multiple + '\u00d7', x, 10);
+      }
+
+      ctx.save();
+      ctx.fillStyle = '#484f58';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.translate(10, chartH / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('magnitude', 0, 0);
+      ctx.restore();
+    }
+  }
+
+  // -- MI Matrix Heatmap Update --
+  const N = MI_DIMS.length;
+  if (sectionExpanded('body-mi')) for (let r = 0; r < N; r++) {
+    const dim = MI_DIMS[r];
+    for (let c = 0; c < N; c++) {
+      const cellId = 'mc-' + r + '-' + c;
+      const valEl = document.getElementById(cellId + '-v');
+      if (!valEl) continue;
+      const cellEl = document.getElementById(cellId);
+      if (!cellEl) continue;
+
+      if (r === c) {
+        // Diagonal: individual entropy
+        const v = e[dim.id];
+        if (v === undefined) continue;
+        const maxVal = dim.maxKey && e[dim.maxKey] > 0 ? e[dim.maxKey] : dim.max;
+        valEl.textContent = v.toFixed(2);
+        cellEl.style.cssText = heatBg(v, maxVal, true) + ';grid-row:' + (r + 2) + ';grid-column:' + (c + 2) + ';';
+      } else {
+        const entry = MI_MAP[miKey(r, c)];
+        if (!entry) continue; // no MI data cell
+        const v = e[entry.miKey];
+        if (v === undefined) continue;
+        const cmax = e[entry.miMaxKey];
+        const maxVal = (cmax > 0) ? cmax : (entry.absMax || 16);
+        valEl.textContent = v.toFixed(2);
+        cellEl.style.cssText = heatBg(v, maxVal, false) + ';grid-row:' + (r + 2) + ';grid-column:' + (c + 2) + ';';
+
+        // Tooltip
+        const tipEl = document.getElementById(cellId + '-tip');
+        if (tipEl) {
+          let tipText = entry.label + ' = ' + v.toFixed(3) + ' bits';
+          if (cmax > 0) tipText += ' (observed bound: ' + cmax.toFixed(2) + ')';
+          tipEl.textContent = tipText;
+        }
+      }
+    }
+  }
+
+  // Detail list below matrix
+  if (sectionExpanded('body-mi')) for (const k in MI_MAP) {
+    const entry = MI_MAP[k];
+    const v = e[entry.miKey];
+    if (v === undefined) continue;
+    updateValue('md-' + entry.miKey, v.toFixed(3));
+  }
+
+  // -- MI Cards update --
+  const miCardPairs = [
+    { id: 'mi_sip_dip',   max: 16 },
+    { id: 'mi_spt_dpt',   max: 8 },
+    { id: 'mi_proto_spt', max: 6 },
+    { id: 'mi_size_dpt',  max: 16 },
+    { id: 'mi_size_proto',max: 8 },
+    { id: 'mi_dtsc_proto',max: 8 },
+    { id: 'mi_dtsc_flow', max: 16 },
+    { id: 'mi_tcpf_sz',   max: 8 },
+    { id: 'mi_tcpf_spt',  max: 8 },
+    { id: 'mi_tcpf_dpt',  max: 8 },
+    { id: 'mi_osip_odip', max: 16 },
+    { id: 'mi_vni_osip',  max: 16 },
+  ];
+  if (sectionExpanded('body-mi-cards')) miCardPairs.forEach(p => {
+    const val = e[p.id];
+    if (val === undefined) return;
+    updateValue('mcv-' + p.id, val.toFixed(3));
+    // Upper bound from the observed marginal entropies
+    const cmax = e['mi_max_' + p.id];
+    const el = document.getElementById('mcc-' + p.id);
+    if (el) el.textContent = cmax > 0 ? ' (bound: ' + cmax.toFixed(1) + ')' : '';
+    // Bar uses the smaller of the display maximum and observed bound
+    const denom = (cmax > 0 && cmax < p.max) ? cmax : p.max;
+    updateBar('mcb-' + p.id, (val / denom) * 100);
+  });
+}
+
+connect();
+</script>
+</body>
+</html>

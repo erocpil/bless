@@ -1,0 +1,104 @@
+# Rate-limited handshake demo — CPS constrained.
+# Left side (initiator): sends SYNs at a controlled rate.
+# Right side (responder): sends SYN-ACKs, wired in a separate instance.
+#
+# -- PMD options for bidirectional handshake --------------------------
+# Handshake mode requires both TX and RX on the same device.
+# net_pcap0,iface=lo  is TX-only (max_rx_queues=0) and will cause
+# bless to abort with an error.  Choose one of the options below:
+#
+#   Option A: net_null0 (CPS-only, no real traffic)
+#     vdev: net_null0
+#     TX sends to nowhere, RX always returns 0 pkts.
+#     Pros:  zero setup, no root, single instance works alone
+#     Cons:  no real conntrack tracking (no SYN-ACKs ever arrive)
+#     Use:   unidirectional SYN flood / CPS ceiling test alone
+#
+#   Option B: PCAP rx_iface+tx_iface (bidirectional on lo)
+#     vdev: net_pcap0,rx_iface=lo,tx_iface=lo
+#     Both instances share lo: left TX → lo → right RX, right TX → lo → left RX.
+#     Pros:  real bidirectional handshake on lo
+#     Cons:  requires root + libpcap; libpcap captures may drop on heavy load
+#     Use:   small-scale conntrack validation (batch ≤ 256)
+#
+#   Option C: TAP device (bidirectional, dedicated interface)
+#     vdev: net_tap0,iface=bless-tap0
+#     Create TAP first: ip tuntap add dev bless-tap0 mode tap
+#     Both instances use the same TAP.
+#     Pros:  reliable bidirectional, no capture drops
+#     Cons:  requires root + TAP creation; may need bridge for multi-OS
+#     Use:   realistic conntrack / CPS test at scale
+#
+# -- Usage -----------------------------------------------------------
+# Start LEFT side:
+#   build/release-static/bin/bless conf/config-rate-cps.yaml
+# Then start RIGHT side (exchange src/dst):
+#   build/release-static/bin/bless conf/config-hs-right.yaml
+#
+# Monitor CPS:
+#   curl -s http://localhost:8000/metrics | grep "bless_hs"
+#
+# CPS = 5000 SYNs/sec. With batch-delay-us=200000 (5 iter/sec),
+# each iteration sends at most 5000/5 = 1000 SYNs (capped by batch=2048).
+# The CPS bucket smooths this: if RX falls behind, tokens accumulate
+# slower, naturally reducing the SYN rate.
+#
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  vdev: net_pcap0,rx_iface=lo,tx_iface=lo
+  main-lcore: 0
+  l: 0-2
+  n: 2
+  proc-type: auto
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  mode: handshake
+  num: -1
+  batch: 2048
+  batch-delay-us: 200000
+  batch-jitter-us: 5000
+  sample-interval: 0
+  # CPS rate: 5000 SYNs/sec (CIR auto-derived from hs-rate)
+  hs-rate: 1000
+  hs-timeout-us: 30000000
+  hs-mix-ratio: 1000
+  # Also constrain PPS to avoid flooding
+  pps-rate: 15000
+  pps-burst: 4096
+
+bless:
+  hw-offload: [ ipv4, tcp ]
+  ether:
+    mtu: 0
+    copy-payload: false
+    dst: 02:00:00:00:00:01
+    src:
+    type:
+      ipv4:
+        src: 10.0.0.1+65536    # 65536 source IPs
+        dst: 192.168.0.1+4096   # 4096 destination IPs
+        tcp:
+          src: 10000+1024
+          dst: [ 80, 443, 8080, 22, 3306 ]
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      ssl_certificate: conf/ssl/ssl.pem
+      num_threads: 2
+      enable_keep_alive: yes
