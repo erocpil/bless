@@ -1,0 +1,68 @@
+# Three-layer comparison — software ceiling (net_null PMD).
+# Unified inner config: UDP 64B, batch=128, single worker,
+# copy-payload=false, sample-interval=0.  Differs from T-pf/T-vf
+# ONLY in the dpdk section.
+#
+# SAFETY: net_null drops all TX in software — no PCIe, no wire.
+
+dpdk:
+  vdev: net_null0
+  no-pci: ""
+  no-huge: ""
+  no-shconf: ""
+  main-lcore: 0
+  l: "0-1"
+  n: 2
+  proc-type: auto
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  batch: 128
+  batch-delay-us: 0
+  sample-interval: 0
+  mode: tx-only
+  num: -1
+  arp: 0
+  icmp: 0
+  tcp: 0
+  udp: 100
+  sctp: 0
+  latency-hist-enable: false
+  mi-smoothing-window: 1
+
+bless:
+  hw-offload: []
+  ether:
+    mtu: 0
+    copy-payload: false
+    dst: "02:00:00:00:00:01"
+    imix: [64]
+    type:
+      ipv4:
+        src: "10.0.0.1+64"
+        dst: ["192.168.1.1"]
+        udp:
+          src: "20000+1"
+          dst: "53+1"
+          payload: "b"
+  vxlan:
+    enable: false
+  erroneous:
+    ratio: 0
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      num_threads: 4
+      enable_keep_alive: yes

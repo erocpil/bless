@@ -1,0 +1,37 @@
+[Unit]
+Description=BLESS — Entropy-controlled DPDK traffic injector
+Documentation=https://github.com/erocpil/bless
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/bless/bin/bless --log-format=json /etc/bless/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+
+# DPDK needs hugepages.  Reserve on boot:
+#   echo "vm.nr_hugepages=1024" >> /etc/sysctl.d/80-dpdk.conf
+# Or mount hugetlbfs:
+#   mkdir -p /dev/hugepages && mount -t hugetlbfs nodev /dev/hugepages
+# For no-huge testing, replace ExecStart above with:
+#   ExecStart=/opt/bless/bin/bless --no-huge --no-pci --vdev=net_null0 -- --mode=tx-only
+
+# Environment
+Environment=DPDK_FILE_PREFIX=bless
+Environment=HOME=/root
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/dev/hugepages /var/run/dpdk
+ReadOnlyPaths=/etc/bless
+PrivateTmp=yes
+
+# Resource limits
+LimitMEMLOCK=infinity
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

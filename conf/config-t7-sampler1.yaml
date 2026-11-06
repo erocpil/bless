@@ -1,0 +1,69 @@
+# T7 — HW PF, 3-protocol mix + sampler interval=1
+# Extracts 5-tuple for every packet (rate-limited write only).
+# Same as T6 but sample-interval=1.
+
+dpdk:
+  allow: "0000:00:04.0"
+  main-lcore: 0
+  l: "0-1"
+  n: 2
+  proc-type: auto
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  batch: 128
+  batch-delay-us: 0
+  sample-interval: 1
+  mode: tx-only
+  num: 500000000
+  arp: 0
+  icmp: 0
+  tcp: 1
+  udp: 3
+  sctp: 1
+  latency-hist-enable: false
+  mi-smoothing-window: 1
+
+bless:
+  hw-offload: []
+  ether:
+    mtu: 0
+    copy-payload: false
+    dst: "02:00:00:00:00:01"
+    imix: [64]
+    type:
+      ipv4:
+        src: "10.0.0.1+64"
+        dst: ["192.168.1.1"]
+        tcp:
+          src: "10000+1"
+          dst: "80+1"
+          payload: "b"
+        udp:
+          src: "20000+1"
+          dst: "53+1"
+          payload: "b"
+        sctp:
+          src: "30000+1"
+          dst: "3868+1"
+  vxlan:
+    enable: false
+  erroneous:
+    ratio: 0
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      num_threads: 4
+      enable_keep_alive: yes

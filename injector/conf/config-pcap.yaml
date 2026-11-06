@@ -1,0 +1,57 @@
+# Local PCAP test: no physical NIC or hugepages required.
+# Run from the repository root:
+#   make -j4
+#   build/release-static/bin/injector conf/config-pcap.yaml
+# Writes tx.pcap in the working directory, overwriting it on each run.
+# CPU 0 is the main core; CPU 1 sends packets. Adjust for your host.
+dpdk:
+  main-lcore: 0
+  l: 0-1
+  n: 2
+  m: 256
+  no-pci: ""
+  no-huge: ""
+  no-shconf: ""
+  # no-telemetry: ""
+  vdev: net_pcap0,tx_pcap=tx.pcap
+
+injector:
+  p: 0x1
+  q: 1
+  mode: tx-only
+  auto-start: true
+  batch: 64
+  batch-delay-us: 100000
+  num: -1
+  seed: 123
+  arp: 1
+  icmp: 1
+  tcp: 1
+  udp: 1
+
+bless:
+  # Use software checksums for the PCAP device.
+  hw-offload: []
+  ether:
+    copy-payload: true
+    src: 02:00:00:00:00:01
+    dst: 02:00:00:00:00:02
+    type:
+      ipv4:
+        src: 192.0.1.1+10
+        dst: 192.0.2.1+20
+        udp:
+          src: 10000+100
+          dst: 20000+-1000
+          payload: "injector: udp payload."
+        tcp:
+          src: [ 80, 808, 8080, 8888 ]
+          dst: 9000+10
+          payload: "injector: tcp payload."
+        icmp:
+          # only array supported
+          ident: [ 0x1234, 0xface ]
+          payload: "injector: icmp payload."
+
+system:
+  daemonize: false

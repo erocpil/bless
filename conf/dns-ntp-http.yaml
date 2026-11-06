@@ -1,0 +1,14 @@
+# bless:
+#   dns:
+#     names:
+#       - "www.google.com"
+#       - "api.github.com"
+#       - "cdn.cloudflare.com"
+#     qtypes: [A, AAAA, MX]
+#   ntp:
+#     modes: [3, 4]
+#     versions: [3, 4]
+#   http:
+#     methods: "GET,POST,HEAD"
+#     paths: "/,/api/v1,/index.html,/health"
+#     hosts: "example.com,api.example.org,cdn.example.net"

@@ -1,0 +1,41 @@
+# Finite local integration test for the Bless-compatible injector schema.
+dpdk:
+  main-lcore: 0
+  l: "0-1"
+  n: 2
+  no-pci: ""
+  no-huge: ""
+  no-shconf: ""
+  no-telemetry: ""
+  vdev: net_pcap0,tx_pcap=tx.pcap
+
+injector:
+  p: 0x1
+  q: 1
+  mode: tx-only
+  auto-start: true
+  num: 32
+  batch: 8
+  arp: 0
+  icmp: 0
+  tcp: 0
+  udp: 1
+
+bless:
+  hw-offload: []
+  ether:
+    mtu: 0
+    copy-payload: true
+    src: "02:00:00:00:00:01"
+    dst: "02:00:00:00:00:02"
+    type:
+      ipv4:
+        src: "192.0.2.1"
+        dst: "198.51.100.1"
+        udp:
+          src: 12345
+          dst: 54321
+          payload: "injector schema smoke test"
+
+system:
+  daemonize: false

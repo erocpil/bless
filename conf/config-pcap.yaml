@@ -1,0 +1,59 @@
+# Minimal configuration for verifying TX PCAP export.
+#
+# Run from the repository root:
+#   build/release-static/bin/bless conf/config-pcap.yaml
+#
+# The finite packet count keeps the run self-terminating. The output file is
+# written by DPDK's net_pcap PMD; remove it before rerunning if necessary.
+# Inspect it with:
+#   tcpdump -nn -r /tmp/bless-pcap-test.pcap
+
+dpdk:
+  no-pci: ""
+  no-huge: ""
+  no-shconf: ""
+  no-telemetry: ""
+  vdev: net_pcap0,tx_pcap=/tmp/bless-pcap-test.pcap
+  main-lcore: 0
+  l: "0-1"
+  n: 2
+  proc-type: auto
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  mode: tx-only
+  num: 32
+  batch: 8
+  batch-delay-us: 1000
+  arp: 0
+  icmp: 0
+  tcp: 0
+  udp: 1
+  sctp: 0
+
+bless:
+  ether:
+    mtu: 0
+    copy-payload: true
+    src: "02:00:00:00:00:01"
+    dst: "02:00:00:00:00:02"
+    type:
+      ipv4:
+        src: "192.0.2.1"
+        dst: "198.51.100.1"
+        udp:
+          src: 12345
+          dst: 54321
+          payload: "pcap export test"
+  vxlan:
+    enable: false
+  erroneous:
+    ratio: 0
+
+system:
+  daemonize: false
+  server:
+    enable: false

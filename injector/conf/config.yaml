@@ -1,0 +1,108 @@
+dpdk:
+  main-lcore: 24
+  l: 1-11,24-26
+  n: 4
+  lcores: null
+  socket-mem: null
+  # ls -l /sys/class/net/*/device
+  # !!! the order here is not identical to dpdk's RTE_ETH_FOREACH_DEV()
+  # allow: [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
+  block: null # [ 0000:00:05.0, 00:06.0, 00:07.0, 00:08.0, 00:09.0, 00:0a.0, 00:04.0 ]
+  # NOTE: block all ports and set p and q to 1
+  vdev: net_pcap0,tx_pcap=tx.pcap
+  # vdev: null # net_pcap0,tx_pcap=tx.pcap
+  proc-type: primary
+  # --log-level=pmd.net.af_xdp:debug
+  log-level: info
+  trace: regex-match
+  trace-dir: /tmp
+  trace-bufsz: 100M
+  trace-mode: discard
+  huge-dir: /dev/hugepages
+  file-prefix: null
+
+injector:
+  # ports
+  p: 0x3
+  # queues on each port
+  q: 1
+  mode: tx-only
+  auto-start: true
+  # packets per burst
+  batch: 32
+  # delay us after each batch
+  batch-delay-us: 0
+  # uniform ±jitter applied to batch-delay-us (μs)
+  batch-jitter-us: 0
+  # traffic shape: 0=uniform, 1=Poisson (exponential inter-arrival)
+  traffic-model: 0
+  # per-lcore
+  num: 100
+  arp: 0
+  icmp: 0
+  tcp: 0
+  udp: 1
+
+bless:
+  hw-offload: [ ipv4, udp, tcp ]
+  ether:
+    # [46, 1500] size of ether payload, may result in error if vxlan enabled
+    mtu: 0
+    # IMIX (Internet Mix) — random packet sizes for realistic traffic
+    # Each burst picks a random size from this list. Overrides payload size.
+    # imix: [ 64, 256, 570, 1518 ]
+    # copy payload to mbuf, default false
+    copy-payload: true
+    dst: 10:70:fd:af:21:10
+    src:
+    type:
+      arp:
+        # only array accepted
+        src: [ 10.0.0.1 ]
+        dst: [ 20.0.0.2, 30.0.0.3 ]
+      ipv4:
+        # use range
+        src: 172.16.1.1+10
+        # use array
+        dst: [ 192.168.0.1, 192.168.1.1 ]
+        icmp:
+          # only array supported
+          ident: [ 0x1234, 0xface ]
+          payload: "injector: icmp payload."
+        tcp:
+          src: [ 80, 808, 8080, 8888 ]
+          dst: 9000+10
+          payload: "injector: tcp payload."
+        udp:
+          src: 8000+-10
+          dst: [ 10000, 10001, 10003 ]
+          payload: "injector: udp payload."
+  vxlan:
+    enable: true
+    ratio: 10
+    ether:
+      dst: 10:70:fd:af:21:10
+      src:
+      type:
+        ipv4:
+          src: [ 172.31.30.246:100+5 ]
+          # VNI range syntax: IP:VNI_BASE+COUNT (expands to COUNT consecutive VNIs)
+          dst: [ 4.0.0.1, 5.0.0.1, 6.0.0.1 ]
+          udp:
+            src: [ 4000, 4001, 4002 ]
+            dst: 4789
+  erroneous:
+    ratio: 0
+    class:
+      mac: [ vlan, multicast ] # 0, 1
+      arp: [ src ] # 3
+      ipv4: [ version, ihl, dscp, ecn, total_length, id, flags, fragment_offset, ttl, protocol, cksum, ipsec ]
+      #       4        5    6     7    8             9   10     11               12   13        14     15
+      icmp: [ type ] # 16
+      tcp: [ syn_flood, data_off, flags, window, cksum ]
+      #      17         18        19     20      21
+      udp: [ len, cksum, vxlan ] # 22, 23, 24
+      other: [ toa ] # 25
+
+system:
+  daemonize: false

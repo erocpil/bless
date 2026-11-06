@@ -1,0 +1,86 @@
+# Benchmark config — absolute minimum overhead for PPS measurement.
+# net_null PMD: zero I/O, measures pure software construction cost.
+#
+# Design:
+#   - batch-delay-us=0: no artificial inter-burst delay
+#   - sample-interval=0: entropy sampler off (no ring-buffer writes)
+#   - copy-payload=false: skip memcpy for payload strings
+#   - hw-offload=[]: no checksum offload; pure software
+#   - log-level=emerg: suppress all non-critical output
+#   - minimal protocol mix: 1 TCP + 3 UDP + 1 SCTP (=5 types)
+
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  no-huge: ""
+  no-shconf: ""
+  vdev: net_null0
+  main-lcore: 0
+  l: 0-1
+  n: 2
+  proc-type: auto
+  log-level: emerg
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  batch: 64
+  batch-delay-us: 0
+  batch-jitter-us: 0
+  traffic-model: 0
+  entropy-target: 0
+  entropy-dim: 0
+  entropy-adapt-gain: 0
+  sample-interval: 0
+  latency-hist-enable: false
+  mi-smoothing-window: 1
+  mode: tx-only
+  num: -1
+  arp: 0
+  icmp: 0
+  tcp: 1
+  udp: 3
+  sctp: 1
+
+bless:
+  hw-offload: []
+  ether:
+    mtu: 0
+    copy-payload: false
+    dst: "02:00:00:00:00:01"
+    type:
+      ipv4:
+        src: "10.0.0.1+64"
+        dst: ["192.168.1.1"]
+        tcp:
+          src: "10000+1"
+          dst: "80+1"
+          payload: "b"
+        udp:
+          src: "20000+1"
+          dst: "53+1"
+          payload: "b"
+        sctp:
+          src: "30000+1"
+          dst: "3868+1"
+  vxlan:
+    enable: false
+  erroneous:
+    ratio: 0
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      num_threads: 4
+      enable_keep_alive: yes

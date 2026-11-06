@@ -1,0 +1,60 @@
+## Minimal IPv6 smoke test — single src+dst, UDP only.
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  no-huge: ""
+  no-shconf: ""
+  vdev: net_null0
+  main-lcore: 0
+  l: 0-1
+  n: 2
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  batch: 8
+  mode: tx-only
+  num: -1
+  tcp: 0
+  udp: 0
+  arp: 0
+  icmp: 0
+  sctp: 0
+
+bless:
+  ether:
+    dst: 02:00:00:00:00:01
+    src: 02:00:00:00:00:02
+    dist:
+      ipv6: 100
+      tcp: 0
+      udp: 0
+      arp: 0
+      icmp: 0
+      sctp: 0
+    type:
+      ipv4:
+        src: 10.0.0.1
+        dst: 10.0.0.2
+      ipv6:
+        src: "2001:db8::1"
+        dst: ["2001:db8::100"]
+        udp:
+          src: 20000
+          dst: 53
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      num_threads: 2

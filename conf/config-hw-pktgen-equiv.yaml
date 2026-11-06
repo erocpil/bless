@@ -1,0 +1,63 @@
+# pktgen-equivalent config — minimal fixed-flow UDP for fair comparison.
+# Same template pktgen uses: single MAC, single IP, single port, no variability.
+
+dpdk:
+  allow: "0000:00:04.0"
+  main-lcore: 0
+  l: "0-1"
+  n: 2
+  proc-type: auto
+  # NB: no log-level — DPDK EAL log filtering suppresses rte_exit() errors
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  batch: 128
+  batch-delay-us: 0
+  sample-interval: 0
+  mode: tx-only
+  num: 50000000
+  arp: 0
+  icmp: 0
+  tcp: 0
+  udp: 100
+  sctp: 0
+  latency-hist-enable: false
+  mi-smoothing-window: 1
+
+bless:
+  hw-offload: []
+  ether:
+    mtu: 0
+    copy-payload: false
+    dst: "02:00:00:00:00:01"
+    src: "02:00:00:00:00:02"
+    imix: [64]
+    type:
+      ipv4:
+        src: ["10.1.0.1"]        # single IP — no sweep
+        dst: ["192.168.100.1"]   # single IP
+        udp:
+          src: ["1234"]          # single port
+          dst: ["5678"]          # single port
+          payload: "a"
+  vxlan:
+    enable: false
+  erroneous:
+    ratio: 0
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      num_threads: 4
+      enable_keep_alive: yes

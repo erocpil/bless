@@ -1,0 +1,68 @@
+# TCP flag entropy demo (tx-only stateless).
+# Features:
+#   - TCP flag diversity: bless_mbufs_tcp now sends weighted random flags
+#     (PSH+ACK 60%, SYN 15%, SYN-ACK 10%, ACK 10%, FIN-ACK 5%)
+#   - Runtime entropy sampling captures tcp_flags distribution
+#   - All other entropy dimensions active as well
+#
+# Uses PCAP on lo, no physical NICs needed.  Runs 100K packets then exits.
+# Single instance, no pairing required.
+#
+# Usage:
+#   build/release-static/bin/bless conf/config-tcp-flags.yaml
+#
+# Monitor (during run):
+#   curl -s http://localhost:8000/metrics | grep "bless_entropy.*tcp_flags"
+
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  vdev: net_pcap0,iface=lo
+  main-lcore: 0
+  l: 0-2
+  n: 2
+  proc-type: auto
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  mode: tx-only
+  num: 10000000
+  batch: 64
+  batch-delay-us: 100000
+  sample-interval: 1
+  tcp: 1
+
+bless:
+  hw-offload: [ ipv4, tcp ]
+  ether:
+    mtu: 0
+    dst: 02:00:00:00:00:01
+    src:
+    type:
+      ipv4:
+        src: 10.0.0.1+1024
+        dst: [ 192.168.1.1 ]
+        tcp:
+          src: 10000+100
+          dst: 80
+          payload: "Stateless TCP with flag diversity."
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      ssl_certificate: conf/ssl/ssl.pem
+      num_threads: 2
+      enable_keep_alive: yes

@@ -1,0 +1,101 @@
+# Rate-limited entropy demo — PPS constrained.
+# Generates all entropy dimensions but limits packets per second.
+#
+# Usage:
+#   build/release-static/bin/bless conf/config-rate-pps.yaml
+#   curl -s http://localhost:8000/metrics | grep -E "bless_entropy|bless_packets"
+
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  vdev: net_pcap0,iface=lo
+  main-lcore: 0
+  l: 0-2
+  n: 2
+  proc-type: auto
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  mode: tx-only
+  num: -1
+  batch: 256
+  batch-delay-us: 100000
+  batch-jitter-us: 50
+  sample-interval: 1
+  # PPS rate limit: 10,000 packets/sec, burst up to 512
+  pps-rate: 10000
+  pps-burst: 512
+  # BPS disabled (default 0)
+  arp: 1
+  icmp: 2
+  tcp: 8
+  udp: 9
+
+bless:
+  hw-offload: [ ipv4, udp, tcp ]
+  ether:
+    mtu: 0
+    copy-payload: true
+    dst: 02:00:00:00:00:01
+    src:
+    imix: [ 64, 128, 256, 512, 1024, 1500 ]
+    type:
+      arp:
+        src: [ 10.0.0.1, 10.0.0.2, 10.0.0.3 ]
+        dst: [ 20.0.0.2, 20.0.0.3 ]
+      ipv4:
+        src: 10.0.0.1+65536
+        dst: 192.168.0.1+4096
+        icmp:
+          ident: [ 0x1234, 0x5678, 0x9abc ]
+          payload: "ICMP echo with variable entropy."
+        tcp:
+          src: 10000+512
+          dst: [ 80, 443, 8080, 22, 3306 ]
+          payload: "TCP segment with random flag bits."
+        udp:
+          src: 20000+1024
+          dst: [ 53, 123, 443, 514, 1194, 5353 ]
+          payload: "UDP datagram."
+  vxlan:
+    enable: true
+    ratio: 30
+    ether:
+      dst: 02:00:00:00:00:02
+      src:
+      type:
+        ipv4:
+          src: [ 172.31.30.246:100, 10.10.10.1:200, 192.168.255.1:300 ]
+          dst: [ 4.0.0.1 ]
+          udp:
+            src: [ 4000, 4001, 4002 ]
+            dst: 4789
+  erroneous:
+    ratio: 50
+    class:
+      mac: [ vlan ]
+      arp: [ src ]
+      ipv4: [ version, ihl, cksum ]
+      icmp: [ type ]
+      tcp: [ syn_flood, cksum ]
+      udp: [ len, cksum ]
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      ssl_certificate: conf/ssl/ssl.pem
+      num_threads: 2
+      enable_keep_alive: yes

@@ -1,0 +1,400 @@
+{
+  "annotations": { "list": [] },
+  "description": "BLESS — DPDK packet injector dashboard: throughput, entropy, latency, DPDK port stats, and handshake telemetry.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "panels": [],
+      "title": "Throughput",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "pps"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "TX Gbps" }, "properties": [{ "id": "unit", "value": "bps" }] },
+          { "matcher": { "id": "byName", "options": "RX Gbps" }, "properties": [{ "id": "unit", "value": "bps" }] },
+          { "matcher": { "id": "byName", "options": "Loss Rate" }, "properties": [{ "id": "unit", "value": "percentunit" }] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "legend": { "calcs": ["mean", "max", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "rate(bless_tx_mpps[30s]) * 1e6", "legendFormat": "TX PPS", "refId": "A" },
+        { "expr": "rate(bless_rx_mpps[30s]) * 1e6", "legendFormat": "RX PPS", "refId": "B" },
+        { "expr": "rate(bless_tx_gbps[30s]) * 1e9", "legendFormat": "TX Gbps", "refId": "C" },
+        { "expr": "rate(bless_rx_gbps[30s]) * 1e9", "legendFormat": "RX Gbps", "refId": "D" }
+      ],
+      "title": "Packets / Bits per Second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.001 }, { "color": "red", "value": 0.01 }] },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 10, "w": 6, "x": 12, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        { "expr": "bless_rx_loss_rate", "legendFormat": "RX Loss", "refId": "A" }
+      ],
+      "title": "RX Loss Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 10, "w": 6, "x": 18, "y": 1 },
+      "id": 3,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "desc" } },
+      "targets": [
+        { "expr": "bless_cpu_busy_pct", "legendFormat": "CPU Busy %", "refId": "A" },
+        { "expr": "bless_mem_rss_kb / 1024", "legendFormat": "RSS MB", "refId": "B" }
+      ],
+      "title": "System Resources",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 },
+      "id": 200,
+      "panels": [],
+      "title": "Shannon Entropy (14-dim)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 5, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 3, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "max": 14,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 12 },
+      "id": 10,
+      "options": { "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "bless_entropy{type=\"protocol\"}", "legendFormat": "protocol", "refId": "A" },
+        { "expr": "bless_entropy{type=\"src_ip\"}", "legendFormat": "src_ip", "refId": "B" },
+        { "expr": "bless_entropy{type=\"dst_ip\"}", "legendFormat": "dst_ip", "refId": "C" },
+        { "expr": "bless_entropy{type=\"src_port\"}", "legendFormat": "src_port", "refId": "D" },
+        { "expr": "bless_entropy{type=\"dst_port\"}", "legendFormat": "dst_port", "refId": "E" },
+        { "expr": "bless_entropy{type=\"pkt_size\"}", "legendFormat": "pkt_size", "refId": "F" },
+        { "expr": "bless_entropy{type=\"tcp_flags\"}", "legendFormat": "tcp_flags", "refId": "G" },
+        { "expr": "bless_entropy{type=\"total_5tuple\"}", "legendFormat": "total_5tuple", "refId": "H" },
+        { "expr": "bless_entropy{type=\"delta_tsc\"}", "legendFormat": "delta_tsc", "refId": "I" },
+        { "expr": "bless_entropy{type=\"vxlan_encap\"}", "legendFormat": "vxlan_encap", "refId": "J" },
+        { "expr": "bless_entropy{type=\"joint_5tuple\"}", "legendFormat": "joint_5tuple", "refId": "K" },
+        { "expr": "bless_entropy{type=\"outer_src_ip\"}", "legendFormat": "outer_src_ip", "refId": "L" },
+        { "expr": "bless_entropy{type=\"outer_dst_ip\"}", "legendFormat": "outer_dst_ip", "refId": "M" },
+        { "expr": "bless_entropy{type=\"vni\"}", "legendFormat": "vni", "refId": "N" }
+      ],
+      "title": "Shannon Entropy (14 dimensions)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "id": 300,
+      "panels": [],
+      "title": "Min-Entropy (H∞)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 3, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 25 },
+      "id": 20,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "bless_entropy_min{type=\"protocol\"}", "legendFormat": "protocol", "refId": "A" },
+        { "expr": "bless_entropy_min{type=\"src_ip\"}", "legendFormat": "src_ip", "refId": "B" },
+        { "expr": "bless_entropy_min{type=\"dst_ip\"}", "legendFormat": "dst_ip", "refId": "C" },
+        { "expr": "bless_entropy_min{type=\"src_port\"}", "legendFormat": "src_port", "refId": "D" },
+        { "expr": "bless_entropy_min{type=\"dst_port\"}", "legendFormat": "dst_port", "refId": "E" },
+        { "expr": "bless_entropy_min{type=\"pkt_size\"}", "legendFormat": "pkt_size", "refId": "F" },
+        { "expr": "bless_entropy_min{type=\"tcp_flags\"}", "legendFormat": "tcp_flags", "refId": "G" },
+        { "expr": "bless_entropy_min{type=\"delta_tsc\"}", "legendFormat": "delta_tsc", "refId": "H" }
+      ],
+      "title": "Min-Entropy H(infinity)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 3, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 25 },
+      "id": 21,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "bless_entropy_max{type=\"src_ip\"}", "legendFormat": "max_src_ip", "refId": "A" },
+        { "expr": "bless_entropy_max{type=\"dst_ip\"}", "legendFormat": "max_dst_ip", "refId": "B" },
+        { "expr": "bless_entropy_max{type=\"src_port\"}", "legendFormat": "max_src_port", "refId": "C" },
+        { "expr": "bless_entropy_max{type=\"dst_port\"}", "legendFormat": "max_dst_port", "refId": "D" },
+        { "expr": "bless_entropy_max{type=\"outer_src_ip\"}", "legendFormat": "max_outer_src_ip", "refId": "E" },
+        { "expr": "bless_entropy_max{type=\"outer_dst_ip\"}", "legendFormat": "max_outer_dst_ip", "refId": "F" },
+        { "expr": "bless_entropy_max{type=\"vni\"}", "legendFormat": "max_vni", "refId": "G" }
+      ],
+      "title": "Max Entropy (per-dim ceiling)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
+      "id": 400,
+      "panels": [],
+      "title": "Latency",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "µs"
+        }
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 36 },
+      "id": 30,
+      "options": { "legend": { "calcs": ["mean", "max", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "bless_lat_p50_us", "legendFormat": "p50", "refId": "A" },
+        { "expr": "bless_lat_p95_us", "legendFormat": "p95", "refId": "B" },
+        { "expr": "bless_lat_p99_us", "legendFormat": "p99", "refId": "C" },
+        { "expr": "bless_lat_p999_us", "legendFormat": "p99.9", "refId": "D" }
+      ],
+      "title": "Latency Percentiles (RTT through DUT)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 10, "w": 6, "x": 12, "y": 36 },
+      "id": 31,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        { "expr": "bless_lat_samples", "legendFormat": "Samples", "refId": "A" }
+      ],
+      "title": "Latency Sample Count",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 46 },
+      "id": 500,
+      "panels": [],
+      "title": "DPDK Port Stats",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 5, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "pps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 47 },
+      "id": 40,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "rate(dpdk_ipackets[30s])", "legendFormat": "RX pps {{port}}", "refId": "A" },
+        { "expr": "rate(dpdk_opackets[30s])", "legendFormat": "TX pps {{port}}", "refId": "B" }
+      ],
+      "title": "DPDK Packet Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 5, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 47 },
+      "id": 41,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "rate(dpdk_ierrors[30s])", "legendFormat": "RX err {{port}}", "refId": "A" },
+        { "expr": "rate(dpdk_oerrors[30s])", "legendFormat": "TX err {{port}}", "refId": "B" },
+        { "expr": "rate(dpdk_imissed[30s])", "legendFormat": "RX missed {{port}}", "refId": "C" }
+      ],
+      "title": "DPDK Errors / Missed",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 5, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "Bps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 47 },
+      "id": 42,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "rate(dpdk_ibytes[30s])", "legendFormat": "RX Bps {{port}}", "refId": "A" },
+        { "expr": "rate(dpdk_obytes[30s])", "legendFormat": "TX Bps {{port}}", "refId": "B" }
+      ],
+      "title": "DPDK Byte Rate",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 },
+      "id": 600,
+      "panels": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 3, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+              "mappings": [],
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+              "unit": "none"
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 56 },
+          "id": 50,
+          "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "bless_hs_cps", "legendFormat": "CPS", "refId": "A" },
+            { "expr": "bless_hs_success_rate", "legendFormat": "Success Rate", "refId": "B" }
+          ],
+          "title": "Handshake Rate & Success",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 3, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+              "mappings": [],
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+              "unit": "none"
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 56 },
+          "id": 51,
+          "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "bless_hs_syn_sent_total", "legendFormat": "SYN sent", "refId": "A" },
+            { "expr": "bless_hs_syn_recv_total", "legendFormat": "SYN recv", "refId": "B" },
+            { "expr": "bless_hs_synack_sent_total", "legendFormat": "SYN-ACK sent", "refId": "C" },
+            { "expr": "bless_hs_synack_recv_total", "legendFormat": "SYN-ACK recv", "refId": "D" },
+            { "expr": "bless_hs_ack_sent_total", "legendFormat": "ACK sent", "refId": "E" },
+            { "expr": "bless_hs_established_total", "legendFormat": "Established", "refId": "F" }
+          ],
+          "title": "Handshake State Transitions",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Handshake (TCP 3-way)",
+      "type": "row"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": ["bless", "dpdk", "traffic-generator", "entropy"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "Prometheus", "value": "prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "BLESS — Entropy Injector",
+  "uid": "bless-dashboard",
+  "version": 1,
+  "weekStart": ""
+}

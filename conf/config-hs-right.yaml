@@ -1,0 +1,60 @@
+# Handshake experiment, right endpoint.
+# Complete setup, topology, validation, and Observe instructions:
+#   docs/guides/handshake-experiment.md
+#
+dpdk:
+  a: null
+  b: null
+  no-pci: ""
+  vdev: net_pcap0,rx_iface=bless-right0,tx_iface=bless-right0
+  main-lcore: 2
+  l: 2-3
+  n: 2
+  proc-type: primary
+  file-prefix: bless-hs-right
+  log-level: info
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  mode: handshake
+  num: -1
+  batch: 64
+  batch-delay-us: 1000
+  sample-interval: 1
+  latency-hist-enable: true
+  hs-rate: 64
+  hs-timeout-us: 10000000
+  hs-mix-ratio: 1000
+
+bless:
+  hw-offload: [ ipv4, tcp ]
+  ether:
+    dst: 02:00:00:00:00:01
+    src: 02:00:00:00:00:02
+    type:
+      ipv4:
+        src: [ 192.168.1.1 ]
+        dst: 10.0.0.1+1024
+        tcp:
+          src: 80
+          dst: 10000+100
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    enable: true
+    control_enable: false
+    remote_control_enable: false
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: 127.0.0.1:8001
+      num_threads: 2
+      enable_keep_alive: yes

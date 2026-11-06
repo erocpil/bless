@@ -1,0 +1,69 @@
+# Hardware benchmark config — ConnectX-6 VF (00:05.0, mlx5 PMD).
+# Minimal overhead: entropy off, no delay, single protocol.
+#
+# WARNING: NO-CARRIER — no physical link.  Measures PCIe + NIC TX
+# descriptor path, not wire speed.  Valid for software+PCIe ceiling.
+
+dpdk:
+  allow: "0000:00:05.0"     # ConnectX-6 VF — must use multi-char key
+                              # for --allow= format.  Single-char -a
+                              # format is misparsed by DPDK's EAL.
+  main-lcore: 0
+  l: "0-1"
+  n: 2
+  proc-type: auto
+  # NB: do NOT set log-level here — DPDK EAL log-level filtering
+  # suppresses rte_exit() error messages.  Use bless's own log
+  # configuration (system.theme) for output control.
+
+injector:
+  p: 0x1
+  q: 1
+  auto-start: true
+  batch: 128
+  batch-delay-us: 0
+  sample-interval: 0
+  mode: tx-only
+  num: 50000000
+  arp: 0
+  icmp: 0
+  tcp: 0
+  udp: 100
+  sctp: 0
+  latency-hist-enable: false
+  mi-smoothing-window: 1
+
+bless:
+  hw-offload: []
+  ether:
+    mtu: 0
+    copy-payload: false
+    dst: "02:00:00:00:00:01"
+    imix: [64]
+    type:
+      ipv4:
+        src: "10.0.0.1+64"
+        dst: ["192.168.1.1"]
+        udp:
+          src: "20000+1"
+          dst: "53+1"
+          payload: "b"
+  vxlan:
+    enable: false
+  erroneous:
+    ratio: 0
+
+system:
+  daemonize: false
+  theme: default
+  server:
+    service:
+      websocket: /wsURL
+      http:
+        - /api/control
+        - /api/stats
+        - /metrics
+    options:
+      listening_ports: "127.0.0.1:8000"
+      num_threads: 4
+      enable_keep_alive: yes
